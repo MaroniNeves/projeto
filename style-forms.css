@@ -11,7 +11,7 @@
 }
 
 .light {
-  --text-color: black;
+  --text-color: white;
   --bg-url: url(./assets/bg-mobile-light.jpg);
   --stroke-color: rgba(0, 0, 0, 0.5);
   --surface-color: rgba(0, 0, 0, 0.05);
@@ -20,11 +20,11 @@
   --switch-bg-url: url(./assets/sun.svg);
 }
 .box{
- 
+  color: white;
   position: center;
   top: 180px;
   left: 600px;
-  background: rgba(0, 0, 0, 0.0);
+  background: rgba(255, 255, 255, 0.5);
 }
 .box input { color: black }
 
@@ -50,12 +50,75 @@ body * {
 
 #box {
   margin-top: 10px;
-  background: black;
+  background: rgba(255, 255, 255, 0.5);
   padding: 15px;
   border-radius: 15px;
 }
 fieldset{
   border: 3px solid dodgerblue;
+  border-radius: 6px;
+}
+legend{
+  border: 1px solid dodgerblue;
+  padding: 10px;
+  text-align: center;
+  background-color: dodgerblue;
+  border-radius: 8px;
+  color: white;
+}
+.inputBox{
+  position: relative;
+}
+.inputUser{
+
+  border-radius: 6px;
+  outline: none;
+  font-size: 15px;
+  width: 100%;
+  letter-spacing: 2px;
+  padding: 3px;
+}
+.labelInput{
+  color: black;
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  pointer-events: none;
+  transition: .5s;
+
+}
+.inputUser:focus ~ .labelInput,
+.inputUser:valid ~ .labelInput
+{
+  top: -20px;
+  color: white;
+  font-size: 12px;
+}
+
+#data_nascimento{
+  width: 130px;;
+  margin-left: 15px;
+  border: none;
+  padding: 8px;
+  border-radius: 9px;
+  outline: none;
+  font-size: 15px;
+}
+
+#submit{
+  background-image: linear-gradient(to right, rgb(0, 92, 197), rgb(90, 20, 220));
+  width: 100%;
+  border: none;
+  padding: 15px;
+  color: white;
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: 10px;
+
+}
+#submit:hover{
+  background-image: linear-gradient(to right, rgb(0, 80, 172), rgb(90, 19, 195));
+
 }
 
 #profile {
