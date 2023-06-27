@@ -105,6 +105,8 @@ legend{
   font-size: 15px;
 }
 
+
+
 #submit{
   background-image: linear-gradient(to right, rgb(0, 92, 197), rgb(90, 20, 220));
   width: 100%;
@@ -119,6 +121,37 @@ legend{
 #submit:hover{
   background-image: linear-gradient(to right, rgb(0, 80, 172), rgb(90, 19, 195));
 
+}
+input[type="file"]{
+  display: none;
+
+}
+.inputFile ~ .labelFile {
+  width: 20rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.9rem;
+  border: 2px solid #00aeff;
+  border-radius: 0.5rem;
+  -webkit-border-radius: 0.5rem;
+  -moz-border-radius: 0.5rem;
+  -o-border-radius: 0.5rem;
+  font-size: 1.1rem;
+  color: gray;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.inputFile ~ .labelFile span:nth-child(2) {
+  color: black;
+  background-color: #00aeff;
+  padding: 0.6rem 0.8rem;
+  border-radius: .3rem;
+  -webkit-border-radius: 0.3rem;
+  -moz-border-radius: 0.3rem;
+  -o-border-radius: 0.3rem;
+  margin-left: 2.1rem;
+  cursor: pointer;
 }
 
 #profile {
