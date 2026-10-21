@@ -21,8 +21,8 @@ jobs:
       - name: Gerar arquivo Three.js + GLTFLoader sem CDN
         run: |
           mkdir -p atelie-arcano-real3d/runtime
-          printf "%s\n" "import * as THREE from 'three';" "import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';" "window.ARCANORUNTIME={THREE,GLTFLoader};" "window.dispatchEvent(new Event('arcanoready'));" > /tmp/arcano-entry.mjs
-          ./node_modules/.bin/esbuild /tmp/arcano-entry.mjs --bundle --minify --format=iife --platform=browser --resolve-extensions=.mjs,.js --outfile=atelie-arcano-real3d/runtime/three-glb.min.js --abs-working-dir="$PWD" --external:noop || true
+          printf "%s\n" "import * as THREE from 'three';" "import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';" "window.ARCANORUNTIME={THREE,GLTFLoader};" "window.dispatchEvent(new Event('arcanoready'));" > atelie-arcano-real3d/runtime/arcano-entry.mjs
+          ./node_modules/.bin/esbuild atelie-arcano-real3d/runtime/arcano-entry.mjs --bundle --minify --format=iife --platform=browser --resolve-extensions=.mjs,.js --outfile=atelie-arcano-real3d/runtime/three-glb.min.js
           test -s atelie-arcano-real3d/runtime/three-glb.min.js
       - name: Enviar biblioteca para branch de demonstracao
         run: |
