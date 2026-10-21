@@ -1,0 +1,36 @@
+name: Criar runtime Three.js GLB offline
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/atelie-three-offline.yml']
+permissions:
+  contents: write
+jobs:
+  bundle-three:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: atelie-arcano-public-demo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar bibliotecas Three.js e empacotador
+        run: npm install --no-save --ignore-scripts three@0.165.0 esbuild@0.24.2
+      - name: Gerar arquivo Three.js + GLTFLoader sem CDN
+        run: |
+          mkdir -p atelie-arcano-real3d/runtime
+          printf "%s\n" "import * as THREE from 'three';" "import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';" "window.ARCANORUNTIME={THREE,GLTFLoader};" "window.dispatchEvent(new Event('arcanoready'));" > /tmp/arcano-entry.mjs
+          ./node_modules/.bin/esbuild /tmp/arcano-entry.mjs --bundle --minify --format=iife --platform=browser --resolve-extensions=.mjs,.js --outfile=atelie-arcano-real3d/runtime/three-glb.min.js --abs-working-dir="$PWD" --external:noop || true
+          test -s atelie-arcano-real3d/runtime/three-glb.min.js
+      - name: Enviar biblioteca para branch de demonstracao
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add atelie-arcano-real3d/runtime/three-glb.min.js
+          git diff --cached --quiet || (git commit -m "Adicionar runtime Three.js GLTF offline" && git push origin HEAD:atelie-arcano-public-demo)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-threejs-glb-offline
+          path: atelie-arcano-real3d/runtime/three-glb.min.js
