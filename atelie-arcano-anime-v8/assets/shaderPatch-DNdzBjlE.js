@@ -1,0 +1,2 @@
+function e(e){let t=2166136261;for(let n=0;n<e.length;n++)t^=e.charCodeAt(n),t=Math.imul(t,16777619);return(t>>>0).toString(36)}function t(t,n){let r=t.onBeforeCompile,i=t.customProgramCacheKey,a=e(n.toString());return t.onBeforeCompile=function(e,t){r&&r.call(this,e,t),n.call(this,e,t)},t.customProgramCacheKey=function(){return`${i?i.call(this):``}|${a}`},t}function n(e,t,n){return e.includes(t)?e.replace(t,n):(console.warn(`[shaderPatch] token not found: ${t}`),e)}export{n,t};
+//# sourceMappingURL=shaderPatch-DNdzBjlE.js.map

@@ -1,0 +1,85 @@
+import{G as e,R as t,Tn as n,Ut as r,V as i,Y as a,di as o,it as s,nt as c,o as l,ot as u,st as d,vt as f,xt as p,y as m}from"./settings-DdywqLlV.js";import{t as h}from"./ParticleSystem-BZTczMT8.js";import{n as g}from"./ParticleEngine-DLxipNH0.js";import{n as _}from"./GroundDecals-kYmr8HKl.js";import{n as v,t as y}from"./Ability-CYesB5Ur.js";import{n as b,r as x,t as S}from"./GrowthField-BxvnSH9l.js";import{t as C}from"./Dissolve-DOkbDg8t.js";function w(r){let i=new n({color:16777215,roughness:.86,metalness:0,flatShading:!0}),s={uTime:e.uTime,uColorCrust:{value:new p},uColorFracture:{value:new p},uColorShade:{value:new p},uColorGlow:{value:new p},uStrata:{value:.4},uStrataScale:{value:9},uGrain:{value:.22},uGrainScale:{value:34},uFracture:{value:1.1},uFractureSharp:{value:1.9},uRim:{value:.7},uRimPower:{value:2.6},uGlow:{value:.85},uBirthGlow:{value:1.6},uFlow:{value:new o(0,0,1)}};return r.registerShadowCasterWithPatch(i,e=>{Object.assign(e.uniforms,s),e.vertexShader=e.vertexShader.replace(`#include <common>`,`#include <common>
+         attribute float aSeed;
+         attribute float aBirth;
+         varying vec3  vSlabLocal;
+         varying vec3  vSlabWorld;
+         varying vec3  vSlabNormalW;
+         varying float vSlabSeed;
+         varying float vSlabBirth;`).replace(`#include <begin_vertex>`,`#include <begin_vertex>
+         vSlabLocal = transformed;
+         vSlabSeed  = aSeed;
+         vSlabBirth = aBirth;
+         #ifdef USE_INSTANCING
+           vSlabWorld   = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+           vSlabNormalW = normalize(mat3(modelMatrix) * (instanceMatrix * vec4(objectNormal, 0.0)).xyz);
+         #else
+           vSlabWorld   = (modelMatrix * vec4(transformed, 1.0)).xyz;
+           vSlabNormalW = normalize(mat3(modelMatrix) * objectNormal);
+         #endif`),e.fragmentShader=e.fragmentShader.replace(`#include <common>`,`#include <common>
+         uniform float uTime;
+         uniform vec3  uColorCrust;
+         uniform vec3  uColorFracture;
+         uniform vec3  uColorShade;
+         uniform vec3  uColorGlow;
+         uniform float uStrata;
+         uniform float uStrataScale;
+         uniform float uGrain;
+         uniform float uGrainScale;
+         uniform float uFracture;
+         uniform float uFractureSharp;
+         uniform float uRim;
+         uniform float uRimPower;
+         uniform float uGlow;
+         uniform float uBirthGlow;
+         uniform vec3  uFlow;
+         varying vec3  vSlabLocal;
+         varying vec3  vSlabWorld;
+         varying vec3  vSlabNormalW;
+         varying float vSlabSeed;
+         varying float vSlabBirth;
+         ${a}`).replace(`#include <emissivemap_fragment>`,`#include <emissivemap_fragment>
+         {
+           vec3  N   = normalize(normal);
+           float ndv = clamp(dot(N, normalize(vViewPosition)), 0.0, 1.0);
+
+           /* --- the crown face: raw snow where the slab broke --- */
+           // Measured on the WORLD normal, against the flow the ability hands
+           // in. A block that has tumbled shows its broken face wherever that
+           // face has ended up, which is the whole point of resolving it here
+           // rather than baking it into the geometry.
+           float crown = clamp(dot(normalize(vSlabNormalW), -uFlow), 0.0, 1.0);
+           crown = pow(crown, max(uFractureSharp, 0.05));
+
+           /* --- strata: horizontal in the ROOM, not in the block --- */
+           float bands = sin(vSlabWorld.y * uStrataScale * 6.2831853 +
+                             vSlabSeed * 5.1 +
+                             fbm3(vSlabWorld * 0.9 + vSlabSeed) * 2.2);
+           float strata = 1.0 + bands * uStrata * 0.5 * (1.0 - crown);
+
+           /* --- grain, on a hashed lattice so it stays a speckle --- */
+           float speck = hash13(floor(vSlabWorld * max(uGrainScale, 1.0)) + vSlabSeed * 13.0);
+           float grain = 1.0 + (speck - 0.5) * 2.0 * uGrain;
+
+           vec3 body = mix(uColorCrust, uColorFracture, crown * clamp(uFracture, 0.0, 1.5));
+           body *= strata * grain;
+
+           // Cheap cavity term: unit-space radius says how far out of the block
+           // this fragment is, and the recesses of a fracture are dark.
+           body *= mix(0.74, 1.05, smoothstep(0.15, 0.75, length(vSlabLocal.xz) + vSlabLocal.y * 0.3));
+           // The shade colour is a picker, not a multiply on the body, so a
+           // slab in shadow is blue-grey and not merely dimmer (I5).
+           body = mix(uColorShade, body, clamp(0.35 + 0.65 * ndv, 0.0, 1.0));
+
+           diffuseColor.rgb *= max(body, vec3(0.0));
+
+           /* --- what actually emits: a rim, and the birth flash --- */
+           vec3 glow = uColorGlow * pow(1.0 - ndv, max(uRimPower, 0.05)) * uRim;
+           glow += uColorGlow * vSlabBirth * uBirthGlow;
+           glow *= uGlow;
+           // The soft ceiling the rock and the hailstone both use: these terms
+           // are independent and stack, and a rim crossing a birth flash sums
+           // past 8 and blows the whole block out under bloom.
+           glow /= 1.0 + glow * 0.3;
+           totalEmissiveRadiance += glow;
+         }`)}),i.userData.uniforms=s,i.userData.sync=(e=null)=>{let n=l.avalanche,r=l.global;i.roughness=n.slabRoughness,s.uColorCrust.value.copy(t(n.colorCrust)),s.uColorFracture.value.copy(t(n.colorFracture)),s.uColorShade.value.copy(t(n.colorShade)),s.uColorGlow.value.copy(t(n.colorSlabGlow)),s.uStrata.value=n.strata,s.uStrataScale.value=n.strataScale*r.noiseFrequency,s.uGrain.value=n.grain*r.randomness,s.uGrainScale.value=n.grainScale*r.noiseFrequency,s.uFracture.value=n.fracture,s.uFractureSharp.value=n.fractureSharp,s.uRim.value=n.slabRim*r.fresnel,s.uRimPower.value=n.slabRimPower,s.uGlow.value=n.slabGlow*r.glow,s.uBirthGlow.value=n.slabBirthGlow*r.shaderIntensity,e&&s.uFlow.value.copy(e)},i}var T=Math.PI*2,E=Math.PI*.5,D=96,O=3,k=96,A=44,j={},M=new o,N=new o,P=new o;function F(e,t){let n=7.3+e*21.7,i=c(Math.round(t?.facets??6),4,10),a=c(t?.shear??.55,0,1),o=c(t?.taper??.78,.15,1.2),l=c(t?.rough??.3,0,.95),u=c(t?.notch??.22,0,.7),p=s(n*1.7)*T,m=Math.cos(p),h=Math.sin(p),g=[],_=[];for(let e=0;e<i;e++){let t=e/i*T,r=.5*(1-l*s(n*3.1+e*5.9)),f=Math.cos(t)*r,p=Math.sin(t)*r,v=f*o,y=p*o,b=1-a*(v*m+y*h)*2,x=d((v*m+y*h)*2+.5);b-=u*x*s(n*5.3+e*2.7),g.push([f,0,p]),_.push([v,c(b,.18,1),y])}let v=0;for(let e of _)v+=e[1];v/=i;let y=[0,v,0],b=[0,0,0],x=[],S=(e,t,n)=>{x.push(e[0],e[1],e[2],t[0],t[1],t[2],n[0],n[1],n[2])};for(let e=0;e<i;e++){let t=(e+1)%i;S(y,_[t],_[e]),S(b,g[e],g[t]),S(_[e],_[t],g[t]),S(_[e],g[t],g[e])}let C=new f;return C.setAttribute(`position`,new r(x,3)),C.computeVertexNormals(),C}var I=class extends y{constructor(e){super(`avalanche`,e)}createShaders(){this.heap=new C(this.group,{along:k,across:A,renderOrder:3,name:`Avalanche:heap`}),this.material=w(this.ctx.environment),this.slabUniforms=this.material.userData.uniforms,this._shape={facets:6,shear:.55,taper:.78,rough:.3,notch:.22},this._fillShape(),this.slabs=new b(this.group,{geometry:F,material:this.material,shape:this._shape,variants:O,capacity:D,layer:i.WORLD,renderOrder:2,castShadow:!0,receiveShadow:!0}),this.slabs.onBreach=(e,t,n)=>this._breachFx(t,n),this._heapPar={},this._growth={layout:x.LINE,emerge:S.PUSH,origin:new o,direction:new o(0,0,1),side:new o(1,0,0),length:1},this._seed=0,this._heapNow=0,this._landedAt=-1}createParticles(){let e=this.ctx.particles;this.powder=e.get(`avalanche.powder`,{capacity:2600,shape:h.SMOKE,additive:!1,curl:!0,softFade:1.2}),this.powder.uniforms.uDrag.value=1.7,this.powder.uniforms.uEndSize.value=3.4,this.powder.uniforms.uSizeIn.value=.1,this.powder.uniforms.uFadeIn.value=.14,this.powder.uniforms.uFadeOut.value=.36,this.drift=e.get(`avalanche.drift`,{capacity:2200,shape:h.SOFT,additive:!0,curl:!0,softFade:.4}),this.drift.uniforms.uDrag.value=1.5,this.drift.uniforms.uEndSize.value=.2,this.drift.uniforms.uSizeIn.value=.05,this.drift.uniforms.uFadeIn.value=.08,this.drift.uniforms.uFadeOut.value=.36,this.chunks=e.get(`avalanche.chunks`,{capacity:1400,shape:h.CHIP,additive:!1,lit:!0,softFade:.25}),this.chunks.uniforms.uDrag.value=.28,this.chunks.uniforms.uEndSize.value=.8,this.chunks.uniforms.uFadeOut.value=.7,this.powderEmitter=new g,this.driftEmitter=new g}get instanceCount(){return this.slabs.count}get impactDuration(){return Math.max(.1,l.avalanche.lifetime*l.global.lifetime)}get fadeDuration(){return Math.max(.1,l.avalanche.settleTime)}lightShimmer(){let e=l.avalanche;return 1-e.lightPulse*(.5-.5*Math.cos(this.age*e.lightPulseSpeed*T))}_fillShape(){let e=l.avalanche,t=this._shape;return t.facets=e.facets,t.shear=e.shear,t.taper=e.taper,t.rough=e.rough,t.notch=e.notch,t}_throttle(){let e=l.avalanche;return this._landedAt<0?1:(1-d((this.age-this._landedAt)/Math.max(.05,e.runout)))**Math.max(.2,e.runoutCurve)}_settle(){let e=l.avalanche;return this.phase===v.FADE?d(this.fadeTime/Math.max(.05,e.settleTime)):0}_fillHeap(){let e=l.avalanche,t=l.global,n=this._heapPar,r=this._settle();return n.halfWidth=e.heapWidth,n.floor=e.heapFloor-r*e.settleSink,n.heightGain=e.heapHeight*(1-r*e.settleFlatten),n.lobes=e.lobes,n.rate=e.lobeRate,n.frontSpeed=e.speed*t.speed*e.heapLead,n.volume=e.lobeVolume,n.volumeJitter=e.lobeJitter*t.randomness,n.repose=e.repose,n.excess=e.excess,n.slump=e.slump,n.creep=e.creep,n.scatter=e.lobeScatter,n.widen=e.widen,n.bed=e.bed,n.bedRamp=e.bedRamp,n.bedWidth=e.bedWidth,n.bedCurve=e.bedCurve,n.ambient=e.snowAmbient,n.wrap=e.snowWrap,n.fresh=e.snowFresh,n.grain=e.snowGrain*t.randomness,n.grainScale=e.snowGrainScale*t.noiseFrequency,n.glint=e.snowGlint*t.shaderIntensity,n.glintScale=e.snowGlintScale*t.noiseFrequency,n.toe=e.heapToe,n.opacity=e.heapOpacity*t.opacity*(1-r*r),n}_fillGrowth(){let e=l.avalanche,t=l.global,n=this._growth;return n.origin.copy(this.origin),n.direction.copy(this.direction),n.side.copy(this.side),n.length=this.length,n.widthNear=e.slabWidthNear,n.width=e.slabWidth,n.widthCurve=e.slabWidthCurve,n.frontBias=e.slabBias,n.clumping=e.slabClump,n.scatter=e.slabScatter,n.clusterRadius=e.slabClusterRadius,n.heightNear=e.slabHeightNear,n.height=e.slabHeight,n.heightCurve=e.slabHeightCurve,n.heightJitter=e.slabHeightJitter,n.crown=e.slabCrown,n.crownPower=e.slabCrownPower,n.rubble=e.slabRubble,n.rubbleScale=e.slabRubbleScale,n.radiusNear=e.slabRadiusNear,n.radius2=e.slabRadius,n.radiusCurve=e.slabRadiusCurve,n.radiusJitter=e.slabRadiusJitter,n.lean=e.slabLean+(E-e.repose)*e.slabRepose,n.leanRamp=e.slabLeanRamp,n.twist=e.slabTwist,n.tilt=e.slabTilt,n.riseTime=e.slabRise,n.riseOvershoot=e.slabOvershoot,n.settle=e.slabSettle,n.springRate=e.slabSpring,n.emergeSink=e.slabSink,n.birthScale=e.slabBirthScale,n.birthFade=e.slabBirthFade,n.breachAt=e.slabBreach,n.sinkDepth=e.slabRetractSink,n.randomness=t.randomness,n}onSpawn(){let e=l.avalanche;this.powderEmitter.reset(),this.driftEmitter.reset(),this._heapNow=0,this._landedAt=-1,this._seed=Math.random()*100,this.heap.roll(this._seed),this.slabs.plant(Math.min(D,Math.round(e.slabCount)),e.slabCluster),this._syncUniforms(),this._syncFields(),this._muzzleFx()}_syncUniforms(){let e=l.avalanche,n=l.global;this.material.userData.sync(this.direction),this.powder.setGradient(t(e.colorPowderA),t(e.colorPowderB),t(e.colorPowderC),t(e.colorPowderD)),this.powder.uniforms.uGravity.value.set(0,e.powderRise,0),this.powder.uniforms.uSizeScale.value=e.powderSize*n.particleSize,this.powder.uniforms.uLifeScale.value=e.powderLifetime*.5*n.particleLifetime,this.powder.uniforms.uSpeedScale.value=e.powderSpeed*n.particleSpeed,this.powder.uniforms.uOpacity.value=e.powderOpacity*n.opacity,this.powder.uniforms.uTurbulence.value=.4*n.turbulence,this.drift.setGradient(t(e.colorDriftA),t(e.colorDriftB),t(e.colorDriftC),t(e.colorDriftD)),this.drift.uniforms.uGravity.value.set(0,e.driftRise,0),this.drift.uniforms.uSizeScale.value=e.driftSize*n.particleSize*7,this.drift.uniforms.uLifeScale.value=e.driftLifetime*.5*n.particleLifetime,this.drift.uniforms.uSpeedScale.value=e.driftSpeed*n.particleSpeed,this.drift.uniforms.uOpacity.value=n.opacity,this.drift.uniforms.uGlow.value=.55*n.glow,this.drift.uniforms.uTurbulence.value=e.driftTurbulence*n.turbulence,this.chunks.setGradient(t(e.colorChunkA),t(e.colorChunkB),t(e.colorChunkC),t(e.colorChunkD)),this.chunks.uniforms.uGravity.value.set(0,e.chunkGravity,0),this.chunks.uniforms.uSizeScale.value=e.chunkSize*n.particleSize*7,this.chunks.uniforms.uLifeScale.value=e.chunkLifetime*.5*n.particleLifetime,this.chunks.uniforms.uSpeedScale.value=n.particleSpeed,this.chunks.uniforms.uOpacity.value=n.opacity}_syncFields(){let e=l.avalanche;this.heap.setBasis(this.origin,this.direction,this.side,this.length),this.heap.setColors(e.colorFresh,e.colorSettled,e.colorFace,e.colorDeep),this.heap.update(this._heapNow,this._fillHeap()),this.slabs.syncGeometry(this._fillShape()),this.slabs.update(this.age,this._fillGrowth(),this._settle())}_crestPoint(e){let t=this._heapPar;return this.heap.frontPoint(this._heapNow,t,e),e.y+=this.heap.crestHeight(this._heapNow,t)*.6,e}_muzzleFx(){let e=l.avalanche,n=l.global;M.copy(this.origin).addScaledVector(this.direction,.6).setY(.3),this.ctx.bursts.spawn(m.FROST,M,{radius:e.burstSize*.15,endRadius:e.burstSize*.5*n.explosionIntensity,life:.55,intensity:e.burstIntensity*.6,opacity:.75,fresnel:1.2,displace:.55,squash:.55,colorA:t(e.colorBurstA),colorB:t(e.colorBurstB),colorC:t(e.colorBurstC)}),this.lightBoost=e.lightIntensity*.35*n.explosionIntensity}_breachFx(t,n){let r=l.avalanche,i=l.global;M.copy(t).setY(.08),j.position=M,j.radius=n*.7,j.direction=N.copy(this.direction).multiplyScalar(.6).setY(1).normalize(),j.speed=r.chunkSpeed,j.speedVariance=.8,j.spread=.9,j.inherit=null,j.anchor=null,j.size=.12,j.sizeVariance=.7,j.life=r.chunkLifetime,j.lifeVariance=.5,j.spin=7,j.tint=null,j.time=e.uTime.value,this.chunks.emit(Math.round(r.breachChunks*i.particleCount),j)}_flowFx(t,n){let r=l.avalanche,i=l.global,a=e.uTime.value,o=Math.round(this.powderEmitter.tick(t,r.powderRate*n)*i.particleCount);o>0&&(this._crestPoint(M),j.position=M,j.radius=r.heapWidth*.55,j.direction=N.copy(this.direction).multiplyScalar(.65).setY(1).normalize(),j.speed=r.powderSpeed,j.speedVariance=.75,j.spread=.95,j.inherit=null,j.anchor=null,j.size=.9,j.sizeVariance=.5,j.life=r.powderLifetime,j.lifeVariance=.45,j.spin=.35,j.tint=null,j.time=a,this.powder.emit(o,j));let s=Math.round(this.driftEmitter.tick(t,r.driftRate*n)*i.particleCount);if(s>0){let e=u(.15,1);this._crestPoint(M),M.addScaledVector(this.direction,-(1-e)*this.length*.35),j.position=M,j.radius=r.heapWidth*.7,j.direction=N.copy(this.direction).multiplyScalar(.35).setY(1).normalize(),j.speed=r.driftSpeed,j.speedVariance=.85,j.spread=1,j.size=.07,j.sizeVariance=.6,j.life=r.driftLifetime,j.lifeVariance=.5,j.spin=0,j.time=a,this.drift.emit(s,j)}}onTravel(e){let t=l.avalanche;this._heapNow+=e*this._throttle(),this._syncUniforms(),this.slabs.triggerUpTo(this.age,this.u,t.slabStagger,t.slabBias,!1),this._syncFields(),this._flowFx(e,1),this._crestPoint(this.position),this.ctx.shake.rumble(t.rumble*l.global.cameraShake,e)}onImpact(){let n=l.avalanche,r=l.global,i=e.uTime.value;this._landedAt=this.age,this.slabs.triggerUpTo(this.age,1,n.slabStagger,n.slabBias,!0),this.pointAt(1,P),M.copy(P).setY(.5),this.ctx.bursts.spawn(m.FROST,M,{radius:n.burstSize*.3,endRadius:n.burstSize*r.explosionIntensity,life:.95,intensity:n.burstIntensity,opacity:.8,fresnel:1.2,displace:.65,squash:.6,colorA:t(n.colorBurstA),colorB:t(n.colorBurstB),colorC:t(n.colorBurstC)}),this.ctx.decals.spawn(_.SHOCKWAVE,P,{radius:n.shockRadius*r.explosionIntensity,life:.8,width:.06,intensity:.7,colorA:t(n.colorShockA),colorB:t(n.colorShockB)}),j.position=M,j.radius=n.heapWidth*.7,j.direction=N.copy(this.direction).multiplyScalar(.4).setY(1).normalize(),j.speed=n.powderSpeed*2.4,j.speedVariance=.8,j.spread=1,j.inherit=null,j.anchor=null,j.size=1.5,j.sizeVariance=.55,j.life=n.powderLifetime*1.35,j.lifeVariance=.45,j.spin=.45,j.tint=null,j.time=i,this.powder.emit(Math.round(n.impactPowder*r.particleCount),j),j.radius=n.heapWidth*.45,j.speed=n.chunkSpeed*2.1,j.size=.16,j.life=n.chunkLifetime*1.3,j.spin=10,this.chunks.emit(Math.round(n.impactChunks*r.particleCount),j),this.ctx.shake.add(n.impactShake*r.explosionIntensity*r.cameraShake,1/Math.max(.1,n.shakeDuration),14),this.ctx.flash.trigger(t(n.colorFlash),n.impactFlash*r.explosionIntensity),this.lightBoost=n.lightIntensity*.8*r.explosionIntensity}onFade(e,t){let n=l.avalanche;this._heapNow+=e*this._throttle(),this._syncUniforms(),this._syncFields(),this._crestPoint(this.position);let r=this._throttle();this._flowFx(e,r*.85+(t<=1?.15:.05)),this.ctx.shake.rumble(n.rumble*r*l.global.cameraShake,e)}onDestroy(){this.slabs.clear(),this.heap.reset(),this._heapNow=0,this._landedAt=-1}dispose(){this.slabs.dispose(),this.heap.dispose(),this.material.dispose(),super.dispose()}};export{I as AvalancheAbility};
+//# sourceMappingURL=AvalancheAbility-lSIqCOf8.js.map

@@ -1,0 +1,2 @@
+import{Fn as e}from"./settings-DdywqLlV.js";var t=null,n=0;function r(){return t||(t=new e(1,1,1,1).rotateX(-Math.PI/2),t.name=`vfx.groundQuad`),n++,t}function i(){--n<=0&&(t?.dispose(),t=null,n=0)}var a=null;function o(){return a||(a=new e(1,1,1,1),a.name=`vfx.uprightQuad`),a}export{i as n,o as r,r as t};
+//# sourceMappingURL=quads-DpYMEt67.js.map
