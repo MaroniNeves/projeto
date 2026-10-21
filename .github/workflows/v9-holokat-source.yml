@@ -16,7 +16,7 @@ jobs:
           mkdir -p /tmp/v9_sources/holokat
           git clone --depth 1 --filter=blob:none --sparse https://github.com/holokat/game-assets.git /tmp/v9_sources/holokat
           cd /tmp/v9_sources/holokat
-          git sparse-checkout set site/fantasy-studio/runtime/world-effects site/fantasy-studio/data/effect-catalog.js
+          git sparse-checkout set site/fantasy-studio/runtime/world-effects site/fantasy-studio/data
           cp LICENSE /tmp/v9_sources/HOLOKAT-LICENSE.txt
           rm -rf .git
           cd /tmp/v9_sources
