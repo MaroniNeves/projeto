@@ -20,6 +20,7 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse https://github.com/holokat/game-assets.git /tmp/holokat
           cd /tmp/holokat
           git sparse-checkout set site/fantasy-studio/runtime/world-effects site/fantasy-studio/data
+          sed -i "s|await import(\x27../../models/creatures/index.js\x27)|Promise.resolve({})|" /tmp/holokat/site/fantasy-studio/runtime/world-effects/ambient.js
           cd "$GITHUB_WORKSPACE"
           npm install --no-audit --no-fund --ignore-scripts --no-save three@0.185.1 esbuild@0.24.2
           ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/holokat/node_modules
