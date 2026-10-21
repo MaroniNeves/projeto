@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#081421"><title>Ateliê Arcano | Cortes de Espada 3D & Magias</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;--gold:#d3ae6d;--mint:#80ffbb;--line:#344a5b;--ink:#06111b}
+*{box-sizing:border-box}body{margin:0;background:#06111b;color:#e9f2f7;overflow:hidden}canvas{display:block;touch-action:none}#view{position:fixed;inset:0;background:radial-gradient(ellipse at 56% 42%,#102837,#06101b 65%)}
+#top{position:fixed;top:0;left:0;right:0;pointer-events:none;padding:23px 30px;background:linear-gradient(#05111def,transparent);display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.smallcaps{font-family:Georgia,serif;font-size:11px;letter-spacing:.23em;text-transform:uppercase;color:var(--gold)}h1{font-family:Georgia,serif;font-size:clamp(23px,3vw,36px);font-weight:normal;margin:6px 0 6px;letter-spacing:.015em}#top p{font-size:12px;color:#a3b9c1;margin:0;line-height:1.5;max-width:510px}#fps{color:#7c958f;font-size:11px;white-space:nowrap}
+#panel{position:fixed;left:20px;bottom:20px;width:min(470px,calc(100% - 40px));max-height:calc(100dvh - 136px);overflow:auto;border:1px solid #607b7355;background:linear-gradient(150deg,#0b1c2cf5,#071623ef);box-shadow:0 22px 70px #000b,inset 0 1px 0 #b5dccc16;border-radius:19px;padding:19px;backdrop-filter:blur(18px);scrollbar-color:#465f69 transparent}
+.topline{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:13px}.kicker{font-family:Georgia,serif;color:var(--gold);font-size:14px;letter-spacing:.08em}#family{color:#8fb3c1;font-size:10px;letter-spacing:.08em}
+#filters{display:flex;gap:6px;margin-bottom:10px} .filter-btn{flex:1;background:#0b2532;border:1px solid #395463;border-radius:9px;color:#b8d1d7;font:inherit;font-size:11px;padding:8px 6px;cursor:pointer} .filter-btn[aria-pressed="true"]{border-color:#d4af6d;color:#ffe4a8;background:#283544} #presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-bottom:13px}
+.spell{min-width:0;min-height:61px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;padding:8px 3px;border:1px solid #395362;background:#102332;color:#cfdfdf;border-radius:10px;cursor:pointer;font-size:10px;transition:.15s;border-bottom-width:2px}
+.spell:hover{background:#163449}.spell[aria-pressed="true"]{background:#203b47;border-color:var(--gold);color:#fff;box-shadow:inset 0 0 16px #c3dfff0a}.spell .emoji{font-size:19px;line-height:1}.spell span:last-child{overflow:hidden;text-overflow:ellipsis;max-width:100%;white-space:nowrap}
+#desc{font-size:12px;color:#acc4c8;line-height:1.55;min-height:36px;margin:0 0 13px}
+#actionrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}button.action{border-radius:10px;border:1px solid #4e6c71;color:#e5f4f1;background:#16313a;padding:11px 13px;font:inherit;font-size:12px;cursor:pointer;flex:1;white-space:nowrap}button.action:active{transform:scale(.98)}button.main{background:linear-gradient(120deg,#237957,#125342);border-color:#3d9d79;font-weight:700;flex:1.3}button.action:hover{filter:brightness(1.22)}.settings{border-top:1px solid #54746b36;padding-top:10px;display:grid;gap:11px}.field{display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:12px;color:#b9cbce}.field input[type=range]{width:55%;accent-color:#80ffad}.field select{background:#112634;border:1px solid #415d6b;border-radius:8px;color:#e6f1ef;padding:7px;max-width:59%;font-size:11px}
+.assets-info{margin-top:11px;border-top:1px solid #364d5450;padding-top:8px;font-size:11px;color:#9aafb7;line-height:1.5}.assets-info summary{cursor:pointer;color:#bfe7da}.assets-info p{margin:5px 0}.assets-info a{color:#8edcc5}.asset-status{font-size:10px;color:#99afb8;line-height:1.5;border-bottom:1px solid #374c533e;padding:2px 0 9px}#onlineAssets{width:18px;height:18px;accent-color:#67dca2}#badge{position:fixed;right:25px;bottom:25px;border-radius:12px;border:1px solid #3d536355;background:#091b2cbc;padding:10px 13px;color:#afbbc0;font-size:12px;pointer-events:none;line-height:1.5;text-align:right}#badge b{color:#d5e7e5}#warning{position:fixed;inset:0;display:none;z-index:30;align-items:center;justify-content:center;background:#07121a;padding:20px}#warning div{max-width:540px;color:#f4dfd6;background:#211c23;border:1px solid #9a5157;border-radius:16px;padding:25px;line-height:1.65}
+@media(max-width:700px){#top{padding:14px 15px}#top p{max-width:250px;font-size:10px}#fps,#badge{display:none}#panel{left:10px;bottom:8px;padding:12px;width:calc(100% - 20px);max-height:43dvh;border-radius:15px}#filters{gap:4px;margin-bottom:7px}.filter-btn{font-size:10px;padding:6px 3px}#presets{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.spell{min-height:46px;padding:5px 3px;font-size:9px}.spell .emoji{font-size:16px}.topline{margin-bottom:9px}#desc{margin-bottom:8px;min-height:0;font-size:11px}#actionrow{margin-bottom:9px}.action{padding:8px!important;font-size:11px!important}}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="view" aria-label="Visualização interativa das magias 3D"></div>
+<header id="top"><div><div class="smallcaps">✦ Artefatos do mundo • Efeitos 3D</div><h1>Ateliê Arcano</h1><p>Laboratório de VFX com modelos GLB online, cortes corrigidos, fumaça, poças, gotas de chuva e magia procedural em tempo real.</p></div><div id="fps">THREE.JS · VFX LAB</div></header>
+<section id="panel" aria-label="Controles dos efeitos"><div class="topline"><div class="kicker">Biblioteca de magias</div><div id="family">Natureza · Defesa</div></div><div id="filters"><button class="filter-btn" data-filter="sword" aria-pressed="true">⚔️ Espadas</button><button class="filter-btn" data-filter="magic" aria-pressed="false">✦ Outras magias</button><button class="filter-btn" data-filter="all" aria-pressed="false">Tudo</button></div><div id="presets"></div><p id="desc"></p>
+<div id="actionrow"><button class="action main" id="replay">✦ Lançar magia</button><button class="action" id="loop" aria-pressed="true">↻ Repetir: ligado</button><button class="action" id="pause">Ⅱ Pausar</button></div>
+<div class="settings"><div class="field"><label for="onlineAssets">Modelos 3D prontos (GLB)</label><input id="onlineAssets" type="checkbox" checked aria-label="Carregar modelos 3D online"></div><div id="assetStatus" class="asset-status">Modelos externos opcionais • CC0 • requer internet</div><div class="field"><label for="origin">Origem do efeito</label><select id="origin"><option value="auto">Automática conforme magia</option><option value="sword">Espada</option><option value="dagger">Adaga</option><option value="axe">Machado</option><option value="staff">Cajado</option><option value="arrow">Flecha</option><option value="ground">Chão</option><option value="air">Ar</option></select></div>
+<div class="field"><label for="particles">Densidade de partículas</label><input id="particles" type="range" min="20" max="150" value="100" step="5"></div><div class="field"><label for="power">Intensidade</label><input id="power" type="range" min="40" max="160" value="100" step="5"></div><div class="field"><label for="speed">Velocidade</label><input id="speed" type="range" min="50" max="160" value="100" step="5"></div></div><details class="assets-info"><summary>Modelos GLB e licenças</summary><p>Malhas CC0 de 3DAssets.dev. Algumas são estáticas; os movimentos e partículas são acrescentados pelo Three.js.</p><a href="https://3dassets.dev/assets/sunfall-rift-moba-crescent-slash-5489a2d2" target="_blank" rel="noopener noreferrer">Corte 3D</a> · <a href="https://3dassets.dev/assets/sunfall-rift-moba-ember-projectile-49569ecb" target="_blank" rel="noopener noreferrer">Fogo 3D</a> · <a href="https://3dassets.dev/assets/vfx-mesh-library-lightning-strike-f525cfcd" target="_blank" rel="noopener noreferrer">Relâmpago 3D</a> · <a href="https://3dassets.dev/assets/vfx-mesh-library-rain-splash-ring-370934d8" target="_blank" rel="noopener noreferrer">Respingo 3D</a> · <a href="https://3dassets.dev/assets/izakaya-alley-and-ramen-shop-puddle-plate-467c25c5" target="_blank" rel="noopener noreferrer">Poça 3D</a></details></section>
+<div id="badge"><b>Arraste</b> para girar · <b>Role</b> para aproximar<br><span id="state">Manifestação ativa</span></div>
+<div id="loading" role="status" aria-live="polite" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:15;background:radial-gradient(circle at 50% 44%,#112b3c,#06111b 62%);color:#dceff0;font-family:system-ui;text-align:center;padding:24px"><div><div style="font-size:46px;filter:drop-shadow(0 0 17px #6affc3)">✧</div><h2 style="font-size:22px;margin:14px 0 6px">Preparando laboratório 3D…</h2><p style="font-size:13px;color:#9cb9bb">Carregando Three.js e criando partículas mágicas.</p><p id="loadHelp" style="max-width:360px;font-size:12px;color:#7e9da4;line-height:1.65">Aguarde alguns segundos.</p></div></div>
+<div id="warning"><div><h2>Não foi possível iniciar a magia 3D</h2>O arquivo precisa de um navegador moderno, WebGL e conexão com a internet para carregar Three.js.<p id="errortext"></p></div></div>
+<script>
+  window.__arcanoBoot = false;
+  function showArcanoFailure(message){
+    const loading=document.getElementById('loading');
+    if(loading){loading.style.pointerEvents='auto';loading.innerHTML='<div style="max-width:480px;line-height:1.6;padding:20px"><h2>Não foi possível carregar a cena 3D</h2><p>'+String(message).replace(/[<>&]/g,'')+'</p><p>Abra esta página publicada em HTTPS, usando um navegador com WebGL e conexão estável. Os modelos GLB externos são opcionais.</p><button onclick="location.reload()" style="border:1px solid #84d8ae;background:#183a31;color:#fff;padding:12px 20px;border-radius:9px;cursor:pointer">Tentar novamente</button></div>';}
+  }
+  window.addEventListener('error',e=>{if(!window.__arcanoBoot)showArcanoFailure(e.message||'O navegador bloqueou os módulos do Three.js.');});
+  window.addEventListener('unhandledrejection',e=>{if(!window.__arcanoBoot)showArcanoFailure(e.reason?.message||'Não foi possível importar as bibliotecas.');});
+  setTimeout(()=>{if(!window.__arcanoBoot)showArcanoFailure('O carregamento levou mais de 12 segundos. A CDN do Three.js pode estar bloqueada.');},12000);
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+try {
+const scene=new THREE.Scene(); scene.background=new THREE.Color('#06121e'); scene.fog=new THREE.FogExp2('#06121e',.034);
+const camera=new THREE.PerspectiveCamera(47,innerWidth/innerHeight,.05,90); camera.position.set(7.7,5.1,8.5);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.65)); renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.5;document.getElementById('view').appendChild(renderer.domElement);window.__arcanoBoot=true;document.getElementById('loading').style.display='none';
+const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1.18,0);controls.minDistance=4.3;controls.maxDistance=19;controls.maxPolarAngle=Math.PI*.515;controls.enableDamping=true;controls.dampingFactor=.065;controls.update();
+scene.add(new THREE.HemisphereLight(0x87b4f4,0x09211b,1.35));const amb=new THREE.DirectionalLight(0xd2fff8,1.25);amb.position.set(2,8,4);scene.add(amb);const glow=new THREE.PointLight(0x44ffae,37,10,1.5);glow.position.set(0,1.6,.3);scene.add(glow);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:0x09151e,metalness:.1,roughness:.94}));ground.rotation.x=-Math.PI/2;ground.position.y=-.07;scene.add(ground);
+const grid=new THREE.GridHelper(36,72,0x33596a,0x142734);grid.position.y=-.053;grid.material.transparent=true;grid.material.opacity=.33;scene.add(grid);
+function radialTexture(){const c=document.createElement('canvas');c.width=c.height=128;const ctx=c.getContext('2d');const g=ctx.createRadialGradient(64,64,0,64,64,64);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.09,'rgba(255,255,255,.95)');g.addColorStop(.25,'rgba(255,255,255,.38)');g.addColorStop(.65,'rgba(255,255,255,.08)');g.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=g;ctx.fillRect(0,0,128,128);return new THREE.CanvasTexture(c)}
+function skullTexture(){const c=document.createElement('canvas');c.width=c.height=128;const ctx=c.getContext('2d');ctx.clearRect(0,0,128,128);ctx.fillStyle='white';ctx.beginPath();ctx.arc(64,52,28,0,Math.PI*2);ctx.fill();ctx.fillRect(38,58,52,24);ctx.clearRect(52,77,8,12);ctx.clearRect(68,77,8,12);ctx.fillStyle='black';ctx.beginPath();ctx.arc(53,50,7,0,Math.PI*2);ctx.arc(75,50,7,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(64,58);ctx.lineTo(58,68);ctx.lineTo(70,68);ctx.closePath();ctx.fill();for(let i=0;i<6;i++){ctx.fillRect(43+i*7,88,4,10);}return new THREE.CanvasTexture(c)}
+const glowMap=radialTexture();const skullMap=skullTexture();const TAU=Math.PI*2;const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);const mix=(a,b,t)=>a+(b-a)*t;const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));const smooth=x=>{x=clamp(x);return x*x*(3-2*x)};const fract=x=>x-Math.floor(x);const rnd=x=>fract(Math.sin(x*127.1+78.3)*43758.5453123);
+const presets=[
+{id:'shield',title:'Escudo verde',icon:'🛡️',family:'Natureza · Escudo',hex:0x66ff80,accent:0xd9ffa1,type:'shield',style:'dome',origin:'ground',duration:4.9,desc:'Cúpula verde expandida com runas e poeira mágica.'},
+{id:'shield_hex',title:'Escudo hexagonal',icon:'🔰',family:'Defesa · Escudo',hex:0x64ffd1,accent:0xe4fff6,type:'shield',style:'hex',origin:'ground',duration:4.8,desc:'Barreira hexagonal com placas energéticas e partículas finas.'},
+{id:'shield_void',title:'Escudo abissal',icon:'🛡️',family:'Trevas · Escudo',hex:0x9d74ff,accent:0xffa8ff,type:'shield',style:'void',origin:'ground',duration:5.0,desc:'Escudo escuro com anéis roxos, distorção e estilhaços de sombra.'},
+{id:'bolt',title:'Relâmpago',icon:'⚡',family:'Raios · Cajado',hex:0x47a8ff,accent:0xe0faff,type:'bolt',style:'chain',origin:'staff',duration:3.8,desc:'Relâmpago quebrado com ramos, faíscas e impacto elétrico.'},
+{id:'bolt_storm',title:'Tempestade elétrica',icon:'🌩️',family:'Raios · Céu',hex:0x69b7ff,accent:0xffffff,type:'bolt',style:'storm',origin:'air',duration:4.3,desc:'Múltiplos raios caem em zigue-zague com impacto no chão.'},
+{id:'fire',title:'Bola de fogo',icon:'🔥',family:'Fogo · Projétil',hex:0xff6536,accent:0xffea79,type:'projectile',style:'flame',origin:'staff',duration:3.8,desc:'Projétil de fogo com língua de chamas e dissipação ao colidir.'},
+{id:'fire_pillar',title:'Coluna de fogo',icon:'🔥',family:'Fogo · Área',hex:0xff5c2d,accent:0xfff3a0,type:'pillar',style:'firepillar',origin:'ground',duration:4.3,desc:'Fenda ardente que ergue uma coluna de chamas em forma orgânica.'},
+{id:'black_fire',title:'Fogo negro',icon:'🖤',family:'Trevas · Fogo',hex:0x5e2b94,accent:0xff5b6c,type:'projectile',style:'blackflame',origin:'staff',duration:4.0,desc:'Chama negra com núcleo carmesim e fumaça sombria.'},
+{id:'green_fire',title:'Fogo verde',icon:'💚',family:'Necro · Fogo',hex:0x37ff87,accent:0xe3ffb0,type:'projectile',style:'greenflame',origin:'staff',duration:4.0,desc:'Chamas verdes espectrais com dissipação venenosa ao impacto.'},
+{id:'ice',title:'Pilar de gelo',icon:'❄️',family:'Gelo · Chão',hex:0x55bfff,accent:0xf3ffff,type:'crystal',style:'pillarburst',origin:'ground',duration:4.5,desc:'Grande pilar central de gelo cobre o personagem e depois explode em cristais.'},
+{id:'ice_prison',title:'Prisão glacial',icon:'🧊',family:'Gelo · Defesa',hex:0x72d8ff,accent:0xffffff,type:'crystal',style:'prison',origin:'ground',duration:4.7,desc:'Cristais crescem em volta do alvo formando uma prisão que se rompe.'},
+{id:'smoke',title:'Fumaça viva',icon:'☁️',family:'Ambiente · Fumaça',hex:0xa5abb2,accent:0xf5f7fa,type:'environment',style:'smoke',origin:'ground',duration:6.0,desc:'Camadas de fumaça em espaço 3D: nuvens cinza expandem, sobem e desaparecem suavemente.'},
+{id:'puddle',title:'Poça de água',icon:'💦',family:'Ambiente · Poça',hex:0x4fc6ff,accent:0xe9fcff,type:'environment',style:'puddle',origin:'ground',duration:6.0,desc:'Modelo GLB de poça ou superfície líquida procedural com ondulações e reflexos.'},
+{id:'rain',title:'Chuva e gotas',icon:'🌧️',family:'Ambiente · Chuva',hex:0x4bbcff,accent:0xd9f5ff,type:'environment',style:'rain',origin:'air',duration:6.0,desc:'Gotas 3D caem e criam respingos e ondulações ao atingir uma poça.'},
+{id:'water_splash',title:'Respingo de água',icon:'💧',family:'Água · Impacto',hex:0x45baff,accent:0xebfdff,type:'environment',style:'splash',origin:'ground',duration:3.0,desc:'Malha GLB de respingo de chuva reforçada com anéis e partículas.'},
+{id:'light',title:'Pilar de luz',icon:'☀️',family:'Luz · Área',hex:0xffcd68,accent:0xffffff,type:'pillar',style:'holy',origin:'ground',duration:4.4,desc:'Círculo sagrado e coluna luminosa com partículas ascendentes.'},
+{id:'void',title:'Buraco negro',icon:'🌀',family:'Trevas · Vácuo',hex:0xb75aff,accent:0xff8fff,type:'portal',style:'blackhole',origin:'air',duration:4.8,desc:'Buraco negro com horizonte de eventos, aros e detritos orbitais.'},
+{id:'void_2',title:'Fenda abissal',icon:'🌌',family:'Trevas · Vácuo',hex:0x8f61ff,accent:0x69ffd7,type:'portal',style:'rift',origin:'air',duration:5.0,desc:'Rasgo roxo-esverdeado com chamas negras e sucção circular.'},
+{id:'necro',title:'Necromancia',icon:'☠️',family:'Necromancia · Chão',hex:0x32eaa8,accent:0xaaffd9,type:'necro',style:'skulls',origin:'ground',duration:5.0,desc:'Vórtice necromântico com caveiras espectrais, selos e chamas verdes.'},
+{id:'necro_black',title:'Vórtice funerário',icon:'💀',family:'Necromancia · Abismo',hex:0x7d59ff,accent:0x41ff91,type:'necro',style:'blackskulls',origin:'ground',duration:5.0,desc:'Vórtice negro com caveiras invocadas e fogo sombrio.'},
+{id:'water',title:'Tornado d’água',icon:'💧',family:'Água · Ar',hex:0x39caff,accent:0xd6f9ff,type:'vortex',style:'water',origin:'air',duration:4.2,desc:'Vórtice de água girando com gotas e névoa.'},
+{id:'water_twins',title:'Vórtices gêmeos',icon:'🌊',family:'Água · Ar',hex:0x56dbff,accent:0xffffff,type:'vortex',style:'twinwater',origin:'air',duration:4.4,desc:'Dois redemoinhos aquáticos que se unem em um impacto central.'},
+{id:'slash',title:'Corte clássico',icon:'⚔️',family:'Espada · Arco básico',hex:0x62caff,accent:0xf7ffff,type:'sword',style:'arc',origin:'sword',duration:3.2,desc:'Golpe curvo clássico com rastro azul de lâmina.'},
+{id:'sw_h',title:'Horizontal',icon:'↔️',family:'Espada · Horizontal',hex:0x73cfff,accent:0xffffff,type:'sword',style:'horizontal',origin:'sword',duration:3.0,desc:'Corte lateral de lado a lado.'},
+{id:'sw_v',title:'Vertical',icon:'⬇️',family:'Espada · Vertical',hex:0xffc975,accent:0xffffff,type:'sword',style:'vertical',origin:'sword',duration:3.1,desc:'Ataque de cima para baixo.'},
+{id:'sw_diag',title:'Diagonal',icon:'↘️',family:'Espada · Diagonal',hex:0xc18cff,accent:0xf7e9ff,type:'sword',style:'diagonal',origin:'sword',duration:3.15,desc:'Corte inclinado roxo.'},
+{id:'sw_x',title:'Golpe em X',icon:'✖️',family:'Espada · Corte cruzado',hex:0xff6674,accent:0xffebc4,type:'sword',style:'cross',origin:'sword',duration:3.4,desc:'Dois cortes diagonais sucessivos se cruzam.'},
+{id:'sw_combo',title:'Combo triplo',icon:'✳️',family:'Espada · Três golpes',hex:0x8ec9ff,accent:0xffffff,type:'sword',style:'combo',origin:'sword',duration:3.6,desc:'Três golpes em sequência.'},
+{id:'sw_spin',title:'Giro 360°',icon:'🌀',family:'Espada · Área circular',hex:0x39edc8,accent:0xc3fff8,type:'sword',style:'spin',origin:'sword',duration:4.0,desc:'A lâmina circunda o personagem.'},
+{id:'sw_dash',title:'Avanço veloz',icon:'💨',family:'Espada · Investida',hex:0xff5f65,accent:0xffebc0,type:'sword',style:'dash',origin:'sword',duration:3.45,desc:'Corte rasga o ar enquanto avança.'},
+{id:'sw_air',title:'Golpe aéreo',icon:'🪽',family:'Espada · Salto',hex:0x54b8ff,accent:0xe8faff,type:'sword',style:'air',origin:'air',duration:3.7,desc:'Corte descendente começando acima do alvo.'},
+{id:'sw_ground',title:'Ruptura do solo',icon:'💥',family:'Espada · Impacto em área',hex:0xff9a52,accent:0xfff1a8,type:'sword',style:'ground',origin:'ground',duration:4.2,desc:'Onda luminosa no chão com pedras e poeira.'},
+{id:'sw_charge',title:'Corte carregado',icon:'✨',family:'Espada · Habilidade especial',hex:0xaa7aff,accent:0xffd9ff,type:'sword',style:'charged',origin:'sword',duration:4.5,desc:'Carrega a lâmina antes de lançar uma onda grande.'},
+{id:'sw_parry',title:'Defesa e contra',icon:'🛡️',family:'Espada · Aparar e reagir',hex:0xd4e9ff,accent:0xffffff,type:'sword',style:'parry',origin:'sword',duration:3.7,desc:'Lampejo defensivo seguido de contra-golpe.'},
+{id:'dagger',title:'Golpes de adaga',icon:'✧',family:'Adaga · Combo',hex:0xc267ff,accent:0xffc1ff,type:'daggers',origin:'dagger',duration:3.1,desc:'Três cortes muito rápidos e sobrepostos.'},
+{id:'axe',title:'Impacto de machado',icon:'🪓',family:'Machado · Área',hex:0xff884b,accent:0xffeda8,type:'cleave',origin:'axe',duration:3.8,desc:'Golpe vertical que projeta energia no solo.'},
+{id:'beam',title:'Feixe de cajado',icon:'✦',family:'Cajado · Canalizado',hex:0xa97aff,accent:0xf2e4ff,type:'beam',origin:'staff',duration:4.0,desc:'Concentração de magia na ponta do cajado.'},
+{id:'arrow',title:'Flecha encantada',icon:'➶',family:'Flecha · Projétil',hex:0x6dffb3,accent:0xe6ffcc,type:'arrow',origin:'arrow',duration:3.3,desc:'Flecha de energia com trilhas finas.'},
+{id:'earth',title:'Terra explosiva',icon:'🪨',family:'Terra · Solo',hex:0xf2a855,accent:0xfff0bd,type:'earth',origin:'ground',duration:4.2,desc:'Anel de impacto, colunas de pedra e rochas flutuantes.'},
+{id:'orb',title:'Orbe arcano',icon:'🔮',family:'Arcana · Ar',hex:0x9d70ff,accent:0xffd2ff,type:'orb',origin:'air',duration:4.5,desc:'Esfera mágica cercada por aros rotatórios.'}
+ ];
+// Catálogo verificado de malhas CC0. GLBs são formas base sem animação; o laboratório adiciona movimentos e partículas.
+const glbUrls={
+ slash:'https://cdn.3dassets.dev/assets/22005/v1/model.glb',
+ ember:'https://cdn.3dassets.dev/assets/22004/v1/model.glb',
+ lightning:'https://cdn.3dassets.dev/assets/21927/v1/model.glb',
+ wormhole:'https://cdn.3dassets.dev/assets/21909/v1/model.glb',
+ dust:'https://cdn.3dassets.dev/assets/21926/v1/model.glb',
+ splash:'https://cdn.3dassets.dev/assets/21925/v1/model.glb',
+ puddle:'https://cdn.3dassets.dev/assets/36422/v1/model.glb'
+};
+const glbLoader=new GLTFLoader();
+let useExternalModels=true, externalRequestId=0;
+function urlFor(p){if(p.type==='sword')return 'slash';if(p.type==='projectile')return 'ember';if(p.type==='bolt')return 'lightning';if(p.type==='portal'||p.type==='necro')return 'wormhole';if(p.type==='vortex'||p.style==='smoke')return 'dust';if(p.style==='puddle'||p.style==='rain')return 'puddle';if(p.style==='splash')return 'splash';return null}
+function attachExternalModel(p,container){
+ const requestId=++externalRequestId, key=urlFor(p),status=document.getElementById('assetStatus');
+ if(!useExternalModels||!key){status.textContent=!useExternalModels?'Modelos GLB desativados • exibindo efeitos procedurais':'Efeito construído proceduralmente • sem GLB associado';return;}
+ status.textContent='Carregando modelo GLB CC0: '+key+'…';
+ glbLoader.load(glbUrls[key],gltf=>{
+   if(requestId!==externalRequestId||container!==fxGroup){gltf.scene.traverse(o=>{if(o.geometry)o.geometry.dispose()});return;}
+   const model=gltf.scene;model.name='GLB-CC0-'+key;
+   const setup={
+      slash:{scale:1.32,pos:[0,.68,.38]},ember:{scale:.72,pos:[-1.8,1.65,.12]},
+      lightning:{scale:1.7,pos:[1.28,.06,-.45]},wormhole:{scale:2.2,pos:[0,.14,0]},
+      dust:{scale:2.05,pos:[0,.05,0]},splash:{scale:1.8,pos:[0,.07,0]},puddle:{scale:1.4,pos:[0,.027,0]}
+   }[key];
+   model.scale.setScalar(setup.scale);model.position.set(...setup.pos);
+   if(key==='ember')model.rotation.z=-Math.PI/2;
+   if(key==='slash')model.rotation.y=-.25;
+   container.add(model);
+   status.textContent='GLB carregado: '+key+' • sobreposto a partículas e animação';
+   updates.push((t,d)=>{
+     let show=smooth(t/.17)*smooth((d-t)/.58);model.visible=show>.015;
+     if(key==='slash'){model.position.y=.68+Math.max(0,Math.sin(Math.min(t,1.3)*2.2))*.23;model.rotation.y=-.25+t*.38;model.scale.setScalar(setup.scale*(.45+.55*smooth(t/.5))*show)}
+     else if(key==='ember'){const progress=smooth(t/(d*.56));model.position.set(-1.8+3.65*progress,1.65+.15*Math.sin(progress*10),.12);model.scale.setScalar(setup.scale*show*(1-smooth((t-d*.58)/.19)));model.rotation.x=t*.75;}
+     else if(key==='lightning'){model.scale.setScalar(setup.scale*show*(.95+Math.sin(t*22)*.11));model.rotation.y=t*.14;}
+     else if(key==='wormhole'){model.rotation.y=t*.95;model.scale.setScalar(setup.scale*show*(.8+.2*Math.sin(t*2)));}
+     else if(key==='dust'){model.rotation.y=t*.48;model.scale.setScalar(setup.scale*show);}
+     else if(key==='puddle'){model.position.y=.027;model.scale.setScalar(setup.scale*show);}
+     else if(key==='splash'){model.scale.setScalar(setup.scale*show*(.55+smooth(t/.42)*.65));}
+   });
+ },undefined,e=>{if(requestId===externalRequestId)status.textContent='GLB indisponível ('+key+'): exibindo o efeito procedural';console.warn('Falha ao carregar GLB',key,e)});
+}
+const pane=document.getElementById('presets');
+let selected=presets.findIndex(p=>p.type==='sword'), currentFilter='sword';
+function swordPreset(p){return p.type==='sword'}
+function renderPresets(){
+ pane.replaceChildren();
+ presets.forEach((p,i)=>{
+   if(currentFilter==='sword'&&!swordPreset(p))return;
+   if(currentFilter==='magic'&&swordPreset(p))return;
+   const b=document.createElement('button');b.className='spell';b.type='button';
+   b.innerHTML=`<span class="emoji">${p.icon}</span><span>${p.title}</span>`;
+   b.setAttribute('aria-pressed',String(i===selected));b.addEventListener('click',()=>select(i));pane.appendChild(b);
+ });
+ document.querySelectorAll('.filter-btn').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===currentFilter)));
+}
+document.querySelectorAll('.filter-btn').forEach(b=>b.onclick=()=>{
+ currentFilter=b.dataset.filter;
+ if(currentFilter==='sword'&&!swordPreset(presets[selected])){select(presets.findIndex(swordPreset));return}
+ if(currentFilter==='magic'&&swordPreset(presets[selected])){select(presets.findIndex(p=>!swordPreset(p)));return}
+ renderPresets();
+});
+const state={clock:0,paused:false,loop:true,power:1,density:1,speed:1,cycle:0,started:true};
+let fxGroup=new THREE.Group(),updates=[],fxMaterials=[],primaryParticle,minorParticle,shock,ripple,hits=[],swordEmitters=[]; scene.add(fxGroup);
+const basic=(color,opacity=1)=>{const m=new THREE.MeshBasicMaterial({color,transparent:true,opacity,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});fxMaterials.push(m);return m};
+const spriteMap=(map,color,scale=1,opacity=.9,where=V())=>{const s=new THREE.Sprite(new THREE.SpriteMaterial({map,color,transparent:true,opacity,depthWrite:false,blending:THREE.AdditiveBlending}));s.position.copy(where);s.scale.set(scale,scale,1);fxGroup.add(s);fxMaterials.push(s.material);return s};
+const sprite=(color,scale=1,opacity=.9,where=V())=>spriteMap(glowMap,color,scale,opacity,where);
+const mesh=(g,m,where)=>{const o=new THREE.Mesh(g,m);if(where)o.position.copy(where);fxGroup.add(o);return o};
+const ring=(r,thick,y,color,op=.8)=>{const o=mesh(new THREE.TorusGeometry(r,thick,7,128),basic(color,op),V(0,y,0));o.rotation.x=Math.PI/2;return o};
+function torus(r,thick,color,op,pos=V()){return mesh(new THREE.TorusGeometry(r,thick,7,120),basic(color,op),pos)}
+function cable(points,color,thick=.018,op=.8){const curve=new THREE.CatmullRomCurve3(points);return mesh(new THREE.TubeGeometry(curve,Math.max(10,points.length*8),thick,5,false),basic(color,op))}
+function sphere(r,color,op=1,loc=V()){return mesh(new THREE.SphereGeometry(r,32,20),basic(color,op),loc)}
+function crystal(size,color,loc=V()){const m=new THREE.MeshPhysicalMaterial({color,emissive:color,emissiveIntensity:1.2,roughness:.26,metalness:.12,flatShading:true,transparent:true,opacity:.85});fxMaterials.push(m);return mesh(new THREE.OctahedronGeometry(size,0),m,loc)}
+function swish(radius,start,arc,thickness,col,op=.95,rotation=0,origin=V(0,1.45,0)){
+ const seg=50, vertices=[],inds=[];for(let i=0;i<=seg;i++){const q=i/seg,angle=start+arc*q;const w=Math.sin(Math.PI*q)**.72*thickness;for(const rad of [radius-w*.55,radius+w*.55])vertices.push(Math.cos(angle)*rad,Math.sin(angle)*rad,0)}
+ for(let i=0;i<seg;i++){const v=2*i;inds.push(v,v+1,v+2,v+1,v+3,v+2)}
+ const geom=new THREE.BufferGeometry();geom.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geom.setIndex(inds);geom.computeVertexNormals();const o=mesh(geom,basic(col,op),origin);o.rotation.y=rotation;return o;
+}
+function flameTongue(color,size,where=V()){const g=new THREE.ConeGeometry(size*.16,size,6,1,true);const m=basic(color,.85);const o=mesh(g,m,where);o.rotation.z=Math.PI;return o}
+function cylinderGlow(radius,height,color,opacity=.55,where=V()){const m=basic(color,opacity);const o=mesh(new THREE.CylinderGeometry(radius,radius,height,20,1,true),m,where);return o}
+function makeSkull(color,where=V(),scale=1){const s=spriteMap(skullMap,color,scale,.9,where);return s}
+function jagLine(points,color,op=.9){const geo=new THREE.BufferGeometry().setFromPoints(points);const mat=new THREE.LineBasicMaterial({color,transparent:true,opacity:op,blending:THREE.AdditiveBlending,depthWrite:false});fxMaterials.push(mat);const line=new THREE.Line(geo,mat);fxGroup.add(line);return line}
+function disposeGroup(g){g.traverse(obj=>{if(obj.geometry)obj.geometry.dispose();if(obj.material){if(Array.isArray(obj.material))obj.material.forEach(x=>x.dispose());else obj.material.dispose()}});scene.remove(g)}
+const magicOrigin=()=>{let name=document.getElementById('origin').value;if(name==='auto')name=presets[selected].origin;return name};
+function emitOrigin(){const origin=magicOrigin();if(origin==='ground')return V(0,.05,0);if(origin==='air')return V(0,1.55,0);if(origin==='sword')return V(-1.35,1.7,0);if(origin==='dagger')return V(-1.4,1.15,0);if(origin==='axe')return V(-1.15,2.05,0);if(origin==='arrow')return V(-2.1,1.5,0);return V(-1.8,1.5,0)}
+function makeParticles(count,sz,color){const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(count*3),3));geo.attributes.position.setUsage(THREE.DynamicDrawUsage);const mat=new THREE.PointsMaterial({color,size:sz,map:glowMap,transparent:true,opacity:.92,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});const obj=new THREE.Points(geo,mat);obj.frustumCulled=false;fxGroup.add(obj);return obj}
+function updateParticles(obj,count,t,duration,kind,isTiny){const arr=obj.geometry.attributes.position.array;const origin=emitOrigin(),present=presets[selected];const frac=t/duration;const nActive=Math.floor(count*state.density);const hitP=smooth((t-duration*.34)/(duration*.18));
+ for(let i=0;i<count;i++){
+  const j=i*3; if(i>=nActive||t>=duration){arr[j]=arr[j+1]=arr[j+2]=999;continue}
+  const h=rnd(i+1),v=rnd(i+71),w=rnd(i+473),age=fract(frac*(.75+v*.5)+h);const a=TAU*h+t*(.7+w*.9),r=Math.sqrt(v)*2.7;let x=0,y=0,z=0;
+  if(kind==='shield'){const yy=v*Math.PI/2,rr=2.82*Math.cos(yy);x=Math.cos(a)*rr;y=.08+2.82*Math.sin(yy);z=Math.sin(a)*rr;y+=Math.sin(t*3+i)*.028;}
+  else if(kind==='portal'||kind==='orb'){const spiral=(kind==='orb'?1.05:1.7)+v*.6; x=Math.cos(a*1.7)*spiral; y=1.7+Math.sin(a*1.9)*spiral*(kind==='portal'?.75:1.);z=Math.sin(a*1.3)*spiral;}
+  else if(kind==='vortex'||kind==='necro'){const yy=age*3.4,rr=(.2+age*1.6)*(kind==='necro'?.7:1);x=Math.cos(a+age*14)*rr;y=.06+yy;z=Math.sin(a+age*14)*rr;if(kind==='vortex'){x*=1.2;z*=1.2;y+=Math.sin(age*18+h*8)*.08;}}
+  else if(kind==='pillar'||kind==='crystal'||kind==='earth'||kind==='cleave'){const aa=TAU*h;const spread=kind==='earth'?2.7:kind==='cleave'?2.4:1.8;x=Math.cos(aa)*spread*v;y=.04+age*3.1*(.3+w*.9);z=Math.sin(aa)*spread*v;if(kind==='crystal'){x*=.85;z*=.85;y+=1.2*age;}}
+  else if(kind==='sword'){const e=swordEmitters[Math.floor(rnd(i+18)*swordEmitters.length)];const mode=presets[selected].style; if(e){const off=.08+age*1.3; x=e.x+(h-.5)*off*2;y=e.y+(v-.5)*off*1.7;z=e.z+(w-.5)*off*1.8;}else if(mode==='ground'||mode==='air'){const aa=h*TAU,rr=1.3*v;x=Math.cos(aa)*rr;y=.05+age*1.1;z=Math.sin(aa)*rr;}else{x=-.4+(h-.5)*2;y=1.55+(v-.5)*2;z=(w-.5)*.5;}}
+  else if(kind==='slash'||kind==='daggers'){const rad=1.35+v*1.2, ang=-1+age*2.75 + ((kind==='daggers')?((i%3)-1)*.25:0);x=-.45+Math.cos(ang)*rad;y=1.45+Math.sin(ang)*rad;z=(w-.5)*.9;}
+  else if(kind==='environment'){const radius=Math.sqrt(v)*1.8;x=Math.cos(a)*radius;y=.10+age*3.;z=Math.sin(a)*radius;}
+  else if(kind==='projectile'||kind==='arrow'||kind==='bolt'||kind==='beam'){const progress=kind==='projectile'||kind==='arrow'?smooth(frac*1.6):clamp(frac*1.45);const along=(h*.9+.1)*3.7*progress;x=-1.8+along;y=1.48+Math.cos(a)*(.11+v*.3);z=Math.sin(a)*(.11+v*.3);if(kind==='bolt'||kind==='beam'){y+=Math.sin(progress*18+h*7)*.25*(1-progress);z+=Math.cos(progress*14+w*5)*.18*(1-progress);}if(frac>.49){x=1.7+(h-.5)*1.7*hitP;y=1.25+(v-.5)*2.2*hitP;z=(w-.5)*2.2*hitP;}}
+  else {x=Math.cos(a)*r;y=.1+age*2.5;z=Math.sin(a)*r;}
+  const scale=isTiny?1.0:1.0; arr[j]=x*scale;arr[j+1]=y*scale;arr[j+2]=z*scale;
+ }
+ obj.geometry.attributes.position.needsUpdate=true;
+}
+
+// Espadas: fitas energéticas em 3D, desenhadas progressivamente conforme o movimento da lâmina.
+function makeSwordVFX(p,C,Hi){
+ const mode=p.style||'arc'; const sweeps=[];const finishEffects=[];
+ const add=(opts)=>sweeps.push({delay:0,move:.5,life:1.05,start:-2.25,span:2.6,radius:2.25,thick:.29,at:V(0,1.6,0),rot:V(0,0,0),...opts});
+ if(mode==='arc')add({start:-2.55,span:2.85,radius:2.18,at:V(-.1,1.55,.05),rot:V(.12,-.13,.12)});
+ if(mode==='horizontal')add({start:-2.8,span:3.2,at:V(0,1.55,.12),rot:V(.22,.35,0),thick:.32});
+ if(mode==='vertical')add({start:-2.35,span:3.15,at:V(-.05,1.52,.05),rot:V(.18,.17,Math.PI/2),thick:.30,move:.68});
+ if(mode==='diagonal')add({start:-2.6,span:3.05,at:V(0,1.56,0),rot:V(.16,.38,-.67),radius:2.32});
+ if(mode==='cross'){
+   add({delay:.12,move:.46,life:.86,start:-2.25,span:2.7,rot:V(.05,.2,.64),at:V(0,1.68,0)});
+   add({delay:.60,move:.49,life:1.0,start:-2.40,span:2.75,rot:V(.06,-.25,-.68),at:V(0,1.68,.12),thick:.32});
+ }
+ if(mode==='combo'){
+   add({delay:.12,move:.32,life:.67,span:2.3,rot:V(.1,.2,-.32),at:V(-.23,1.48,.05),thick:.22});
+   add({delay:.47,move:.31,life:.68,start:.60,span:-2.42,rot:V(.2,-.3,.47),at:V(.13,1.65,.1),thick:.26});
+   add({delay:.87,move:.39,life:.93,span:2.85,rot:V(.15,.26,-.1),radius:2.52,thick:.34});
+ }
+ if(mode==='spin'){
+   add({delay:.15,move:1.10,life:1.50,start:-Math.PI,span:TAU*.98,radius:2.5,thick:.32,at:V(0,1.42,0),rot:V(Math.PI/2,0,0)});
+   add({delay:.45,move:1.0,life:1.2,start:-1.3,span:TAU*.93,radius:2.28,thick:.22,at:V(0,1.10,0),rot:V(Math.PI/2,0,0)});
+ }
+ if(mode==='dash'){
+   add({delay:.20,move:.67,life:1.04,start:-2.48,span:2.75,radius:2.07,thick:.38,at:V(-1.95,1.55,0),rot:V(.1,.19,-.23),travel:3.9});
+   add({delay:.33,move:.70,life:.81,start:-2.44,span:2.55,radius:1.95,thick:.19,at:V(-2.28,1.57,-.28),rot:V(.12,.2,-.2),travel:3.7});
+ }
+ if(mode==='air')add({delay:.15,move:.83,life:1.3,start:-2.15,span:3.05,radius:2.52,thick:.42,at:V(0,2.82,0),rot:V(.07,.32,1.1),drop:2.58});
+ if(mode==='ground')add({delay:.35,move:.71,life:1.0,start:-2.3,span:3.05,radius:2.54,thick:.43,at:V(0,2.7,0),rot:V(.15,-.28,1.12),drop:2.51});
+ if(mode==='charged'){
+   add({delay:1.08,move:.80,life:1.65,start:-2.85,span:3.9,radius:2.85,thick:.51,at:V(0,1.76,0),rot:V(.12,.16,.12)});
+   add({delay:1.24,move:.83,life:1.53,start:-2.71,span:3.8,radius:3.06,thick:.20,at:V(0,1.73,-.18),rot:V(.17,.27,.1)});
+ }
+ if(mode==='parry'){
+   add({delay:.12,move:.34,life:.70,start:-2.3,span:2.35,radius:1.62,thick:.28,at:V(-.05,1.54,0),rot:V(0,.15,Math.PI/2)});
+   add({delay:.79,move:.51,life:1.2,start:-2.62,span:3.13,radius:2.46,thick:.33,at:V(.14,1.56,.15),rot:V(.1,-.3,-.26)});
+ }
+ // Geometria dinâmica: camada brilhante externa + núcleo fino + pós-imagem.
+ const N=66;
+ function buildRibbon(layer, s){
+   const geo=new THREE.BufferGeometry();const coords=new Float32Array((N+1)*2*3);const idx=[];
+   for(let k=0;k<N;k++){let a=k*2;idx.push(a,a+1,a+2,a+1,a+3,a+2)}
+   geo.setAttribute('position',new THREE.BufferAttribute(coords,3));geo.attributes.position.setUsage(THREE.DynamicDrawUsage);geo.setIndex(idx);
+   const mat=basic(layer===0?C:layer===1?Hi:C,0);
+   const o=mesh(geo,mat);o.frustumCulled=false;
+   const params=[{w:1.8,z:-.025,alpha:.27},{w:.38,z:.034,alpha:.88},{w:1.0,z:-.080,alpha:.12}][layer];
+   return {o,params};
+ }
+ const rigs=sweeps.map((s,i)=>{
+   const holder=new THREE.Group();fxGroup.add(holder);holder.position.copy(s.at);holder.rotation.set(s.rot.x,s.rot.y,s.rot.z);
+   const ribbons=[0,1,2].map(layer=>{
+      const r=buildRibbon(layer,s);holder.add(r.o);fxGroup.remove(r.o);return r;
+   });
+   const flare=sprite(i%2?C:Hi,.75,0,V());
+   return {s,holder,ribbons,flare};
+ });
+ // Ondas de choque, halos e pequenos fragmentos emergentes nos golpes pesados.
+ const impactPos=(mode==='ground'||mode==='air')?V(0,.09,0):V(.42,1.65,.25);
+ const impacts=(mode==='cross')?[1.07]:(mode==='combo')?[.51,.91,1.37]:(mode==='charged')?[1.92]:(mode==='parry')?[.49,1.31]:(mode==='spin')?[1.34]:(mode==='air'||mode==='ground')?[1.22]:[.68];
+ const bursts=impacts.map((when,index)=>{
+   const boom=sprite(Hi,index===impacts.length-1?2.6:1.65,0,impactPos.clone());
+   const wave=torus(mode==='ground'?1.15:.44,.03,Hi,0,impactPos.clone());
+   if(mode==='ground'||mode==='air'||mode==='spin')wave.rotation.x=Math.PI/2;
+   return {when,boom,wave};
+ });
+ const groundWave=mode==='ground'||mode==='spin'||mode==='air';
+ const debris=[];
+ if(mode==='ground')for(let i=0;i<28;i++){
+   const a=TAU*i/28, rad=.35+1.8*rnd(i+10);
+   const ob=mesh(new THREE.DodecahedronGeometry(.075+.09*rnd(i+6),0),new THREE.MeshStandardMaterial({color:0x96735c,emissive:C,emissiveIntensity:.21,roughness:.8,flatShading:true}),V(Math.cos(a)*rad,0,Math.sin(a)*rad));
+   debris.push({ob,a,rad,height:.25+.7*rnd(i+54)});
+ }
+ const chargedOrb=mode==='charged'?sprite(C,2.8,0,V(-.6,1.55,0)):null;
+ const brightStreaks=[];
+ for(let i=0;i<36;i++){
+  const st=sprite(i%3===0?Hi:C,.09,0,V());brightStreaks.push(st);
+ }
+ updates.push((t,d)=>{
+   swordEmitters=[];
+   const tailFade=smooth((d-t)/.35);
+   for(let i=0;i<rigs.length;i++){
+     const {s,holder,ribbons,flare}=rigs[i];
+     const age=t-s.delay, p=clamp(age/s.move), reveal=smooth(p);
+     const alive=age>=0&&age<s.life;
+     const dissolve=smooth((s.life-age)/.55)*tailFade;
+     holder.position.set(s.at.x+(s.travel||0)*reveal,s.at.y-(s.drop||0)*reveal,s.at.z);
+     holder.updateMatrixWorld(true);const invHolder=holder.matrixWorld.clone().invert();
+     ribbons.forEach(({o,params},layer)=>{
+       const ar=o.geometry.attributes.position.array;
+       let a0=Math.max(0,reveal-.39),a1=Math.max(a0,reveal);
+       if(!alive||reveal<.012){o.visible=false;return}
+       o.visible=true;
+       for(let j=0;j<=N;j++){
+         const q=mix(a0,a1,j/N),ang=s.start+s.span*q;
+         const w=Math.pow(Math.sin(Math.PI*(j+.01)/(N+.02)),.65)*s.thick*params.w;
+         const radial=s.radius+Math.sin(q*10+t*3.8)*.035;
+         for(let k=0;k<2;k++){
+           const r=radial+(k?1:-1)*w*.5,index=(j*2+k)*3;
+           ar[index]=Math.cos(ang)*r;
+           ar[index+1]=Math.sin(ang)*r;
+           ar[index+2]=params.z+.09*Math.sin(q*11+i)*(.2+q);
+           // Mantém todo vértice da faixa acima do chão, inclusive cortes inclinados e aéreos.
+           const vertex=V(ar[index],ar[index+1],ar[index+2]).applyMatrix4(holder.matrixWorld);
+           if(vertex.y<.20){vertex.y=.20;vertex.applyMatrix4(invHolder);ar[index]=vertex.x;ar[index+1]=vertex.y;ar[index+2]=vertex.z;}
+         }
+       }
+       o.geometry.attributes.position.needsUpdate=true;
+       o.material.opacity=params.alpha*dissolve*state.power;
+     });
+     if(alive&&reveal>.02){
+       const a=s.start+s.span*reveal;
+       const tip=V(Math.cos(a)*s.radius,Math.sin(a)*s.radius,.02);
+       const world=holder.localToWorld(tip.clone());
+       world.y=Math.max(.20,world.y);flare.position.copy(world);flare.scale.setScalar(.56+.32*Math.sin(age*16)**2);flare.material.opacity=.75*dissolve;
+       swordEmitters.push(world);
+     }else flare.material.opacity=0;
+   }
+   bursts.forEach(({when,boom,wave},i)=>{
+      const age=t-when,on=age>=0&&age<.60;boom.visible=wave.visible=on;
+      if(!on)return;
+      const fade=(1-smooth(age/.6))*state.power;
+      boom.material.opacity=.89*fade;boom.scale.setScalar((1+age*4)* (mode==='ground'?1.7:1));
+      wave.material.opacity=.82*fade;wave.scale.setScalar(.5+age*(groundWave?5.3:3.4));
+      if(!groundWave)wave.quaternion.copy(camera.quaternion);
+   });
+   brightStreaks.forEach((st,i)=>{
+     const e=swordEmitters[i%swordEmitters.length];
+     if(!e){st.visible=false;return}
+     st.visible=true;
+     const h=rnd(i+9), v=rnd(i+49), age=fract(t*(.9+h*.7)+i/36);
+     st.position.set(e.x+(h-.5)*1.15*age,e.y+(v-.5)*1.08*age,e.z+(rnd(i+67)-.5)*.75*age);
+     st.scale.setScalar(.03+.19*(1-age));st.material.opacity=.5*(1-age)*state.power;
+   });
+   if(chargedOrb){const a=smooth(t/.85)*(1-smooth((t-1.13)/.55));chargedOrb.material.opacity=a*.9;chargedOrb.scale.setScalar(1.1+a*1.9)}
+   debris.forEach(({ob,a,rad,height},i)=>{
+     const age=t-1.12,progress=clamp(age/1.3),visible=age>0&&age<1.55;
+     ob.visible=visible;
+     if(visible){ob.position.set(Math.cos(a)*(rad+.6*progress),height*Math.sin(Math.PI*progress)+.025,Math.sin(a)*(rad+.6*progress));ob.rotation.set(age*2,age*2.6,age);ob.scale.setScalar((1-progress)*.92)}
+   });
+ });
+}
+
+function effectBuild(){const p=presets[selected],C=p.hex,Hi=p.accent,style=p.style||'';disposeGroup(fxGroup);fxGroup=new THREE.Group();scene.add(fxGroup);updates=[];fxMaterials=[];hits=[];swordEmitters=[];
+ const ty=p.type; if(ty==='sword')makeSwordVFX(p,C,Hi); const core=sprite(C,3,.27,V(0,1.35,0));const low=sprite(C,3.7,.2,V(0,.06,0));updates.push((t,d)=>{const fade=smooth(t/.24)*smooth((d-t)/.8);core.material.opacity=(.16+.10*Math.sin(t*4))*fade;low.material.opacity=.17*fade;core.scale.setScalar(2.4+Math.sin(t*2)*.1)});
+ const groundRing=ring(1.6,.024,.015,C,.38);const outerRing=ring(2.55,.015,.018,Hi,.22);
+ if(ty==='sword'){core.visible=false;low.visible=false;groundRing.visible=false;outerRing.visible=false;}
+ const emitterPoint=emitOrigin();
+ const sourceFlash=sprite(Hi,1.1,.72,emitterPoint);
+ const sourceOrb=sphere(.075,C,.85,emitterPoint);if(ty==='sword'){sourceFlash.visible=false;sourceOrb.visible=false;}
+ updates.push((t,d)=>{const fade=smooth(t/.18)*smooth((d-t)/.65);sourceFlash.material.opacity=(.32+.27*Math.sin(t*8))*fade;sourceFlash.scale.setScalar(.9+.25*Math.sin(t*6));sourceOrb.material.opacity=.65*fade;});
+ updates.push((t,d)=>{groundRing.rotation.z=t*.25;groundRing.material.opacity=(.2+smooth(t/.7)*.34)*Math.min(1,(d-t)/.4);outerRing.rotation.z=-t*.12;outerRing.material.opacity=(.2+smooth(t/.7)*.2)*Math.min(1,(d-t)/.4)});
+ 
+ if(ty==='shield'){
+  const shmat=new THREE.ShaderMaterial({uniforms:{time:{value:0},alpha:{value:0},color:{value:new THREE.Color(C)}},vertexShader:`varying vec3 vN;varying vec3 vP;void main(){vec4 wp=modelMatrix*vec4(position,1.);vP=wp.xyz;vN=normalize(mat3(modelMatrix)*normal);gl_Position=projectionMatrix*viewMatrix*wp;}`,fragmentShader:`uniform float time,alpha;uniform vec3 color;varying vec3 vN,vP;void main(){float fres=pow(1.-abs(dot(normalize(vN),normalize(cameraPosition-vP))),2.1);float lines=pow(max(0.,sin(vP.y*22.-time*2.+atan(vP.z,vP.x)*12.)),24.);float pulse=.6+.4*sin(time*3.);gl_FragColor=vec4(color*(.35+fres*1.7+lines+pulse*.15),alpha*(.04+fres*.56+lines*.12));}`,transparent:true,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+  const dome=mesh(new THREE.SphereGeometry(2.85,72,44,0,TAU,0,Math.PI/2),shmat,V(0,.05,0));const base=ring(2.87,.049,.048,C,.85);
+  const turners=[];for(let i=0;i<4;i++){const tor=torus([2.1,1.72,1.24,.78][i],.025,i===2?Hi:C,.72,V(0,[.75,1.30,1.92,2.42][i],0));tor.rotation.x=Math.PI/2+.08*(i%2?1:-1);turners.push(tor)}
+  const gems=[];for(let i=0;i<30;i++){const a=i/30*TAU;const gem=crystal(.09+(i%3)*.04,C,V(2.77*Math.cos(a),.23,2.77*Math.sin(a)));gem.scale.y=1.6;gems.push(gem)}
+  const hexes=[]; if(style==='hex'){for(let i=0;i<18;i++){const ang=i/18*TAU;const pl=mesh(new THREE.CircleGeometry(.28,6),basic(Hi,.0),V(Math.cos(ang)*2.1,1.4+Math.sin(i)*.55,Math.sin(ang)*2.1));pl.lookAt(V(0,1.4,0));hexes.push(pl)}}
+  updates.push((t,d)=>{const a=smooth(t/.9),f=smooth((d-t)/.65);dome.scale.setScalar(.08+.92*a);shmat.uniforms.time.value=t;shmat.uniforms.alpha.value=f*a*state.power;base.scale.setScalar(.4+.6*a);turners.forEach((o,i)=>{o.scale.setScalar(.15+.85*a);o.rotation.z=t*(i%2?-.5:.4);o.position.y=[.75,1.3,1.92,2.42][i]*a});gems.forEach((g,i)=>{g.scale.setScalar((.2+.8*a)*(1+.05*Math.sin(t*2+i)));g.position.y=.17+Math.sin(t*2+i)*.06});hexes.forEach((h,i)=>{h.material.opacity=.3*a*f;h.scale.setScalar(.55+.2*Math.sin(t*2+i));h.lookAt(camera.position)});if(style==='void'){dome.material.uniforms.color.value.setRGB(.55,.34,.95);turners.forEach((o,i)=>{o.material.opacity=.4*a*f;o.rotation.y=t*(i+1)*.35;});}});
+ }
+ if(ty==='projectile' || ty==='arrow'){
+  const ball=sphere(ty==='arrow'?.18:.32,C,.8,V(-1.8,1.55,0));const halo=sprite(Hi,ty==='arrow'?1.5:2.6,.9,V(-1.8,1.55,0));const tracer=[];for(let i=0;i<9;i++)tracer.push(sprite(i%2?C:Hi,.44,.58,V(-1.8,1.5,0)));
+  const flames=[]; if(ty==='projectile'){for(let i=0;i<7;i++)flames.push(flameTongue(i%3?C:Hi,.75+.22*(i%3),V(-1.8,1.55,0)))}
+  if(ty==='arrow'){ball.scale.set(.9,.38,2.8);ball.rotation.y=Math.PI/2;}
+  const dissipate=[]; for(let i=0;i<24;i++)dissipate.push(sprite(i%2?Hi:C,.35,0,V(1.8,1.3,0)));
+  updates.push((t,d)=>{const prog=smooth(t/(d*.56)),fade=smooth((d-t)/.55);const pos=V(-1.8+3.65*prog,1.55+.15*Math.sin(prog*10),0);ball.position.copy(pos);halo.position.copy(pos);ball.material.opacity=fade;halo.material.opacity=fade*.83;tracer.forEach((o,i)=>{let q=Math.max(0,prog-.04*(i+1));o.position.set(-1.8+3.65*q,1.55+.18*Math.sin(q*10),.09*Math.sin(i+t*3));o.material.opacity=fade*(.15+.8*(1-i/9));o.scale.setScalar(.18+.42*(1-i/9));});
+    flames.forEach((f,i)=>{const ang=t*4+i*TAU/flames.length;f.position.set(pos.x+Math.cos(ang)*.11,pos.y-.15+i*.025,pos.z+Math.sin(ang)*.11);f.scale.set(.55+.15*Math.sin(t*7+i),1.3+.5*Math.sin(t*9+i),.55);f.rotation.y=ang;f.material.opacity=.45+.35*Math.sin(t*8+i); if(style==='blackflame'){f.material.color.setHex(i%2?0x1a0c24:0x5e2b94);} if(style==='greenflame'){f.material.color.setHex(i%2?0x37ff87:0xd8ff8c);} });
+    const q=t-d*.58; dissipate.forEach((s,i)=>{const on=q>0&&q<.75; s.visible=on; if(!on)return; const h=rnd(i+4),v=rnd(i+52),g=smooth(q/.75); s.position.set(1.7+(h-.5)*2.1*g,1.25+(v-.5)*1.4*g,(rnd(i+11)-.5)*1.2*g); s.material.opacity=(1-g)*.86; s.scale.setScalar(.15+(1-g)*.85);});
+    if(q>0){ball.visible=false;halo.material.opacity*=Math.max(0,1-q*4.2);flames.forEach(f=>f.material.opacity=Math.max(0,.8-q*1.6));}
+  });
+ }
+ if(ty==='bolt'||ty==='beam'){
+  const beams=[];const branches=[];const shot=sprite(Hi,1.3,1,V(-1.8,1.5,0));
+  const count=ty==='beam'?5:(style==='storm'?8:6);
+  for(let k=0;k<count;k++)beams.push(jagLine([V(),V(1,1,0)],k%2?Hi:C,.88));
+  for(let k=0;k<(style==='storm'?5:3);k++)branches.push(jagLine([V(),V(.6,.3,0)],Hi,.55));
+  const impacts=[];for(let i=0;i<(style==='storm'?4:1);i++){impacts.push(sprite(Hi,1.2,0,V(-.5,0,0)));impacts.push(sprite(C,2.0,0,V(-.5,0,0)));}
+  updates.push((t,d)=>{const reach=smooth(t/.56),fade=smooth((d-t)/.5);shot.scale.setScalar(1.2+Math.sin(t*12)*.15);shot.material.opacity=fade*.9;
+    beams.forEach((line,k)=>{const pts=[];const segments=style==='storm'?18:15; const start=style==='storm'?V(-1.4+k*.36,3.6,.4*Math.sin(k)):V(-1.8,1.5,0); const end=style==='storm'?V(-1.2+k*.45,.1,.3*Math.cos(k)):V(1.9,1.35,0); for(let j=0;j<segments;j++){const f=j/(segments-1); const base=start.clone().lerp(end,Math.min(1,reach*f*1.2)); const zig=((j%2)*2-1)*(style==='storm'?0.18:0.13)*(1-f); base.x+=zig*(.3+.7*rnd(j+k*8)); base.z+=Math.sin(j*1.7+t*17+k)*(.08+.04*k)*(1-f); base.y+=Math.sin(j*2.1+t*25+k)*(.06+.02*k); pts.push(base);} line.geometry.setFromPoints(pts); line.material.opacity=(.25+.6*(k%2?1:.5))*fade;});
+    branches.forEach((line,k)=>{const root=style==='storm'?V(-1.1+k*.48,1.5,.2*Math.sin(k)):V(.1+k*.55,1.35,.15*Math.cos(k)); const pts=[root]; for(let j=1;j<7;j++){const f=j/6; pts.push(V(root.x+.25*f+((j%2)*2-1)*.18*f, root.y+.15-.55*f, root.z+Math.sin(j+k)*.18*f));} line.geometry.setFromPoints(pts); line.material.opacity=.55*fade*(.5+.5*Math.sin(t*30+k));});
+    impacts.forEach((sp,i)=>{const on=t>d*.34; sp.visible=on; if(!on)return; const col=style==='storm'?i/2:0; const x=style==='storm'?-1.2+col*.45:1.82; const q=smooth((t-d*.34)/.7); sp.position.set(x,.05+(i%2)*.12,0); sp.scale.setScalar(.5+q*(i%2?2.8:1.6)); sp.material.opacity=(1-q)*.8;});
+  });
+ }
+ if(ty==='crystal'||ty==='earth'||ty==='cleave'){
+  const shards=[];for(let i=0;i<(ty==='crystal'?34:24);i++){const angle=TAU*i/34,r=.25+1.9*rnd(i+32),height=.28+2.25*rnd(i+71);let ob;if(ty==='crystal')ob=crystal(.21+rnd(i+5)*.23,C,V(Math.cos(angle)*r,height*.5,Math.sin(angle)*r));else{const material=new THREE.MeshStandardMaterial({color:ty==='cleave'?0x956040:0x8e6d4b,emissive:C,emissiveIntensity:.14,roughness:.76,flatShading:true});ob=mesh(new THREE.DodecahedronGeometry(.14+.33*rnd(i+5),0),material,V(Math.cos(angle)*r,height*.5,Math.sin(angle)*r));}ob.scale.y=ty==='crystal'?2.2+rnd(i+13)*1.7:1.2;shards.push({ob,height,angle,r})}
+  const hit=ring(1.2,.072,.04,C,.95);
+  const centerPillar=(ty==='crystal')?cylinderGlow(style==='prison'?1.05:.72,3.9,Hi,.35,V(0,1.95,0)):null;
+  const innerCore=(ty==='crystal')?crystal(.55,Hi,V(0,1.8,0)):null;
+  const burst=[]; if(ty==='crystal')for(let i=0;i<26;i++)burst.push(sprite(i%3?Hi:C,.4,0,V(0,2.0,0)));
+  updates.push((t,d)=>{const a=smooth((t-.18)/.65),f=smooth((d-t)/.8);shards.forEach(({ob,height,angle,r},i)=>{const explode=smooth((t-(style==='pillarburst'?2.05:2.35))/.7); if(ty==='crystal'){ob.scale.y=(2.2+rnd(i+13)*1.7)*a*f; ob.scale.x=ob.scale.z=Math.max(.015,a*f); ob.position.y=height*(style==='prison'?a*.42:a*.52)+explode*.6; ob.position.x=Math.cos(angle)*(r+explode*1.8); ob.position.z=Math.sin(angle)*(r+explode*1.8);} else {ob.scale.y=1.2*a*f; ob.scale.x=ob.scale.z=Math.max(.015,a*f); ob.position.y=height*a*.52;}});hit.scale.setScalar(.3+t*.85);hit.material.opacity=(1-smooth(t/2.1))*.9;
+    if(centerPillar){const grow=smooth(t/.85),explode=smooth((t-2.0)/.7); centerPillar.scale.set(style==='prison'?1.2:1, grow*(style==='prison'?1.1:1.2), style==='prison'?1.2:1); centerPillar.material.opacity=(.38+.12*Math.sin(t*8))*grow*(1-explode); innerCore.scale.setScalar(.5+grow*1.4); innerCore.material.opacity=(.55+.25*Math.sin(t*9))*grow*(1-explode);} 
+    burst.forEach((s,i)=>{const q=t-2.02; const on=q>0&&q<1.1; s.visible=on; if(!on)return; const gg=smooth(q/1.1), ang=TAU*(i/26); s.position.set(Math.cos(ang)*(gg*3.0),1.95+Math.sin(i)*.1+(rnd(i+11)-.5)*gg,Math.sin(ang)*(gg*3.0)); s.material.opacity=(1-gg)*.85; s.scale.setScalar(.18+(1-gg)*1.1);});
+  });
+ }
+ if(ty==='pillar'||ty==='necro'){
+  const beam=sphere(.28,C,.2,V(0,1.4,0));beam.scale.set(1,7,1);
+  const spirals=[];for(let i=0;i<3;i++){const pts=[];for(let j=0;j<70;j++){const q=j/69;const a=TAU*(q*3+i/3);const rr=(style==='firepillar'||style==='blackskulls'?1.3-q*.3:1.0-q*.4);pts.push(V(Math.cos(a)*rr,.1+q*3.5,Math.sin(a)*rr))}spirals.push(cable(pts,i%2?Hi:C,.018,.55))}
+  const rune=ring(1.32,.04,.055,Hi,.8);
+  const flames=[]; if(style==='firepillar'||style==='blackskulls'){for(let i=0;i<11;i++)flames.push(flameTongue(i%2?C:Hi,.95,V(Math.cos(i/11*TAU)*.55,.35,Math.sin(i/11*TAU)*.55)))}
+  const skulls=[]; if(ty==='necro'){for(let i=0;i<10;i++)skulls.push(makeSkull(style==='blackskulls'?(i%2?0x7d59ff:0x41ff91):Hi,V(0,1.1,0),.34))}
+  updates.push((t,d)=>{const a=smooth(t/.65),f=smooth((d-t)/.75);beam.material.opacity=.28*a*f;beam.scale.x=beam.scale.z=.38+Math.sin(t*5)*.1;spirals.forEach((sp,i)=>{sp.rotation.y=t*(i%2?-1:1)*1.35;sp.scale.y=Math.max(.001,a*f);sp.material.opacity=a*f*.75});rune.scale.setScalar(.35+a*.65);rune.rotation.z=t*.9;rune.material.opacity=a*f*.9;
+    flames.forEach((fl,i)=>{const ang=t*2.6+i*TAU/flames.length; fl.position.set(Math.cos(ang)*(.55+.15*Math.sin(t*3+i)), .3+.25*Math.sin(t*6+i)+a*2.1, Math.sin(ang)*(.55+.15*Math.cos(t*3+i))); fl.scale.set(.55,1.5+.9*Math.sin(t*7+i)**2,.55); fl.material.opacity=.45*a*f; if(style==='blackskulls')fl.material.color.setHex(i%2?0x1a0c24:0x41ff91);});
+    skulls.forEach((sk,i)=>{const ang=t*1.8+i*TAU/skulls.length; const rise=1.0+fract(t*.25+i/skulls.length)*2.2; sk.position.set(Math.cos(ang)*(.65+.15*Math.sin(i+t)), rise, Math.sin(ang)*(.65+.15*Math.cos(i+t))); sk.scale.setScalar(.25+.12*Math.sin(t*4+i)+.18*a); sk.material.opacity=.55*a*f*(.65+.35*Math.sin(t*6+i)); sk.lookAt(camera.position);});
+  });
+ }
+ if(ty==='portal'||ty==='orb'||ty==='vortex'){
+  const pivot=V(0,ty==='vortex'?1.45:1.6,0);const center=sphere(ty==='portal'?.72:.32,ty==='portal'?0x180921:C,ty==='portal'?.94:.48,pivot);
+  const bands=[];for(let i=0;i<7;i++){const b=torus(.74+i*.15,.017+i*.004,i%3?C:Hi,.65,V(0,pivot.y,0));b.rotation.x=i*1.3;b.rotation.y=i*.74;bands.push(b)}
+  const curls=[];for(let i=0;i<5;i++){const pts=[];for(let j=0;j<90;j++){const q=j/89,a=q*Math.PI*(3.2+i*.4)+i*TAU/5,rad=(.1+q*(style==='twinwater'?1.1:1.55));pts.push(V(Math.cos(a)*rad,ty==='vortex'?.12+q*3.0:1.55+Math.sin(q*TAU)*.3,Math.sin(a)*rad))}curls.push(cable(pts,i%2?Hi:C,.027,.83))}
+  const extra=[]; if(ty==='vortex'){for(let i=0;i<24;i++)extra.push(sprite(i%2?Hi:C,.22,0,V()))}
+  const flames=[]; if(ty==='portal'&&style==='rift'){for(let i=0;i<10;i++)flames.push(flameTongue(i%2?0x1a0c24:0x41ff91,.8,V()))}
+  updates.push((t,d)=>{const a=smooth(t/.6),f=smooth((d-t)/.7);center.scale.setScalar(a*f);bands.forEach((b,i)=>{b.rotation.x=t*(i%2?-.7:.8)+i*.45;b.rotation.y=t*.53+i*.36;b.scale.setScalar((.1+a*.9)*f);b.material.opacity=f*a*.55});curls.forEach((b,i)=>{b.rotation.y=t*(i%2?-.8:.7);b.scale.setScalar((.25+a*.75)*f);b.material.opacity=f*a*.7});
+    if(style==='blackhole'){center.scale.setScalar(.55+.25*Math.sin(t*4)); center.material.opacity=.98*f; bands.forEach((b,i)=>{b.rotation.x=Math.PI/2+i*.12; b.scale.set(1.2+.18*Math.sin(t*2+i),1,1);});}
+    if(style==='twinwater'){curls.forEach((b,i)=>{b.position.x=i%2?-.6:.6;});}
+    extra.forEach((e,i)=>{const ang=t*2.2+i*TAU/extra.length; const rr=.45+1.1*fract(i/extra.length+t*.12); e.position.set(Math.cos(ang)*rr, .35+fract(t*.4+i/extra.length)*2.5, Math.sin(ang)*rr); e.material.opacity=.35*a*f; e.scale.setScalar(.12+.18*(1-rr/1.55));});
+    flames.forEach((fl,i)=>{const ang=t*2+i*TAU/flames.length; fl.position.set(Math.cos(ang)*(.8+.2*Math.sin(t*5+i)), .4+fract(t*.25+i/flames.length)*2.4, Math.sin(ang)*(.8+.2*Math.cos(t*4+i))); fl.scale.set(.4,1.25+.6*Math.sin(t*7+i)**2,.4); fl.material.opacity=.45*a*f;});
+  });
+ }
+ if(ty==='slash'||ty==='daggers'||ty==='cleave'){
+   const n=ty==='daggers'?3:1;const sw=[];for(let k=0;k<n;k++){const o=swish(ty==='cleave'?2.7:2.2,-1.15+(ty==='daggers'?k*.35:0),ty==='cleave'?Math.PI*.7:Math.PI*1.05,ty==='cleave'?.42:.33,k%2?Hi:C,.9,(ty==='cleave'?.2:-.22)+k*.4,V(-.5,1.55,.08*k));sw.push(o)}
+   updates.push((t,d)=>{sw.forEach((o,i)=>{const a=smooth((t-i*.23)/.22);const fade=smooth((d-t)/.75)*(1-smooth((t-(i*.23+.95))/.85));o.material.opacity=a*fade;const s=.2+a*.85;o.scale.setScalar(s);o.rotation.z=.5*(a-1)});});
+ }
+ if(ty==='environment'){
+   // Smoke: layered camera-facing clouds placed in true 3D positions; not an actual volumetric fluid simulator.
+   if(style==='smoke'){
+     const clouds=[];for(let i=0;i<55;i++)clouds.push(sprite(i%4?0xa0a8b0:0x5b6472,.7,0,V()));
+     const embers=[];for(let i=0;i<70;i++)embers.push(sprite(i%3?0xb4d5ff:0xffffff,.09,0,V()));
+     updates.push((t,d)=>{const f=smooth(t/.4)*smooth((d-t)/.9);clouds.forEach((cl,i)=>{const age=fract(t*(.10+rnd(i+12)*.11)+rnd(i+45)),a=i*2.39996+t*.23,rr=.26+1.2*Math.sqrt(rnd(i+6))*(.45+age);cl.position.set(Math.cos(a)*rr,.24+age*2.6,Math.sin(a)*rr);cl.scale.setScalar((.65+age*1.65)*(0.6+rnd(i+30)*.7));cl.material.opacity=.10+.16*(1-age)*f;});embers.forEach((e,i)=>{const age=fract(t*.24+rnd(i+93));e.position.set(Math.cos(i*2.4)*(.1+age),.12+age*2.5,Math.sin(i*2.4)*(.1+age));e.scale.setScalar(.025+age*.024);e.material.opacity=.12*f*(1-age);});});
+   }
+   if(style==='puddle'||style==='rain'||style==='splash'){
+      const puddle=mesh(new THREE.CircleGeometry(1.62,64),new THREE.MeshPhysicalMaterial({color:0x1675a9,metalness:.27,roughness:.10,transparent:true,opacity:.43,clearcoat:1,clearcoatRoughness:.07,side:THREE.DoubleSide}),V(0,.033,0));puddle.rotation.x=-Math.PI/2;puddle.scale.set(1.37,.82,1);
+      const rims=[];for(let i=0;i<13;i++){const x=(rnd(i+7)-.5)*2.7,z=(rnd(i+31)-.5)*1.7; const r=torus(.07,.012,Hi,.0,V(x,.065,z));r.rotation.x=Math.PI/2;rims.push(r)}
+      // Gotas 3D com InstancedMesh: centenas de gotas em uma única draw call.
+      const dropCount=style==='rain'?190:65;
+      const dropsMesh=new THREE.InstancedMesh(new THREE.SphereGeometry(.018,5,5),basic(Hi,.55),dropCount);
+      dropsMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);dropsMesh.frustumCulled=false;fxGroup.add(dropsMesh);
+      const dummyDrop=new THREE.Object3D();
+      const splashes=[];for(let i=0;i<26;i++)splashes.push(sprite(i%2?Hi:C,.18,.0,V()));
+      updates.push((t,d)=>{const fade=smooth(t/.25)*smooth((d-t)/.7);puddle.material.opacity=.42*fade;puddle.scale.x=1.37+.015*Math.sin(t*5);puddle.scale.y=.82+.013*Math.cos(t*4);
+        rims.forEach((r,i)=>{const age=fract(t*.6+i*.135);r.scale.setScalar(.1+age*5.5);r.material.opacity=.55*(1-age)*fade});
+        for(let i=0;i<dropCount;i++){const age=fract(t*(style==='rain'?.61:.84)+rnd(i+16));const x=(rnd(i+17)-.5)*3.9,z=(rnd(i+65)-.5)*2.8;dummyDrop.position.set(x,Math.max(.12,3.4-age*3.3),z);const f=(age<.97?1:.001)*Math.max(.001,fade);dummyDrop.scale.set(.7*f,2.9*f,.7*f);dummyDrop.updateMatrix();dropsMesh.setMatrixAt(i,dummyDrop.matrix)}
+        dropsMesh.instanceMatrix.needsUpdate=true;
+        splashes.forEach((sp,i)=>{const age=fract(t*.5+rnd(i+22));sp.position.set((rnd(i+5)-.5)*2.4,.08+Math.sin(age*Math.PI)*.24,(rnd(i+13)-.5)*1.9);sp.material.opacity=(1-age)*.52*fade;sp.scale.setScalar(.12+.20*(1-age))});
+      });
+   }
+ }
+ const hitBurst=sprite(Hi,4.2,0,V(1.7,1.45,0));const impactRing=torus(.4,.038,Hi,0,V(1.7,1.45,0));hits.push(hitBurst,impactRing);updates.push((t,d)=>{const trigger=(ty==='projectile'||ty==='arrow'||ty==='bolt'||ty==='beam')?d*.52:(ty==='slash'||ty==='daggers')?d*.28:(ty==='cleave'||ty==='earth'||ty==='crystal')?d*.42:-99;const q=t-trigger;const on=q>0&&q<.65;hitBurst.visible=impactRing.visible=on;if(on){hitBurst.material.opacity=(1-q/.65)*.85;hitBurst.scale.setScalar(1.2+q*6);impactRing.scale.setScalar(.2+q*4.2);impactRing.material.opacity=(1-q/.65)*.85;impactRing.quaternion.copy(camera.quaternion)}});
+ primaryParticle=makeParticles(260,.115,Hi);minorParticle=makeParticles(2200,.043,C);updates.push((t,d)=>{updateParticles(primaryParticle,260,t,d,ty,false);updateParticles(minorParticle,2200,t,d,ty,true);const fade=smooth(t/.26)*smooth((d-t)/.6);primaryParticle.material.opacity=fade*.85*state.power;minorParticle.material.opacity=fade*.68*state.power});
+ glow.color.setHex(C);
+ attachExternalModel(p,fxGroup);
+}
+function select(i){selected=i;const p=presets[i];renderPresets();document.getElementById('family').textContent=p.family;document.getElementById('desc').textContent=p.desc;document.getElementById('state').textContent=p.family+' · partículas 3D';effectBuild();state.cycle=0;state.started=true}
+document.getElementById('replay').onclick=()=>{state.cycle=0;state.started=true;if(state.paused){state.paused=false;document.getElementById('pause').textContent='Ⅱ Pausar'}};
+document.getElementById('loop').onclick=e=>{state.loop=!state.loop;e.currentTarget.textContent=state.loop?'↻ Repetir: ligado':'↻ Repetir: desligado';e.currentTarget.setAttribute('aria-pressed',String(state.loop))};
+document.getElementById('pause').onclick=e=>{state.paused=!state.paused;e.currentTarget.textContent=state.paused?'▶ Continuar':'Ⅱ Pausar'};
+document.getElementById('onlineAssets').onchange=e=>{useExternalModels=e.target.checked;effectBuild();state.cycle=0;state.started=true};
+document.getElementById('origin').onchange=()=>{effectBuild();state.cycle=0;state.started=true};document.getElementById('particles').oninput=e=>{state.density=Number(e.target.value)/100};document.getElementById('power').oninput=e=>{state.power=Number(e.target.value)/100};document.getElementById('speed').oninput=e=>{state.speed=Number(e.target.value)/100};
+select(selected);
+const clock=new THREE.Clock();function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.055);if(!state.paused&&state.started){state.clock+=dt;state.cycle+=dt*state.speed;}const p=presets[selected],dur=p.duration; if(state.cycle>=dur+.35){if(state.loop)state.cycle=0;else{state.cycle=dur+.35;state.started=false}}const t=Math.min(dur, state.cycle);if(state.started||state.cycle<dur)updates.forEach(fn=>fn(t,dur));if(!state.started&&t>=dur){primaryParticle.material.opacity=minorParticle.material.opacity=0;glow.intensity=0;}else glow.intensity=25*state.power*(.5+smooth(t/.5)*.5)*smooth((dur-t)/.7);
+controls.update();renderer.render(scene,camera)}frame();
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+}catch(err){document.getElementById('loading').style.display='none';document.getElementById('warning').style.display='flex';document.getElementById('errortext').textContent=err?.message||String(err);console.error(err)}
+</script>
+</body>
+</html>
