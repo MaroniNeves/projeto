@@ -1,0 +1,66 @@
+name: QA Android WebGL Anime V8
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/arcano-anime-v8-qa.yml']
+permissions:
+  contents: read
+jobs:
+  teste:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: atelie-arcano-public-demo }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Instalar Chromium Playwright
+        run: |
+          mkdir -p qa-run
+          cd qa-run
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund playwright@1.56.1
+          npx playwright install chromium
+      - name: Renderizar Android em WebGL e fotografar
+        shell: bash
+        run: |
+          set -e
+          python -m http.server 8095 --bind 127.0.0.1 >/tmp/v8-server.log 2>&1 &
+          sleep 3
+          cat > qa-run/test.cjs <<'JS'
+          const { chromium }=require('playwright');
+          const fs=require('fs');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--enable-webgl','--disable-dev-shm-usage']});
+            const page=await browser.newPage({viewport:{width:412,height:892},deviceScaleFactor:1,isMobile:true,hasTouch:true});
+            const errors=[];page.on('pageerror',e=>errors.push('JS: '+e.message));page.on('console',m=>{if(m.type()==='error')errors.push('Console: '+m.text())});
+            await page.goto('http://127.0.0.1:8095/atelie-arcano-anime-v8/',{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForFunction('window.app && window.arcanoLab && window.app.character',{timeout:80000});
+            await page.waitForTimeout(4500);
+            console.log('LOAD',JSON.stringify(await page.evaluate('({app:!!window.app,count:window.arcanoLab?.ABILITIES?.length,selected:window.arcanoLab?.getSelected()?.id,status:document.querySelector(".ar-status")?.textContent,loader:document.querySelector("#loader")?.className})')));
+            await page.screenshot({path:'qa-run/qa_v8_inicial_android.png',fullPage:true});
+            await page.getByRole('button',{name:'✦ Lançar magia'}).click();
+            await page.waitForTimeout(450);
+            console.log('CAST',JSON.stringify(await page.evaluate('({active:window.app?.abilities?.active?.length,status:document.querySelector(".ar-status")?.textContent})')));
+            await page.screenshot({path:'qa-run/qa_v8_magia_agua_android.png',fullPage:true});
+            await page.getByRole('button',{name:'☰ Magias'}).click();
+            console.log('UI',JSON.stringify({items:await page.locator('.ar-item').count(),open:await page.locator('.ar-panel').evaluate(e=>e.classList.contains('open'))}));
+            await page.screenshot({path:'qa-run/qa_v8_menu_android.png',fullPage:true});
+            fs.writeFileSync('qa-run/browser-log.txt',JSON.stringify({errors},null,2));
+            console.log('BROWSER_ERRORS',JSON.stringify(errors.slice(0,15)));
+            await browser.close();
+          })().catch(e=>{console.error('QA_BROWSER_ERROR',e);process.exit(1)});
+          JS
+          node qa-run/test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-v8-android
+          path: qa-run/qa_v8_*.png
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-qa-v8
+          path: qa-run/browser-log.txt
+          retention-days: 7
