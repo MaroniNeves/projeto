@@ -1,0 +1,45 @@
+name: Bundle Three GLTF Draco Meshopt JSZip for Sketchfab local viewer
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/atelie-sketchfab-runtime.yml']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: atelie-arcano-public-demo }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm install --no-save --ignore-scripts three@0.165.0 esbuild@0.24.2 jszip@3.10.1
+      - name: Bundle loaders and Draco decoders
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p atelie-arcano-real3d/sketchfab-lab/vendor/draco
+          cat > arcano-sketchfab-entry.mjs <<'EOF'
+          import * as THREE from 'three';
+          import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+          import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+          import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+          window.ARCANO={THREE,GLTFLoader,DRACOLoader,MeshoptDecoder};
+          EOF
+          ./node_modules/.bin/esbuild arcano-sketchfab-entry.mjs --bundle --minify --format=iife --platform=browser --outfile=atelie-arcano-real3d/sketchfab-lab/vendor/three-glb-draco.min.js
+          cp node_modules/jszip/dist/jszip.min.js atelie-arcano-real3d/sketchfab-lab/vendor/jszip.min.js
+          cp node_modules/three/examples/jsm/libs/draco/gltf/draco_decoder.js atelie-arcano-real3d/sketchfab-lab/vendor/draco/
+          cp node_modules/three/examples/jsm/libs/draco/gltf/draco_wasm_wrapper.js atelie-arcano-real3d/sketchfab-lab/vendor/draco/
+          cp node_modules/three/examples/jsm/libs/draco/gltf/draco_decoder.wasm atelie-arcano-real3d/sketchfab-lab/vendor/draco/
+          ls -lh atelie-arcano-real3d/sketchfab-lab/vendor/
+      - name: Publish to demo branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add atelie-arcano-real3d/sketchfab-lab/vendor/
+          git diff --cached --quiet || (git commit -m "Add offline GLTF Draco and ZIP runtime for licensed Sketchfab models" && git push origin HEAD:atelie-arcano-public-demo)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atelie-sketchfab-runtime-offline
+          path: atelie-arcano-real3d/sketchfab-lab/vendor/
