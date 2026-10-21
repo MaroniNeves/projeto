@@ -1,0 +1,33 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"><title>Ateliê Arcano V7 — Android</title><style>*{box-sizing:border-box}body{background:#071421;color:#e6f8f3;margin:0;font-family:system-ui}#loading{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:24px;font-size:16px}#loading small{font-size:12px;color:#9db6c6;margin-top:12px}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:none}#retry{font:inherit;color:#fff;padding:10px;background:#175044;border:1px solid #328f70;border-radius:10px}</style></head><body><div id="loading"><strong>Ateliê Arcano V7</strong><small>Preparando texturas 3D corrigidas…</small></div><iframe id="game" title="Biblioteca de magias 3D"></iframe><script>window.__V7_ASSETS={};</script>
+<script src="./patch_00.js"></script>
+<script src="./patch_01.js"></script>
+<script src="./patch_02.js"></script>
+<script src="./patch_03.js"></script>
+<script src="./patch_04.js"></script>
+<script src="./patch_05.js"></script>
+<script src="./patch_06.js"></script>
+<script src="./patch_07.js"></script>
+<script src="./patch_08.js"></script>
+<script src="./patch_09.js"></script>
+<script src="./patch_10.js"></script>
+<script src="./patch_11.js"></script>
+<script>
+(async()=>{
+  const response=await fetch('../atelie-arcano-v6/index.html',{cache:'no-store'});
+  if(!response.ok)throw Error('A biblioteca original não carregou ('+response.status+').');
+  let html=await response.text();
+  const begin=html.indexOf('const EMBED='), end=html.indexOf(';\nconst ASSET=',begin);
+  if(begin<0||end<0)throw Error('Não encontrei o catálogo de texturas original.');
+  const originals=JSON.parse(html.substring(begin+'const EMBED='.length,end));
+  Object.assign(originals,window.__V7_ASSETS);
+  html=html.substring(0,begin)+'const EMBED='+JSON.stringify(originals)+html.substring(end);
+  html=html.replaceAll('Ateliê Arcano V6 • Android 3D','Ateliê Arcano V7');
+  html=html.replace('Math.cos(phi)*dist+1.18','Math.cos(phi)*dist+(innerWidth<=700?.64:1.18)');
+  html=html.replace('camera.lookAt(0,1.18,0)','camera.lookAt(0,(innerWidth<=700?.64:1.18),0)');
+  html=html.replace('transparent:true,opacity:op,color:0xffffff,blending:', 'transparent:true,opacity:op,alphaTest:.065,color:0xffffff,blending:');
+  html=html.replace('transparent:true,opacity:op,color:0xffffff,side:', 'transparent:true,opacity:op,alphaTest:.065,color:0xffffff,side:');
+  html=html.replace('</style>',`@media(max-width:700px){#header{left:12px;top:11px;max-width:52vw}#header small,#header p{display:none!important}#header h1{font-size:16px!important;letter-spacing:.01em;max-width:210px;line-height:1.2;padding:7px 10px;background:#081828cc;border:1px solid #24485a;border-radius:11px}#status{top:12px;right:8px;max-width:40vw;font-size:9px!important;background:#081828df;padding:6px 8px!important}} </style>`);
+  const frame=document.querySelector('#game');frame.srcdoc=html;
+  frame.onload=()=>{document.querySelector('#loading').style.display='none';frame.style.display='block'};
+})().catch(err=>{document.querySelector('#loading').innerHTML='<b>Não foi possível abrir a versão online.</b><small>'+String(err?.message||err)+'</small><a href="../atelie-arcano-v6/index.html">Abrir versão anterior</a>';console.error(err)});
+</script></body></html>
