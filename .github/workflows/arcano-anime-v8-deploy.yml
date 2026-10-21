@@ -1,0 +1,55 @@
+name: Publicar laboratorio anime V8 com 100 VFX reais
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/arcano-anime-v8-deploy.yml']
+permissions:
+  contents: write
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: atelie-arcano-public-demo }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Baixar codigo de fonte aberta e compilar Three.js
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/majidmanzarpour/threejs-vfx.git /tmp/arcano-anime-source
+          cd /tmp/arcano-anime-source
+          npm install --no-audit --no-fund
+          npm run build
+          test -s dist/index.html
+          test -s dist/models/Idle.fbx
+          test -s dist/hdri/spruit_sunrise.hdr
+      - name: Incluir as animacoes e modelos originais no laboratorio (sem sobrescrever UI mobile)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p atelie-arcano-anime-v8
+          for item in assets models textures hdri; do
+            if [ -d "/tmp/arcano-anime-source/dist/$item" ]; then
+              cp -a "/tmp/arcano-anime-source/dist/$item" atelie-arcano-anime-v8/
+            fi
+          done
+          find atelie-arcano-anime-v8/assets -name '*.map' -delete
+          cp /tmp/arcano-anime-source/LICENSE atelie-arcano-anime-v8/LICENSE-MIT-ORIGINAL.txt
+          printf "%s\n" "Atelie Arcano Anime V8" "Fonte: https://github.com/majidmanzarpour/threejs-vfx" "Efeitos: 100 VFX Three.js/GLSL procedurais, 15 escolas; nao sao GLBs individuais nem assets de Genshin Impact." "Os arquivos FBX e HDR sao ativos de terceiros com licencas independentes; auditar antes da distribuicao comercial." "Interface Android e codigo de catalogo: index.html" > atelie-arcano-anime-v8/README-ATELIE.txt
+          ls -lh atelie-arcano-anime-v8/assets/index-*.js
+          test -s atelie-arcano-anime-v8/index.html
+          test -s atelie-arcano-anime-v8/assets/index-*.js
+      - name: Publicar arquivos no GitHub
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add atelie-arcano-anime-v8
+          git diff --cached --quiet || (git commit -m "Publicar 100 efeitos 3D anime com runtime Three.js sem CDN" && git push origin HEAD:atelie-arcano-public-demo)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atelie-arcano-anime-v8-web
+          path: atelie-arcano-anime-v8/
+          retention-days: 7
+          compression-level: 6
