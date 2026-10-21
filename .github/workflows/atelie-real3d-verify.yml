@@ -30,7 +30,7 @@ jobs:
           python3 -m http.server 8998 --directory atelie-arcano-real3d >/tmp/vfx-server.log 2>&1 &
           sleep 2
           if command -v google-chrome; then
-            timeout 35 google-chrome --headless --no-sandbox --disable-dev-shm-usage --enable-webgl --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --window-size=390,845 --virtual-time-budget=8000 --screenshot=/tmp/preview_glb_real.png http://127.0.0.1:8998/ || true
+            timeout 35 google-chrome --headless --no-sandbox --disable-dev-shm-usage --enable-webgl --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --window-size=390,845 --virtual-time-budget=16000 --screenshot=/tmp/preview_glb_real.png http://127.0.0.1:8998/ || true
             cp /tmp/preview_glb_real.png atelie-arcano-real3d/preview_glb_real.png 2>/dev/null || true
           fi
       - uses: actions/upload-artifact@v4
