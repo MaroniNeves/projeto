@@ -22,6 +22,7 @@ jobs:
           git sparse-checkout set site/fantasy-studio/runtime/world-effects site/fantasy-studio/data
           cd "$GITHUB_WORKSPACE"
           npm install --no-audit --no-fund --ignore-scripts --no-save three@0.185.1 esbuild@0.24.2
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/holokat/node_modules
           mkdir -p atelie-arcano-anime-v9/vendor
           cat > arcano-v9-entry.mjs <<'EOF'
           import { createEffectModel,effectPreset } from '/tmp/holokat/site/fantasy-studio/runtime/world-effects/index.js';
