@@ -40,6 +40,32 @@ for q in ('crescent slash mesh','ember projectile mesh','water vortex','lightnin
    n=next((e[k] for k in ('name','title','slug','label') if e.get(k)),q)
    add(u,n,'Fantasy effects')
  except Exception as e:print('QUERY_ERROR',q,str(e)[:120],flush=True)
+
+# Offline-capable CC0 GLB meshes hosted on GitHub, if 3dassets.dev CDN is unavailable.
+github_models=[
+ ('Impacto 3D feixe','tower-defense-kit','enemy-ufo-beam-burst'),
+ ('Raio 3D concentrado','tower-defense-kit','enemy-ufo-beam'),
+ ('Cristal de gelo grande','tower-defense-kit','snow-detail-crystal-large'),
+ ('Cristais de gelo','tower-defense-kit','snow-detail-crystal'),
+ ('Cristal elemental grande','tower-defense-kit','detail-crystal-large'),
+ ('Cristais elementais','tower-defense-kit','detail-crystal'),
+ ('Fragmentos de gelo','tower-defense-kit','snow-tile-crystal'),
+ ('Lago e agua 3D','tower-defense-kit','snow-tile-river-waterfall'),
+ ('Cascata 3D','tower-defense-kit','tile-river-waterfall'),
+ ('Fumaca 3D','blaster-kit','smoke'),
+ ('Espada 3D','mini-dungeon','weapon-sword'),
+ ('Escudo 3D','mini-dungeon','shield-round'),
+ ('Espectro 3D','graveyard-kit','character-ghost'),
+ ('Esqueleto 3D','graveyard-kit','character-skeleton'),
+ ('Fogo 3D em tocha','graveyard-kit','fire-basket'),
+ ('Pocao magica 3D','mini-dungeon','potion'),
+ ('Selecao circulo de magia','tower-defense-kit','selection-a'),
+ ('Selecao area de efeito','tower-defense-kit','selection-b'),
+]
+for name,pack,item in github_models:
+ url=f'https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/{pack}/{item}.glb'
+ add(url,name,'Kenney CC0 / Tiny Game Engine')
+
 if not found:raise RuntimeError('No downloadable binary 3D GLBs. Refusing to substitute sprites.')
 (base/'catalog.json').write_text(json.dumps({'license':'CC0 1.0','origin':'https://3dassets.dev/packs/vfx-mesh-library','models':found},indent=2))
 print('TOTAL',len(found),'SIZE',sum(a['bytes'] for a in found),flush=True)
