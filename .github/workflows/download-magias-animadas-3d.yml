@@ -1,0 +1,85 @@
+name: Preparar 100 magias animadas 3D anime e agua
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/download-magias-animadas-3d.yml']
+permissions:
+  contents: read
+jobs:
+  pacote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Baixar fontes oficiais e compilar magias Three.js
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/magiaspack
+          git clone --depth 1 https://github.com/majidmanzarpour/threejs-vfx.git /tmp/magiaspack/01_Magias_3D_ThreeJS_100_efeitos
+          cd /tmp/magiaspack/01_Magias_3D_ThreeJS_100_efeitos
+          rm -rf .git
+          npm ci --no-audit --no-fund
+          npm run build
+          npm run check > /tmp/magias-check.log 2>&1 || (cat /tmp/magias-check.log && exit 1)
+          cp /tmp/magias-check.log /tmp/magiaspack/TESTE_100_MAGIAS.txt
+          rm -rf node_modules
+          cd /tmp
+          git clone --depth 1 https://github.com/cortiz2894/stylized-components.git /tmp/cortiz-source
+          mkdir -p /tmp/magiaspack/02_Agua_Anime_ThreeJS
+          cd /tmp/cortiz-source
+          cp LICENSE README.md package.json /tmp/magiaspack/02_Agua_Anime_ThreeJS/
+          mkdir -p /tmp/magiaspack/02_Agua_Anime_ThreeJS/src
+          cp -a src/components /tmp/magiaspack/02_Agua_Anime_ThreeJS/src/
+          rm -rf /tmp/magiaspack/02_Agua_Anime_ThreeJS/src/components/grassField || true
+          cp -a src/app /tmp/magiaspack/02_Agua_Anime_ThreeJS/src/ || true
+          cat > /tmp/magiaspack/LEIA-ME-ANIMACOES.txt <<'EOF'
+          BIBLIOTECA DE MAGIAS 3D ANIMADAS - FONTES OFICIAIS
+            
+          01_Magias_3D_ThreeJS_100_efeitos
+          Origem: https://github.com/majidmanzarpour/threejs-vfx
+          Tecnologia: Three.js, GLSL e Vite. 100 magias procedurais animadas de 15 escolas.
+          Fogo, gelo, raio, luz, agua/tide, escuro/void, arcano, etc.
+          CODIGO: MIT, credito mohamedachrefelouafi; confira LICENSE.
+          ARQUIVOS DE TERCEIROS: HDR e modelos FBX contidos na pasta public
+          sao recursos de terceiros com licencas separadas nao abrangidas pela MIT.
+          Teste: npm run check e npm run build executados no GitHub Actions.
+          PARA TESTAR NO PC (na pasta fonte):
+             Instale Node.js 22+
+             npm ci
+             npm run dev
+             abra a URL que aparecer no terminal.
+          OU TESTAR BUILD PRONTO: utilize um servidor HTTP local na pasta dist
+             python -m http.server 8000 --directory dist
+             no PC abra http://localhost:8000
+          No Android na mesma rede Wi-Fi, abra o IP do computador:8000
+          O projeto original usa controle de teclado e mouse, portanto a interface
+          pode nao ser pratica em telefone sem controles adicionais.
+            
+          02_Agua_Anime_ThreeJS
+          Origem: https://github.com/cortiz2894/stylized-components
+          Tecnologia: React Three Fiber, shaders GLSL e GPU water waves.
+          CODIGO: MIT, creditos Christian Ortiz (Cortiz); confira LICENSE.
+          E um componente-fonte, nao um GLB, e precisa do ambiente React.
+          Demo online: https://stylized.cortiz.dev/
+            
+          Os modelos individuais Sketchfab com animacao e os efeitos Fab gratuitos
+          estao em links nas indicacoes fornecidas no chat. Sketchfab exige
+          autenticacao para o download oficial; as licencas sao especificas por modelo.
+          Estes arquivos Sketchfab/Fab NAO estao neste ZIP.
+            
+          NAO confundir efeitos 3D de shader com modelos .glb contendo AnimationClips.
+          Os efeitos deste pacote sao 3D real-time prontos para rodar no codigo.
+          EOF
+          cd /tmp
+          zip -qr -9 /tmp/magias_animadas_3d_threejs_100.zip magiaspack
+          unzip -t /tmp/magias_animadas_3d_threejs_100.zip | tail -1
+          ls -lh /tmp/magias_animadas_3d_threejs_100.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: magias-anime-3d-100-compiladas
+          path: /tmp/magias_animadas_3d_threejs_100.zip
+          retention-days: 7
+          compression-level: 0
