@@ -1,4 +1,4 @@
-name: Baixar modelos 3D reais para o Atelie Arcano
+name: Baixar modelos 3D reais para o Atelie Arcano (GitHub CC0)
 on:
   push:
     branches: [atelie-arcano-public-demo]
