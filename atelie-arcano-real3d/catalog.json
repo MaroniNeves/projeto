@@ -1,0 +1,132 @@
+{
+  "license": "CC0 1.0",
+  "origin": "https://3dassets.dev/packs/vfx-mesh-library",
+  "models": [
+    {
+      "name": "Impacto 3D feixe",
+      "file": "models/001_impacto-3d-feixe.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/enemy-ufo-beam-burst.glb",
+      "bytes": 20824,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Raio 3D concentrado",
+      "file": "models/002_raio-3d-concentrado.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/enemy-ufo-beam.glb",
+      "bytes": 18448,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Cristal de gelo grande",
+      "file": "models/003_cristal-de-gelo-grande.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/snow-detail-crystal-large.glb",
+      "bytes": 56656,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Cristais de gelo",
+      "file": "models/004_cristais-de-gelo.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/snow-detail-crystal.glb",
+      "bytes": 20832,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Cristal elemental grande",
+      "file": "models/005_cristal-elemental-grande.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/detail-crystal-large.glb",
+      "bytes": 56644,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Cristais elementais",
+      "file": "models/006_cristais-elementais.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/detail-crystal.glb",
+      "bytes": 20816,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Fragmentos de gelo",
+      "file": "models/007_fragmentos-de-gelo.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/snow-tile-crystal.glb",
+      "bytes": 58936,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Lago e agua 3D",
+      "file": "models/008_lago-e-agua-3d.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/snow-tile-river-waterfall.glb",
+      "bytes": 51012,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Cascata 3D",
+      "file": "models/009_cascata-3d.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/tile-river-waterfall.glb",
+      "bytes": 51000,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Fumaca 3D",
+      "file": "models/010_fumaca-3d.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/blaster-kit/smoke.glb",
+      "bytes": 22768,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Espada 3D",
+      "file": "models/011_espada-3d.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/mini-dungeon/weapon-sword.glb",
+      "bytes": 20156,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Escudo 3D",
+      "file": "models/012_escudo-3d.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/mini-dungeon/shield-round.glb",
+      "bytes": 26380,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Espectro 3D",
+      "file": "models/013_espectro-3d.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/graveyard-kit/character-ghost.glb",
+      "bytes": 123744,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Esqueleto 3D",
+      "file": "models/014_esqueleto-3d.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/graveyard-kit/character-skeleton.glb",
+      "bytes": 211500,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Fogo 3D em tocha",
+      "file": "models/015_fogo-3d-em-tocha.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/graveyard-kit/fire-basket.glb",
+      "bytes": 29740,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Pocao magica 3D",
+      "file": "models/016_pocao-magica-3d.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/mini-dungeon/potion.glb",
+      "bytes": 23720,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Selecao circulo de magia",
+      "file": "models/017_selecao-circulo-de-magia.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/selection-a.glb",
+      "bytes": 30872,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    },
+    {
+      "name": "Selecao area de efeito",
+      "file": "models/018_selecao-area-de-efeito.glb",
+      "url": "https://raw.githubusercontent.com/Hidencod/tge-assets/main/packs/tower-defense-kit/selection-b.glb",
+      "bytes": 16780,
+      "group": "Kenney CC0 / Tiny Game Engine"
+    }
+  ]
+}
