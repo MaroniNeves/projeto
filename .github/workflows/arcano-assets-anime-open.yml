@@ -1,0 +1,111 @@
+name: Preparar downloads legais de VFX anime e 3D
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/arcano-assets-anime-open.yml']
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reunir fontes originais MIT e licencas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/vfx-orig /tmp/pack
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/lywedo/Unity-Effect.git /tmp/vfx-orig/unity
+          cd /tmp/vfx-orig/unity
+          git sparse-checkout set Assets/VFXs Assets/Common
+          cd -
+          mkdir -p /tmp/pack/01_Unity_Particle_VFX_MIT/Assets
+          cp /tmp/vfx-orig/unity/LICENSE /tmp/vfx-orig/unity/README.md /tmp/pack/01_Unity_Particle_VFX_MIT/
+          cp -a /tmp/vfx-orig/unity/Assets/VFXs /tmp/pack/01_Unity_Particle_VFX_MIT/Assets/
+          cp -a /tmp/vfx-orig/unity/Assets/Common /tmp/pack/01_Unity_Particle_VFX_MIT/Assets/
+          find /tmp/pack/01_Unity_Particle_VFX_MIT -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.woff*' -o -iname '*.mp4' \) -delete
+          git clone --depth 1 https://github.com/Alkaliii/spellbook-gd.git /tmp/vfx-orig/godot
+          cp -a /tmp/vfx-orig/godot /tmp/pack/02_Godot_Golpe_Espada_3D_MIT
+          rm -rf /tmp/pack/02_Godot_Golpe_Espada_3D_MIT/.git
+          git clone --depth 1 https://github.com/yuanqiubai/Custom-Shader.git /tmp/vfx-orig/anime
+          mkdir -p /tmp/pack/03_Anime_VFX_Shaders_MIT/VFX
+          cp /tmp/vfx-orig/anime/LICENSE /tmp/vfx-orig/anime/README.md /tmp/pack/03_Anime_VFX_Shaders_MIT/
+          cp -a /tmp/vfx-orig/anime/VFX/. /tmp/pack/03_Anime_VFX_Shaders_MIT/VFX/
+          cp /tmp/vfx-orig/anime/Anime.shader /tmp/pack/03_Anime_VFX_Shaders_MIT/
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/tigerabrodi/webgpu-vfx.git /tmp/vfx-orig/webgpu
+          cd /tmp/vfx-orig/webgpu
+          git sparse-checkout set package/src package/scripts
+          cd -
+          mkdir -p /tmp/pack/04_WebGPU_3D_Particulas_Fogo_Fumaca_Chuva_MIT
+          cp /tmp/vfx-orig/webgpu/LICENSE /tmp/vfx-orig/webgpu/README.md /tmp/pack/04_WebGPU_3D_Particulas_Fogo_Fumaca_Chuva_MIT/
+          cp -a /tmp/vfx-orig/webgpu/package /tmp/pack/04_WebGPU_3D_Particulas_Fogo_Fumaca_Chuva_MIT/
+          find /tmp/pack -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.woff*' \) -delete
+      - name: Documentar arquivos sem acesso e compatibilidade
+        shell: bash
+        run: |
+          cat > /tmp/pack/LEIA-ME_PRIMEIRO.txt <<'EOF'
+          ATELIE ARCANO: RECURSOS VFX DE TERCEIROS - DOWNLOAD LEGAL
+
+          Estes arquivos sao downloads originais de repositorios GitHub publicos com licencas MIT.
+          NAO sao os packs comerciais Fab ou os modelos Sketchfab referidos na conversa.
+
+          01_Unity_Particle_VFX_MIT:
+             Fonte: https://github.com/lywedo/Unity-Effect
+             Licenca: MIT (LICENSE incluso)
+             Conteudo real: efeitos VFX Graph em .vfx, cenas Unity, shaders, particulas,
+             fogo (0507/Flame.vfx e 0604), fumaca (Sketch201212), splash (0513),
+             cyclone (Sketch191015), explosoes, trilhas/ribbons e sparkles.
+             Requer Unity + Visual Effect Graph. Nao e GLB.
+
+          02_Godot_Golpe_Espada_3D_MIT:
+             Fonte: https://github.com/Alkaliii/spellbook-gd
+             Licenca: MIT (LICENSE incluso)
+             Efeito real: demos/slash/procedural_idyllic_slash3D.tscn
+             Requer Godot; nao e um modelo GLB.
+
+          03_Anime_VFX_Shaders_MIT:
+             Fonte: https://github.com/yuanqiubai/Custom-Shader
+             Licenca: MIT (LICENSE incluso)
+             Shaders: VFX/FX_Clash.shadergraph e FX_Trail.shadergraph.
+             Requer Unity URP; nao e GLB.
+
+          04_WebGPU_3D_Particulas_Fogo_Fumaca_Chuva_MIT:
+             Fonte: https://github.com/tigerabrodi/webgpu-vfx
+             Licenca: MIT (LICENSE incluso, incluida a do package)
+             Codigo-fonte real de sistema 3D de particulas GPU, presets fogo,
+             fumaca, brasas, agua/nevoa, chuva e magias.
+             Requer ambiente JS/WebGPU moderno, API diferente de Three.js.
+
+          REFERENCIAS ORIGINAIS DA FAB (NAO INCLUIDAS - EXIGEM OBTENCAO LICENCIADA):
+          https://www.fab.com/listings/f7c1976f-f972-46ff-8a60-c5cfeea0a81b
+          https://www.fab.com/listings/6612fd61-c636-45ef-8435-0e5bcfb1cdbd
+          https://www.fab.com/listings/a4660915-e001-4b6b-b3ca-cec7c66740ce
+          https://www.fab.com/listings/55be5a2e-1f7f-48cc-9529-6b81defcfead
+          https://www.fab.com/listings/4752d54a-81ac-4f0e-856d-8628e4f3e840
+          https://www.fab.com/listings/5a3e481f-5093-4e5e-a435-0c45dd4c8efd
+          https://www.fab.com/listings/67f06b3e-b114-4915-9324-77bb529dbcb8
+
+          SKETCHFAB (NAO INCLUIDOS - DOWNLOAD REQUER AUTENTICACAO NA CONTA):
+          https://sketchfab.com/3d-models/fireball-vfx-911322f594b2480e8c3f9d49ff7619c6
+          https://sketchfab.com/3d-models/attack-slashes-db6dcb24d3d64308af57a1421841f30e
+          https://sketchfab.com/3d-models/water-splash-spiral-282e1a5d84f5472281e72f35987775e7
+          https://sketchfab.com/3d-models/smoke-effect-test-5ec187facf7c4be4a468952b05496e2e
+
+          Nao trate VFX Graph (Unity) ou Niagara (Unreal) como modelos GLB.
+          Convertendo meshes isolados nao se converte a animacao de particulas.
+          Preserve os LICENSE em seu jogo, distribua respeitando os termos.
+          EOF
+          (cd /tmp/pack && find . -type f | sort > LISTA_DE_ARQUIVOS.txt)
+      - name: Compactar e criar artefato real para download
+        run: |
+          cd /tmp
+          zip -qr9 /tmp/atelie_vfx_anime_fontes_abertas.zip pack
+          ls -lh /tmp/atelie_vfx_anime_fontes_abertas.zip
+          unzip -t /tmp/atelie_vfx_anime_fontes_abertas.zip | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atelie-vfx-anime-fonte-aberta-download
+          path: /tmp/atelie_vfx_anime_fontes_abertas.zip
+          retention-days: 5
+          compression-level: 0
