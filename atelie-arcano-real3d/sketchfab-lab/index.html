@@ -2,31 +2,37 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#07111c">
-<title>Ateliê Arcano — Modelos Sketchfab licenciados + Animação 3D</title>
+<title>Ateliê Arcano V2 — Animador 3D de modelos Sketchfab</title>
 <style>
 :root{color-scheme:dark;--bg:#06101b;--pane:#101e2c;--line:#294152;--text:#e9f1fa;--muted:#9aafc1;--gold:#f8c981;--aqua:#71dec7}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}button,select,input{font:inherit}a{color:#a6d8ff}button{cursor:pointer;border:1px solid #486273;border-radius:11px;color:var(--text);background:#1c3341;padding:9px 13px}button:active{transform:scale(.97)}button:hover{background:#284559}
 header{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#08121dec;border-bottom:1px solid #273849;padding:11px max(13px,env(safe-area-inset-left))}header strong{font-family:Georgia,serif;font-size:19px;font-weight:normal;white-space:nowrap}header span{color:var(--aqua);font-size:12px}main{max-width:1400px;margin:auto;padding:14px}.intro{display:flex;justify-content:space-between;align-items:flex-start;gap:15px}.intro h1{font:normal 26px Georgia,serif;margin:6px 0 4px}.intro p{margin:0 0 10px;color:var(--muted)}.mini{font-size:12px;color:var(--muted)}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.tabs button.on{color:#071219;background:var(--gold);border-color:var(--gold);font-weight:700}.view{display:none}.view.active{display:block}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(275px,355px);gap:14px}.stage{background:#071928;border:1px solid #2b485e;border-radius:17px;overflow:hidden}.stageHead{padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}.stageHead h2{font-size:17px;font-weight:600;margin:0}.stageHead p{font-size:12px;color:var(--muted);margin:0}iframe{width:100%;height:500px;display:block;border:0;background:radial-gradient(circle,#1e3346,#040a13)}.stageFoot{padding:10px 13px;background:#101f2c;display:flex;flex-wrap:wrap;align-items:center;gap:9px}.stageFoot a{display:inline-block;border:1px solid #41657a;border-radius:9px;padding:8px 11px;text-decoration:none}.stageFoot .label{color:var(--gold);font-size:12px}.sidebar{border-radius:15px;border:1px solid var(--line);background:#0d1c2a;padding:12px;max-height:620px;overflow-y:auto}.sidebar h3,.content h3{font-size:14px;font-weight:650;color:var(--gold);margin:0 0 10px}.filterRow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.filterRow button{padding:5px 8px;font-size:12px}.filterRow button.on{border-color:var(--aqua);color:var(--aqua)}.modelBtn{border-radius:12px;border:1px solid #294858;display:block;width:100%;text-align:left;margin:7px 0;background:#132939;padding:10px}.modelBtn.selected{border-color:var(--gold);background:#29333b}.modelBtn b{display:block;font-size:14px}.modelBtn small{display:block;color:var(--muted);margin-top:1px}.modelBtn em{font-style:normal;color:var(--aqua);font-size:11px;float:right}.info{background:#0d1a27;border:1px solid var(--line);padding:11px 13px;border-radius:13px;margin-top:14px}.info p{margin:4px 0;color:#b1c4d1}.notice{border-left:3px solid var(--gold);background:#2e271d;padding:10px 13px;margin-bottom:12px;border-radius:7px;color:#e6d4b9}
-#viewer{position:relative;min-height:540px;background:linear-gradient(#0b1c2d,#05101b)}#canvas{width:100%;height:540px;display:block;touch-action:none;cursor:grab}#empty{position:absolute;top:45%;left:50%;width:88%;transform:translate(-50%,-50%);background:#0a1b2cdb;border:1px solid #315062;padding:17px;border-radius:13px;text-align:center;pointer-events:none;color:#c8d9e4}#status{padding:10px 12px;color:#9be5ce;font-size:12px;min-height:40px}.controls{border:1px solid var(--line);background:#101f2c;padding:14px;border-radius:13px}.controls label{display:block;margin:12px 0 5px;font-size:12px;color:var(--muted)}.controls select,.controls input[type=range]{width:100%}.controls select{background:#0d1823;color:white;border:1px solid #456079;border-radius:8px;padding:10px}.controls input[type=file]{width:100%;font-size:12px;padding:10px 3px}.cta{background:#1f544b;border-color:#429989;font-weight:600}.smallBtn{font-size:12px;padding:8px 10px}.row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.readout{font-size:12px;color:#b2cadc;padding-top:10px}.foot{margin:25px 0;color:#9caebb;font-size:12px}hr{border:0;border-top:1px solid #263b49;margin:17px 0}
+#viewer{position:relative;min-height:540px;background:linear-gradient(#0b1c2d,#05101b)}#canvas{width:100%;height:540px;display:block;touch-action:none;cursor:grab}#empty{position:absolute;top:45%;left:50%;width:88%;transform:translate(-50%,-50%);background:#0a1b2cdb;border:1px solid #315062;padding:17px;border-radius:13px;text-align:center;pointer-events:none;color:#c8d9e4}#status{padding:10px 12px;color:#9be5ce;font-size:12px;min-height:40px}.controls{border:1px solid var(--line);background:#101f2c;padding:14px;border-radius:13px}.controls label{display:block;margin:12px 0 5px;font-size:12px;color:var(--muted)}.controls select,.controls input[type=range]{width:100%}.controls select{background:#0d1823;color:white;border:1px solid #456079;border-radius:8px;padding:10px}.controls input[type=file]{width:100%;font-size:12px;padding:10px 3px}.controls .toggle{display:flex;align-items:center;gap:8px;color:#e7d6b2;font-size:12px;padding:6px 0}.toggle input{width:17px;height:17px;accent-color:#56caaa}#scrubber{accent-color:#f4c475}.cta{background:#1f544b;border-color:#429989;font-weight:600}.smallBtn{font-size:12px;padding:8px 10px}.row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.readout{font-size:12px;color:#b2cadc;padding-top:10px}.foot{margin:25px 0;color:#9caebb;font-size:12px}hr{border:0;border-top:1px solid #263b49;margin:17px 0}
 @media(max-width:760px){.layout{grid-template-columns:1fr}.sidebar{max-height:275px;order:2}.intro h1{font-size:22px}header strong{font-size:17px}header span{font-size:10px}iframe{height:min(59vh,510px)}#viewer,#canvas{height:min(58vh,560px);min-height:340px}.stageHead{padding:9px 11px}.stageHead h2{font-size:14px}main{padding:9px}.stageFoot{padding:8px}}
 </style>
 </head>
 <body><header><strong>✦ Ateliê Arcano</strong><span>MODELOS 3D REAIS · ANIME VFX · ANDROID</span></header>
 <main>
-  <div class="intro"><div><h1>Sketchfab · Biblioteca de magias</h1><p>Prévia 3D dos modelos originais, créditos verificáveis e animador para arquivos baixados legalmente.</p></div></div>
+  <div class="intro"><div><h1>Sketchfab · Animador de magias 3D</h1><p>Clipes originais e movimentos 3D complementares, com preview no Android e controle de tempo.</p></div></div>
   <div class="notice"><b>Arquivos originais:</b> os modelos abaixo são exibidos pelo visualizador oficial do Sketchfab. Para baixá-los, entre em sua conta e use <b>Download 3D Model</b> no site do autor. Nenhuma captura de tela ou sprite foi usada como substituta.</div>
-  <nav class="tabs" aria-label="Modo"><button id="tabCatalog" class="on" onclick="tab('catalog')">◈ Explorar modelos 3D</button><button id="tabAnim" onclick="tab('animate')">↻ Animar GLB ou ZIP</button></nav>
+  <nav class="tabs" aria-label="Modo"><button id="tabCatalog" class="on" onclick="tab('catalog')">◈ Explorar modelos 3D</button><button id="tabAnim" onclick="tab('animate')">↻ Animador 3D</button></nav>
   <section id="catalogView" class="view active"><div class="layout">
     <div><div class="stage"><div class="stageHead"><div><h2 id="modelTitle">Fireball VFX</h2><p id="modelDesc">Malha 3D exibida pelo Sketchfab</p></div><span class="mini" id="modelLicence">CC BY</span></div><iframe id="sketch" title="Visualização 3D original Sketchfab" allow="fullscreen; autoplay; xr-spatial-tracking" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe><div class="stageFoot"><a target="_blank" rel="noopener noreferrer" id="originalLink" href="#">Abrir original e baixar</a><span class="label" id="authorCredit">Autor e licença</span></div></div><div class="info"><b>Sobre esta licença</b><p id="licenseDesc">CC BY: mantenha créditos e link para o criador.</p><p id="animInfo">A animação interna será detectada após importar o arquivo original.</p></div></div>
     <aside class="sidebar"><h3>Selecione um efeito real</h3><div class="filterRow" id="filters"></div><div id="catalogItems"></div></aside>
   </div></section>
   <section id="animateView" class="view"><div class="layout">
-    <div><div class="stage"><div class="stageHead"><div><h2>Seu modelo 3D com animações</h2><p>Three.js · carrega arquivos locais sem enviar para servidor</p></div><span class="mini" id="modelStats">Aguardando arquivo</span></div><div id="viewer"><canvas id="canvas"></canvas><div id="empty">Escolha um <b>ZIP glTF</b> do Sketchfab ou um <b>GLB</b> local. O modelo real aparecerá aqui, com animação e câmera que gira pelo toque.</div></div><div class="row stageFoot"><button class="smallBtn" onclick="adjustZoom(0.82)">+ Zoom</button><button class="smallBtn" onclick="adjustZoom(1.22)">− Zoom</button><button class="smallBtn" onclick="resetCamera()">⟳ Enquadrar</button><span class="mini">Arraste para girar · 2 dedos para zoom</span></div></div><div id="status">Pronto para abrir seu arquivo.</div></div>
-    <aside class="controls"><h3>Carregar e animar</h3><label>1. Baixe o original com sua conta Sketchfab. Depois escolha o ZIP, GLB ou conjunto glTF:</label><input id="upload" type="file" multiple accept=".zip,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2"/><div class="readout" id="fileInfo">Nenhum modelo importado.</div>
-      <label>2. Tipo de animação aplicada ao modelo 3D</label><select id="motion"><option value="native">Animação original (se existir)</option><option value="fireball">Bola de fogo — viajar e atingir</option><option value="vortex">Vórtice — girar continuamente</option><option value="burst">Explosão — expandir e dissipar</option><option value="slash">Corte de espada — arco e impacto</option><option value="rise">Pilar — surgir do chão</option><option value="smoke">Fumaça — subir e sumir</option><option value="lightning">Raio — estalo e impacto</option><option value="orb">Aura — pulsar e flutuar</option></select>
-      <label>Animação original encontrada no arquivo</label><select id="clipSelect"><option value="">Nenhuma animação carregada</option></select><label>Velocidade</label><input id="speed" type="range" min="0.25" max="2.5" step="0.05" value="1"/><div class="row"><button class="cta" id="playBtn">▶ Reproduzir</button><button id="resetAnim">↺ Reiniciar</button></div><div class="readout" id="clipInfo">O animador detectará clipes embutidos no glTF e criará movimentos externos mesmo em modelos estáticos.</div>
-      <hr/><div class="readout"><b>Importante:</b> modelos de grande porte (ex.: espiral de água com 462 mil triângulos) podem reduzir o desempenho no Android. O modo ZIP funciona também com texturas e <code>scene.bin</code>.</div>
+    <div><div class="stage"><div class="stageHead"><div><h2>Seu modelo 3D com animações</h2><p>Three.js · carrega arquivos locais sem enviar para servidor</p></div><span class="mini" id="modelStats">Aguardando arquivo</span></div><div id="viewer"><canvas id="canvas"></canvas><div id="empty">Importe o <b>ZIP glTF</b> ou <b>GLB</b> obtido com autorização no Sketchfab. Ou pressione <b>Testar animações sem arquivo</b> para ver os movimentos em uma malha de demonstração claramente identificada.</div></div><div class="row stageFoot"><button class="smallBtn" onclick="adjustZoom(0.82)">+ Zoom</button><button class="smallBtn" onclick="adjustZoom(1.22)">− Zoom</button><button class="smallBtn" onclick="resetCamera()">⟳ Enquadrar</button><span class="mini">Arraste para girar · 2 dedos para zoom</span></div></div><div id="status" role="status" aria-live="polite">Pronto para abrir seu arquivo.</div></div>
+    <aside class="controls"><h3>Carregar e animar</h3><label>1. Baixe o original com sua conta Sketchfab. Depois escolha o ZIP, GLB ou conjunto glTF:</label><input id="upload" type="file" multiple accept=".zip,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2"/><div class="row"><button class="smallBtn" id="demoBtn">◇ Testar animações sem arquivo</button><button class="smallBtn" id="clearBtn">Limpar modelo</button></div><div class="readout" id="fileInfo">Nenhum modelo importado.</div>
+      <label>2. Tipo de animação aplicada ao modelo 3D</label><select id="motion"><option value="native">Somente animação original</option>
+<optgroup label="🔥 Fogo"><option value="fireball">Bola de fogo — voo e impacto</option><option value="firecolumn">Pilar de fogo — erguimento</option><option value="eruption">Erupção — jato e fragmentos</option><option value="firevortex">Vórtice de fogo — coluna giratória</option><option value="burn">Queimadura — brasas no chão</option></optgroup>
+<optgroup label="❄️ Gelo"><option value="iceburst">Explosão de gelo — fragmentação</option><option value="icerise">Pilar de gelo — crescer e quebrar</option><option value="iceprison">Prisão de gelo — estacas ao redor</option></optgroup>
+<optgroup label="⚡ Raios"><option value="lightning">Raio do céu — queda e impacto</option><option value="chain">Corrente elétrica — ramificações</option><option value="storm">Tempestade — vários impactos</option></optgroup>
+<optgroup label="💧 Água"><option value="water">Vórtice de água — espiral 3D</option><option value="waterburst">Respingo — expansão radial</option><option value="rain">Chuva — gotas e ondulações</option></optgroup>
+<optgroup label="⚔️ Espadas"><option value="slash">Corte de espada — arco horizontal</option><option value="slashwide">Corte largo — varredura</option><option value="slashspin">Corte giratório — 360°</option><option value="slashair">Corte aéreo — salto e impacto</option></optgroup>
+<optgroup label="✦ Outros"><option value="burst">Explosão — dissipação</option><option value="vortex">Vórtice — energia giratória</option><option value="rise">Pilar — subir do chão</option><option value="smoke">Fumaça — subir e dissipar</option><option value="orb">Aura — flutuar e pulsar</option></optgroup></select>
+      <label>Clipe original incorporado no GLB</label><select id="clipSelect"><option value="">Nenhuma animação carregada</option></select><label class="toggle"><input id="nativeMix" type="checkbox" checked> Reproduzir clipe original junto com o novo movimento</label><label class="toggle"><input id="fxToggle" type="checkbox" checked> Exibir geometria/partículas 3D auxiliares (sem sprites)</label><label>Velocidade</label><input id="speed" type="range" min="0.25" max="2.5" step="0.05" value="1"/><div class="row"><button class="cta" id="playBtn">⏸ Pausar</button><button id="resetAnim">↺ Reiniciar</button><button id="stepBtn">⇥ Quadro</button></div><label>Tempo da animação · arraste para inspecionar</label><input id="scrubber" type="range" min="0" max="1000" value="0" step="1"/><div class="readout" id="timelineReadout">0.00 / 3.20 s</div><div class="readout" id="clipInfo">O AnimationMixer preserva os clipes internos. As ações externas animam outro grupo para não sobrescrever bones nem tracks do original.</div>
+      <hr/><div class="readout"><b>Importante:</b> as animações extras são reproduzidas no Three.js e não são gravadas automaticamente dentro do GLB. Use Blender/GLTFExporter para exportação se desejar.  modelos de grande porte (ex.: espiral de água com 462 mil triângulos) podem reduzir o desempenho no Android. O modo ZIP funciona também com texturas e <code>scene.bin</code>.</div>
     </aside>
   </div></section>
   <section class="foot"><p><b>Licenças:</b> os modelos não são nossos. Veja sempre o crédito no cartão e na página original. CC BY exige atribuição; CC BY-SA também tem condições de compartilhamento de adaptações. A ferramenta não retira direitos autorais nem autoriza redistribuir um modelo comprado.</p><p>Visualizador original: Sketchfab · Integração de importação/animação: Three.js · ZIP: JSZip.</p></section>
@@ -51,7 +57,7 @@ $('licenseDesc').textContent=selected.license==='CC BY-SA'?'Licença CC BY-SA: d
 $('animInfo').textContent=selected.animated+'. '+selected.notes+' A ferramenta permite animar o modelo após download autorizado.';$('motion').value=selected.motion;renderList();}
 renderList();selectModel('fireball');
 let worldStarted=false,THREE,scene,camera,renderer,sceneRoot,assetHolder,mixer,particles,clockTime=0,playing=true,currentClips=[],camYaw=0.75,camPitch=0.34,camRadius=5.3,draggers=new Map(),dragX=0,dragY=0,dracoLoader=null,loaded=false,modelSrc='',particleSeed=[];
-let temporaryUrls=[];
+let temporaryUrls=[],modelFrame=null,fxRoot=null,fxItems=[],importedScene=null,forceNativeUpdate=true;const PRESET_DURATIONS={native:3.2,fireball:3.6,firecolumn:3.1,eruption:3.2,firevortex:4.4,burn:4.2,iceburst:2.9,icerise:3.7,iceprison:3.5,lightning:2.2,chain:2.7,storm:4.0,water:4.5,waterburst:3.0,rain:4.5,slash:2.0,slashwide:2.35,slashspin:2.7,slashair:2.6,burst:3.0,vortex:3.4,rise:3.4,smoke:4.4,orb:4.2};
 const status=(s,bad=false)=>{let el=$('status');el.textContent=s;el.style.color=bad?'#ffab9f':'#9be5ce';};
 function init3D(){if(worldStarted)return;worldStarted=true;let canvas=$('canvas');if(!window.ARCANO){status('Biblioteca Three.js ausente. Verifique a pasta vendor.',true);return;}
   ({THREE}=window.ARCANO);try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});}catch(e){status('WebGL indisponível neste navegador: '+e.message,true);return;}
@@ -60,7 +66,7 @@ function init3D(){if(worldStarted)return;worldStarted=true;let canvas=$('canvas'
   let key=new THREE.DirectionalLight(0xffffff,2.5);key.position.set(3,7,5);scene.add(key);let rim=new THREE.PointLight(0x65b4ff,22,10);rim.position.set(-3,3,-3);scene.add(rim);
   const ground=new THREE.Mesh(new THREE.PlaneGeometry(80,80),new THREE.MeshStandardMaterial({color:0x0a1b27,roughness:1,metalness:0}));ground.rotation.x=-Math.PI/2;ground.position.y=-0.055;scene.add(ground);
   const grid=new THREE.GridHelper(36,36,0x46677d,0x1e3647);grid.position.y=0;scene.add(grid);
-  sceneRoot=new THREE.Group();scene.add(sceneRoot);assetHolder=new THREE.Group();sceneRoot.add(assetHolder);makeParticles();setCam();resize3D();requestAnimationFrame(frame);
+  sceneRoot=new THREE.Group();scene.add(sceneRoot);assetHolder=new THREE.Group();sceneRoot.add(assetHolder);fxRoot=new THREE.Group();sceneRoot.add(fxRoot);makeParticles();setCam();resize3D();requestAnimationFrame(frame);
   canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);draggers.set(e.pointerId,{x:e.clientX,y:e.clientY});dragX=e.clientX;dragY=e.clientY;});
   canvas.addEventListener('pointermove',e=>{if(!draggers.has(e.pointerId))return;const p=draggers.get(e.pointerId);let dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;if(draggers.size>=2){camRadius=Math.max(2,Math.min(16,camRadius*(1+dy*.004)));}else{camYaw-=dx*.009;camPitch=Math.max(-.08,Math.min(1.25,camPitch+dy*.007));}setCam();});
   for(let ev of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(ev,e=>draggers.delete(e.pointerId));
@@ -73,25 +79,100 @@ function adjustZoom(k){camRadius=Math.max(2,Math.min(18,camRadius*k));setCam();}
 function resetCamera(){camYaw=.75;camPitch=.34;camRadius=5.3;setCam();}
 function makeParticles(){let geo=new THREE.IcosahedronGeometry(.027,0);let mat=new THREE.MeshBasicMaterial({color:0xffc77a,transparent:true,opacity:.76});particles=new THREE.InstancedMesh(geo,mat,175);particles.frustumCulled=false;particles.visible=false;scene.add(particles);for(let i=0;i<175;i++){particleSeed.push({a:Math.random()*6.283,d:Math.random(),p:Math.random(),r:Math.random()});}}
 let dummy;
-function resetParticlePositions(t,mode){if(!particles)return;particles.visible=loaded && ['fireball','burst','vortex','smoke','orb','lightning','rise'].includes(mode);if(!particles.visible)return;
- if(!dummy)dummy=new THREE.Object3D();for(let i=0;i<175;i++){let s=particleSeed[i],angle=s.a+t*(mode==='vortex'?2.2:.5),rad=.22+s.d*(mode==='burst'?2.6:1.25),ys=(s.p*3+t*(mode==='smoke'?.65:.19))%2.4;
-  if(mode==='vortex'){dummy.position.set(sceneRoot.position.x+Math.sin(angle)*rad*.8,.1+ys,sceneRoot.position.z+Math.cos(angle)*rad*.8);}else if(mode==='burst'){let q=(t%2.5)/2.5;dummy.position.set(Math.sin(angle)*rad*q,sceneRoot.position.y+.5+Math.cos(angle*1.4)*rad*q,Math.cos(angle)*rad*q);}else if(mode==='fireball'){dummy.position.set(sceneRoot.position.x-.4-s.d*.8,sceneRoot.position.y+Math.cos(angle)*.24,Math.sin(angle)*.32);}else{dummy.position.set(sceneRoot.position.x+Math.sin(angle)*rad*.35,ys,sceneRoot.position.z+Math.cos(angle)*rad*.35);}
-  let scale=.4+s.r*.8;dummy.scale.setScalar(scale);dummy.updateMatrix();particles.setMatrixAt(i,dummy.matrix);
+// Magias extras sao meshes 3D; nunca sprites, decals ou planos de uma folha 2D.
+const TAU=Math.PI*2;
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const bell=u=>Math.sin(Math.PI*clamp(u));
+const frac=x=>x-Math.floor(x);
+function material(color,opacity=1){return new THREE.MeshBasicMaterial({color,transparent:opacity<1,opacity,depthWrite:opacity>=1,side:THREE.DoubleSide,blending:opacity<1?THREE.AdditiveBlending:THREE.NormalBlending});}
+function newFx(geo,mat,x=0,y=0,z=0){let mesh=new THREE.Mesh(geo,mat);mesh.position.set(x,y,z);fxRoot.add(mesh);fxItems.push(mesh);return mesh;}
+function torus(rad,tube,color,op=.85){let o=newFx(new THREE.TorusGeometry(rad,tube,6,64),material(color,op));o.rotation.x=-Math.PI/2;o.position.y=.045;return o;}
+function bladeArc(radius,thick,color){const v=[],idx=[],N=48,start=-1.18,end=1.18;
+  for(let i=0;i<=N;i++){let a=start+(end-start)*i/N,rr=radius,inside=radius-thick*(.2+.8*Math.sin(Math.PI*i/N));v.push(Math.sin(a)*inside,.12+Math.cos(a)*inside*.88,-.075,Math.sin(a)*rr,.12+Math.cos(a)*rr*.88,.075);if(i<N){let k=i*2;idx.push(k,k+1,k+2,k+1,k+3,k+2);}}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setIndex(idx);g.computeVertexNormals();return newFx(g,material(color,.92));}
+function helix(radius,height,turns,color){let pts=[];for(let i=0;i<=105;i++){let u=i/105,a=u*TAU*turns;pts.push(new THREE.Vector3(Math.cos(a)*radius*(1-.32*u),.1+height*u,Math.sin(a)*radius*(1-.32*u)));}return newFx(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),110,.045,5,false),material(color,.76));}
+function rod(a,b,r,col,op=1){let dir=new THREE.Vector3().subVectors(b,a),g=new THREE.CylinderGeometry(r*.25,r,dir.length(),5,1),m=newFx(g,material(col,op));m.position.copy(a).addScaledVector(dir,.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());return m;}
+function wipeFx(){if(!fxRoot)return;for(const child of [...fxRoot.children]){fxRoot.remove(child);child.geometry?.dispose();if(child.material){let a=Array.isArray(child.material)?child.material:[child.material];for(const m of a)m.dispose();}}fxItems=[];}
+function buildFx(mode){if(!fxRoot)return;wipeFx();if(mode==='native')return;
+ let heat=['fireball','firecolumn','eruption','firevortex','burn'].includes(mode),freeze=['iceburst','icerise','iceprison'].includes(mode),water=['water','waterburst','rain'].includes(mode),electric=['lightning','chain','storm'].includes(mode),blade=['slash','slashwide','slashspin','slashair'].includes(mode);
+ let c=heat?0xff7e2e:freeze?0x89edff:water?0x2cb8ff:electric?0xe7deff:blade?0xa4eaff:mode==='smoke'?0xa6b5ca:0x92f8b8;
+ const geo=new THREE.IcosahedronGeometry(.1,0);const shards=[];
+ for(let i=0;i<(mode==='rain'?35:24);i++){let m=newFx(geo.clone(),material(i%3===0?0xffffff:c,1));shards.push(m);}
+ fxRoot.userData={mode,c,shards,rings:[],curves:[],columns:[]};
+ if(blade){fxRoot.userData.curves.push(bladeArc(mode==='slashwide'?1.7:1.32,mode==='slashwide'?.52:.34,c),bladeArc(1.15,.09,0xffffff));}
+ else if(['vortex','firevortex','water','chain'].includes(mode)){for(let k=0;k<3;k++){let h=helix(.44+.19*k,1.65,2.1+k*.27,k===0?0xffffff:c);h.rotation.y=k*TAU/3;fxRoot.userData.curves.push(h);}}
+ else if(['lightning','storm'].includes(mode)){for(let i=0;i<9;i++){let a=new THREE.Vector3(Math.sin(i*2)*.25,2.9-i*.29,Math.cos(i*2)*.22),b=new THREE.Vector3(Math.sin((i+1)*2)*.28,2.7-i*.29,Math.cos((i+1)*2)*.3);fxRoot.userData.curves.push(rod(a,b,.065,i%3===0?0xffffff:c));}}
+ else if(['firecolumn','eruption','icerise','iceprison','rise'].includes(mode)){for(let i=0;i<9;i++){let h=freeze?new THREE.ConeGeometry(.21,1.3,5):new THREE.ConeGeometry(.2,.85,7);let m=newFx(h,material(i%3===0?0xfff2b4:c,.85));m.position.set(Math.cos(i*TAU/9)*.45,.5,Math.sin(i*TAU/9)*.45);m.rotation.x=Math.sin(i*2)*.13;fxRoot.userData.columns.push(m);}}
+ if(['burn','fireball','firecolumn','eruption','iceburst','icerise','iceprison','lightning','storm','waterburst','rain','burst','rise'].includes(mode)){
+  fxRoot.userData.rings.push(torus(.6,.04,c,.74),torus(1.13,.016,c,.4));
+ }
+}
+function moveFx(t,mode,u){if(!fxRoot)return;fxRoot.visible=loaded && $('fxToggle').checked && mode!=='native';if(!fxRoot.visible)return;
+ fxRoot.position.set(0,0,0);fxRoot.rotation.set(0,0,0);fxRoot.scale.setScalar(1);
+ let state=fxRoot.userData,shards=state.shards||[],rings=state.rings||[],curves=state.curves||[],columns=state.columns||[];
+ const fan=mode==='iceburst'||mode==='waterburst'||mode==='burst'||mode==='eruption';const fireball=mode==='fireball',slashing=mode.startsWith('slash'),rain=mode==='rain',smoke=mode==='smoke';
+ if(fireball)fxRoot.position.copy(sceneRoot.position);else if(slashing)fxRoot.position.y=.7;
+ if(['firevortex','water','vortex','chain'].includes(mode))fxRoot.rotation.y=t*2.3;
+ for(let i=0;i<shards.length;i++){let m=shards[i],a=i*2.39996,rad=.25+(i%9)*.092,height=((i*7)%17)/17;let q=fan?u*3.2:1,angle=a+t*(rain?.2:1.1);m.visible=true;
+  if(fireball){m.position.set(-.15-rad*(.3+.6*frac(height+t*.9)),Math.sin(angle)*rad*.45,Math.cos(angle)*rad*.45);}
+  else if(rain){m.position.set(Math.sin(a)*rad*2.4,.15+2.8*frac(height-t*.95),Math.cos(a)*rad*2.4);}
+  else if(smoke){m.position.set(Math.sin(angle)*rad*.7,.2+2.5*frac(height+t*.19),Math.cos(angle)*rad*.7);}
+  else if(['firevortex','water','vortex'].includes(mode)){m.position.set(Math.cos(angle+t)*rad,.13+2.5*frac(height+t*.22),Math.sin(angle+t)*rad);}
+  else if(fan){m.position.set(Math.cos(a)*rad*q,.15+Math.abs(Math.sin(a*2))*q*.8,Math.sin(a)*rad*q);}
+  else if(slashing){m.position.set(Math.cos(a)*rad*1.15,.48+Math.abs(Math.sin(a))*rad*1.1,Math.sin(a)*.14);}
+  else{m.position.set(Math.sin(a)*rad,.15+2.2*frac(height+t*.3),Math.cos(a)*rad);}
+  let sc=fireball?.3+frac(height+t*.1)*.7:rain?.11:smoke?.7+height:fan?.32+u*.35:.3+height*.35;
+  m.scale.set(sc,sc*(rain?2.7:1),sc);m.rotation.set(t*.5+i*.3,t*.4+i*.2,0);
+ }
+ for(let i=0;i<rings.length;i++){rings[i].scale.setScalar(.65+(i*.42)+(fan?u*.95:Math.sin(t*3+i)*.09));rings[i].material.opacity=(fan?1-u:1)*(.66-i*.2);}
+ for(let i=0;i<curves.length;i++){let o=curves[i];if(slashing){let q=bell(u);o.rotation.y=t*(mode==='slashspin'?4:.1);o.material.opacity=.9*q;}else{o.rotation.y=t*(i%2?2:-1);o.material.opacity=.5+.35*Math.sin(t*3+i);}}
+ for(let i=0;i<columns.length;i++){let o=columns[i],s=clamp(u*2.5);o.scale.set(.6+Math.sin(t*4+i)*.18,Math.max(.001,s*(.6+Math.sin(t*6+i)*.3)),.6);o.position.y=.3+o.scale.y*.5;}
+}
+function applyMotion(t,delta){if(!loaded)return;
+ // Separacao: mixer controla SOMENTE o objeto GLB. sceneRoot controla a trajetoria externa.
+ const m=$('motion').value,dur=PRESET_DURATIONS[m]||3.2,cycle=t%dur,u=cycle/dur,k=clamp(u*1.22),fade=k>.82?clamp((1-k)/.18):1;
+ sceneRoot.position.set(0,0,0);sceneRoot.rotation.set(0,0,0);sceneRoot.scale.setScalar(1);
+ const angle=t*1.8;
+ switch(m){
+  case 'native':break;
+  case 'fireball':sceneRoot.position.set(-1.8+3.7*k,.65+Math.sin(k*Math.PI)*.55,0);sceneRoot.rotation.y=t*4.3;sceneRoot.scale.setScalar(fade);break;
+  case 'firecolumn':case 'rise':sceneRoot.position.y=Math.max(0,1.35*(1-clamp(u*3)));sceneRoot.scale.set(.8,.06+clamp(u*2.6)*1.55,.8);break;
+  case 'eruption':sceneRoot.position.y=1.5*bell(u);sceneRoot.scale.setScalar(.3+1.9*bell(u));sceneRoot.rotation.y=angle;break;
+  case 'firevortex':sceneRoot.position.y=.14+Math.sin(t*2)*.06;sceneRoot.rotation.y=t*3.4;sceneRoot.scale.setScalar(1+Math.sin(t*3.7)*.08);break;
+  case 'burn':sceneRoot.position.y=.045;sceneRoot.scale.setScalar(.65+.18*Math.sin(t*6));break;
+  case 'iceburst':case 'waterburst':case 'burst':sceneRoot.position.y=.5;sceneRoot.scale.setScalar(Math.max(.006,(.1+2.6*clamp(u*1.2))*Math.pow(1-clamp((u-.78)/.22),1.3)));break;
+  case 'icerise':sceneRoot.position.y=1.3*(1-clamp(u*2.4));sceneRoot.scale.setScalar(.18+clamp(u*2.4)*1.25);break;
+  case 'iceprison':sceneRoot.rotation.y=t*.38;sceneRoot.scale.setScalar(.45+clamp(u*2)*.85);break;
+  case 'lightning':case 'chain':case 'storm':sceneRoot.position.y=.5;sceneRoot.scale.setScalar(u>.1&&u<.71?1+Math.sin(t*51)*.1:.002);break;
+  case 'water':case 'vortex':sceneRoot.rotation.y=t*1.7;sceneRoot.position.y=.08+Math.sin(t*2)*.08;break;
+  case 'rain':sceneRoot.position.y=0;sceneRoot.scale.setScalar(.94+Math.sin(t*3)*.06);break;
+  case 'slash':case 'slashwide':case 'slashspin':case 'slashair':{
+   let a=clamp(u*1.3),jump=m==='slashair'?.9:0;sceneRoot.position.set(-1.45+2.9*a,.4+Math.sin(a*Math.PI)*(.35+jump),0);sceneRoot.rotation.z=m==='slashwide'?-1.35+a*2.65:-1.02+a*2.04;sceneRoot.rotation.y=m==='slashspin'?t*TAU*.9:0;sceneRoot.scale.setScalar(fade);break;}
+  case 'smoke':sceneRoot.position.y=u*2.2;sceneRoot.scale.setScalar(.5+u*1.7);break;
+  case 'orb':sceneRoot.position.y=.5+Math.sin(t*1.8)*.17;sceneRoot.rotation.y=t*.8;sceneRoot.scale.setScalar(1+Math.sin(t*3)*.11);break;
+ }
+ // Modelos animados e movimentos externos podem tocar SIMULTANEAMENTE.
+ if(mixer){if($('nativeMix').checked||m==='native')mixer.update(delta);else if(delta)mixer.update(0);}
+ moveFx(t,m,u);
+ resetParticlePositions(t,m);
+}
+function resetParticlePositions(t,mode){if(!particles)return;particles.visible=loaded && $('fxToggle').checked && ['fireball','firecolumn','eruption','firevortex','burn','iceburst','icerise','iceprison','vortex','smoke','orb','lightning','chain','storm','water','waterburst','rain','slash','slashwide','slashspin','slashair','rise','burst'].includes(mode);
+ if(!particles.visible)return;if(!dummy)dummy=new THREE.Object3D();const c=fxRoot?.userData?.c||0xffbc6d;particles.material.color.setHex(c);
+ for(let i=0;i<175;i++){const s=particleSeed[i],a=s.a+t*(mode==='firevortex'||mode==='vortex'?2.5:.8),rad=.2+s.d*(mode==='iceburst'?2.2:1.3),h=frac(s.p+t*(mode==='rain'?1.9:.3))*(mode==='rain'?2.8:2.1);let x=Math.sin(a)*rad*.55,y=h,z=Math.cos(a)*rad*.55;
+   if(mode==='fireball'){x=sceneRoot.position.x-s.d*.6;y=sceneRoot.position.y+Math.cos(a)*.16;z=Math.sin(a)*.25;}
+   if(mode==='rain')y=2.7-h;
+   if(mode.includes('slash')){y=.7+Math.abs(Math.cos(a))*.25;z*=.2;}
+   if(['iceburst','waterburst','burst','eruption'].includes(mode)){let u=(t%(PRESET_DURATIONS[mode]||3.4))/(PRESET_DURATIONS[mode]||3.4);x*=u*2.7;y=.25+h*.6*u;z*=u*2.7;}
+   dummy.position.set(x,Math.max(.07,y),z);dummy.scale.setScalar(.35+s.r*.5);dummy.updateMatrix();particles.setMatrixAt(i,dummy.matrix);
  }particles.instanceMatrix.needsUpdate=true;
 }
-function applyMotion(t,delta){if(!loaded)return;let m=$('motion').value;let cycle=t%(m==='slash'?1.8:3.4),u=cycle/(m==='slash'?1.8:3.4);sceneRoot.position.set(0,0,0);sceneRoot.rotation.set(0,0,0);sceneRoot.scale.setScalar(1);
-  if(m==='native'){if(mixer)mixer.update(delta);else{sceneRoot.rotation.y=t*.3;sceneRoot.position.y=.12+Math.sin(t*1.6)*.08;}}
-  else if(m==='vortex'){sceneRoot.rotation.y=t*1.7;sceneRoot.position.y=.10+Math.sin(t*2)*.06;sceneRoot.scale.setScalar(1+Math.sin(t*2)*.09);}
-  else if(m==='fireball'){let k=Math.min(1,u*1.23);sceneRoot.position.set(-2.1+4.1*k,.9+.32*Math.sin(k*Math.PI),0);sceneRoot.rotation.y=t*3.5;let scale=k>.78?Math.max(.02,(1-k)/.22):1;sceneRoot.scale.setScalar(scale);}
-  else if(m==='slash'){let k=Math.min(1,u*1.2);sceneRoot.position.set(-1.55+k*3.05,.65+Math.sin(k*Math.PI)*.85,0);sceneRoot.rotation.z=(-.9+k*1.9);sceneRoot.rotation.y=t*.3;sceneRoot.scale.setScalar(k>.8?Math.max(.02,(1-k)/.2):1);}
-  else if(m==='burst'){sceneRoot.position.y=.58;let pulse=Math.sin(Math.min(1,u*1.08)*Math.PI);sceneRoot.scale.setScalar(Math.max(.01,(0.1+u*3)*(u>.78?(1-u)/.22:1)));sceneRoot.rotation.y=t*.4;}
-  else if(m==='rise'){sceneRoot.position.y=-1.7+Math.min(1,u*2)*1.8;sceneRoot.scale.setScalar(.4+Math.min(1,u*2)*1.2);}
-  else if(m==='smoke'){sceneRoot.position.y=u*2.4;sceneRoot.scale.setScalar(.6+u*1.7);sceneRoot.rotation.y=t*.27;}
-  else if(m==='lightning'){let visible=u>.12&&u<.67;sceneRoot.position.y=.4;sceneRoot.rotation.y=Math.sin(t*7)*.05;sceneRoot.scale.setScalar(visible?(1+Math.sin(t*42)*.065):.001);}
-  else if(m==='orb'){sceneRoot.position.y=.6+Math.sin(t*1.7)*.21;sceneRoot.rotation.y=t*.7;sceneRoot.scale.setScalar(1+Math.sin(t*3.3)*.12);}
-  resetParticlePositions(t,m);
+let seekActive=false;
+function syncTimeline(){const mode=$('motion').value,dur=PRESET_DURATIONS[mode]||3.2;const norm=frac(clockTime/dur);if(!seekActive)$('scrubber').value=Math.floor(norm*1000);$('timelineReadout').textContent=(norm*dur).toFixed(2)+' / '+dur.toFixed(2)+' s';}
+function frame(now){requestAnimationFrame(frame);if(!renderer)return;const delta=Math.min(.05,(now-(frame.last||now))/1000);frame.last=now;const step=playing?delta*Number($('speed').value):0;
+ if(playing)clockTime+=step;
+ applyMotion(clockTime,step);
+ syncTimeline();renderer.render(scene,camera);
 }
-function frame(now){requestAnimationFrame(frame);if(!renderer)return;let delta=Math.min(.05,(now-(frame.last||now))/1000);frame.last=now;if(playing)clockTime+=delta*Number($('speed').value);applyMotion(clockTime,playing?delta*Number($('speed').value):0);renderer.render(scene,camera);}
 async function uploadFiles(files){if(!files.length)return;if(!worldStarted)init3D();if(!renderer)return;status('Abrindo arquivos 3D e texturas...');let zip=files.find(f=>f.name.toLowerCase().endsWith('.zip'));
   try{const manager=new THREE.LoadingManager(),urls=new Map(),owned=[];let buffer,rootName='';
     if(zip){if(!window.JSZip)throw Error('JSZip não carregou.');const z=await JSZip.loadAsync(zip);let items=Object.values(z.files).filter(x=>!x.dir&&!x.name.startsWith('__MACOSX/'));
@@ -104,19 +185,39 @@ async function uploadFiles(files){if(!files.length)return;if(!worldStarted)init3
     let loader=new window.ARCANO.GLTFLoader(manager);let draco=new window.ARCANO.DRACOLoader(manager).setDecoderPath('./vendor/draco/');draco.setWorkerLimit(2);loader.setDRACOLoader(draco);loader.setMeshoptDecoder(window.ARCANO.MeshoptDecoder);
     let obj=await loader.parseAsync(buffer,rootName.includes('/')?rootName.substring(0,rootName.lastIndexOf('/')+1):'');
     if(!obj.scene)throw Error('O arquivo não contém uma cena glTF.');
-    if(mixer){mixer.stopAllAction();mixer=null;}assetHolder.clear();assetHolder.add(obj.scene);
-    const b=new THREE.Box3().setFromObject(obj.scene);if(b.isEmpty())throw Error('A geometria veio vazia.');let size=new THREE.Vector3();b.getSize(size);let center=new THREE.Vector3();b.getCenter(center);let scale=2.25/Math.max(.01,size.x,size.y,size.z);obj.scene.scale.setScalar(scale);
-    obj.scene.position.set(-center.x*scale,-b.min.y*scale,-center.z*scale);currentClips=obj.animations||[];if(currentClips.length){mixer=new THREE.AnimationMixer(obj.scene);mixer.clipAction(currentClips[0]).setLoop(THREE.LoopRepeat,Infinity).play();}
-    $('clipSelect').innerHTML=currentClips.length?currentClips.map((c,i)=>`<option value="${i}">${i+1}. ${c.name||'Clipe sem nome'}</option>`).join(''):'<option value="">Nenhuma animação interna</option>';
+    if(mixer){mixer.stopAllAction();mixer.uncacheRoot(importedScene);mixer=null;}
+    importedScene=obj.scene;assetHolder.clear();modelFrame=new THREE.Group();assetHolder.add(modelFrame);modelFrame.add(obj.scene);
+    const b=new THREE.Box3().setFromObject(obj.scene);if(b.isEmpty())throw Error('A geometria veio vazia.');let size=new THREE.Vector3();b.getSize(size);let center=new THREE.Vector3();b.getCenter(center);let scale=2.1/Math.max(.01,size.x,size.y,size.z);
+    // Normalizar o PIVOT externo: clipes que animam o root do arquivo nao apagam a normalizacao.
+    modelFrame.scale.setScalar(scale);modelFrame.position.set(-center.x*scale,-b.min.y*scale,-center.z*scale);
+    currentClips=obj.animations||[];
+    if(currentClips.length){mixer=new THREE.AnimationMixer(obj.scene);mixer.clipAction(currentClips[0]).reset().setLoop(THREE.LoopRepeat,Infinity).play();}
+    $('clipSelect').innerHTML=currentClips.length?currentClips.map((c,i)=>`<option value="${i}">${i+1}. ${c.name||'Clipe sem nome'} (${c.duration.toFixed(2)} s)</option>`).join(''):'<option value="">Nenhuma animação interna</option>';
+    buildFx($('motion').value);
     temporaryUrls.forEach(x=>URL.revokeObjectURL(x));temporaryUrls=owned;loaded=true;modelSrc=rootName;clockTime=0;playing=true;$('playBtn').textContent='⏸ Pausar';$('empty').style.display='none';$('modelStats').textContent=currentClips.length+' clipe(s) interno(s)';$('fileInfo').textContent=rootName+' · '+(size.x*scale).toFixed(2)+' × '+(size.y*scale).toFixed(2)+' × '+(size.z*scale).toFixed(2);
     $('clipInfo').textContent=currentClips.length?`Animações existentes: ${currentClips.map(x=>x.name||'(sem nome)').slice(0,8).join(', ')}. Selecione "Animação original" para reproduzi-las.`:'Nenhuma animação interna detectada. Você pode aplicar qualquer movimento externo da lista.';
     status('Modelo 3D REAL importado. '+currentClips.length+' animação(ões) original(is). Escolha o movimento.');
   }catch(e){console.error(e);status('Não foi possível abrir: '+(e?.message||e)+'. Se usar Draco, teste a versão hospedada com decoder incluído.',true);}
 }
 $('upload').addEventListener('change',e=>uploadFiles(Array.from(e.target.files)));
-$('playBtn').addEventListener('click',()=>{playing=!playing;$('playBtn').textContent=playing?'⏸ Pausar':'▶ Reproduzir';});
-$('resetAnim').addEventListener('click',()=>{clockTime=0;sceneRoot?.position.set(0,0,0);if(mixer)for(const action of mixer._actions){action.reset().play();}});
-$('motion').addEventListener('change',()=>{clockTime=0;if(mixer){mixer.setTime(0);}});
-$('clipSelect').addEventListener('change',()=>{if(!mixer||!currentClips.length)return;const idx=Number($('clipSelect').value)||0;mixer.stopAllAction();mixer.clipAction(currentClips[idx]).reset().setLoop(THREE.LoopRepeat,Infinity).play();clockTime=0;});
+$('playBtn').addEventListener('click',()=>{playing=!playing;$('playBtn').textContent=playing?'⏸ Pausar':'▶ Reproduzir';});$('stepBtn').addEventListener('click',()=>{playing=false;$('playBtn').textContent='▶ Reproduzir';clockTime+=1/30;if(mixer)mixer.update(1/30);});$('scrubber').addEventListener('pointerdown',()=>{seekActive=true;playing=false;$('playBtn').textContent='▶ Reproduzir';});$('scrubber').addEventListener('input',()=>{const dur=PRESET_DURATIONS[$('motion').value]||3.2;clockTime=Number($('scrubber').value)/1000*dur;if(mixer)mixer.setTime(clockTime);seekActive=true;});$('scrubber').addEventListener('change',()=>{seekActive=false;});
+$('resetAnim').addEventListener('click',()=>{clockTime=0;sceneRoot?.position.set(0,0,0);if(mixer){mixer.setTime(0);}syncTimeline();});
+$('motion').addEventListener('change',()=>{clockTime=0;buildFx($('motion').value);if(mixer)mixer.setTime(0);});
+$('clipSelect').addEventListener('change',()=>{if(!mixer||!currentClips.length)return;const idx=Number($('clipSelect').value)||0;mixer.stopAllAction();mixer.clipAction(currentClips[idx]).reset().setLoop(THREE.LoopRepeat,Infinity).play();clockTime=0;});$('nativeMix').addEventListener('change',()=>{if(mixer&&$('nativeMix').checked)mixer.setTime(clockTime);});
+
+function demoObject(){
+ if(!worldStarted)init3D();if(!renderer)return;
+ if(mixer){mixer.stopAllAction();mixer=null;}assetHolder.clear();
+ // Malha demonstrativa procedural (NAO um asset Sketchfab), para testar o movimento antes de importar.
+ let demo=new THREE.Group(),mat=new THREE.MeshStandardMaterial({color:0xe67930,emissive:0xb8400b,emissiveIntensity:.4,flatShading:true,metalness:.14,roughness:.65});
+ demo.add(new THREE.Mesh(new THREE.IcosahedronGeometry(.62,2),mat));
+ for(let i=0;i<8;i++){let p=new THREE.Mesh(new THREE.TetrahedronGeometry(.13+i*.015),new THREE.MeshStandardMaterial({color:i%2?0xffcb4b:0xf14420,emissive:0x7a2306,flatShading:true}));let a=i*TAU/8;p.position.set(Math.cos(a)*.78,Math.sin(a)*.4,Math.sin(a)*.78);p.rotation.set(a,a*.4,.5);demo.add(p);}
+ assetHolder.add(demo);importedScene=demo;modelFrame=demo;
+ loaded=true;currentClips=[];$('clipSelect').innerHTML='<option value="">Demonstração: sem clipes internos</option>';
+ $('fileInfo').textContent='Malha de TESTE gerada no Three.js — NÃO é um modelo Sketchfab';$('modelStats').textContent='Malha demonstrativa';
+ $('empty').style.display='none';clockTime=0;playing=true;$('playBtn').textContent='⏸ Pausar';buildFx($('motion').value);status('Prévia de movimento 3D ativa. Importe o GLB original do Sketchfab para aplicar a animação ao modelo certo.');
+}
+$('demoBtn').addEventListener('click',demoObject);
+$('clearBtn').addEventListener('click',()=>{if(mixer){mixer.stopAllAction();mixer=null;}assetHolder.clear();loaded=false;particles&&(particles.visible=false);wipeFx();$('empty').style.display='block';$('fileInfo').textContent='Nenhum modelo importado.';$('modelStats').textContent='Aguardando arquivo';$('clipSelect').innerHTML='<option>Sem modelo</option>';status('Modelo removido.');});
 </script>
 </body></html>
