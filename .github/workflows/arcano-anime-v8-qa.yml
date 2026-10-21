@@ -43,9 +43,18 @@ jobs:
             await page.waitForTimeout(450);
             console.log('CAST',JSON.stringify(await page.evaluate('({active:window.app?.abilities?.active?.length,status:document.querySelector(".ar-status")?.textContent})')));
             await page.screenshot({path:'qa-run/qa_v8_magia_agua_android.png',fullPage:true});
-            await page.getByRole('button',{name:'☰ Magias'}).click();
+            await page.getByRole('button',{name:'Abrir biblioteca'}).click();
             console.log('UI',JSON.stringify({items:await page.locator('.ar-item').count(),open:await page.locator('.ar-panel').evaluate(e=>e.classList.contains('open'))}));
             await page.screenshot({path:'qa-run/qa_v8_menu_android.png',fullPage:true});
+            await page.getByRole('button',{name:'Fechar biblioteca'}).click();
+            for(const [id,name,delay] of [['meteor','fogo',1100],['thunder','raio',500],['glacier','gelo',900],['godspear','luz',1000]]){
+              await page.evaluate(async id=>await window.arcanoLab.select(id),id);
+              await page.evaluate(()=>window.arcanoLab.cast());
+              await page.waitForTimeout(delay);
+              console.log('SKILL',id,JSON.stringify(await page.evaluate('({active:window.app?.abilities?.active?.length,status:document.querySelector(".ar-status")?.textContent})')));
+              await page.screenshot({path:'qa-run/qa_v8_'+name+'_android.png',fullPage:true});
+              await page.evaluate(()=>window.arcanoLab.clear());
+            }
             fs.writeFileSync('qa-run/browser-log.txt',JSON.stringify({errors},null,2));
             console.log('BROWSER_ERRORS',JSON.stringify(errors.slice(0,15)));
             await browser.close();
