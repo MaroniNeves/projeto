@@ -21,7 +21,7 @@ jobs:
           git clone --depth 1 https://github.com/majidmanzarpour/threejs-vfx.git /tmp/magiaspack/01_Magias_3D_ThreeJS_100_efeitos
           cd /tmp/magiaspack/01_Magias_3D_ThreeJS_100_efeitos
           rm -rf .git
-          npm ci --no-audit --no-fund
+          npm install --no-audit --no-fund
           npm run build
           npm run check > /tmp/magias-check.log 2>&1 || (cat /tmp/magias-check.log && exit 1)
           cp /tmp/magias-check.log /tmp/magiaspack/TESTE_100_MAGIAS.txt
@@ -48,7 +48,7 @@ jobs:
           Teste: npm run check e npm run build executados no GitHub Actions.
           PARA TESTAR NO PC (na pasta fonte):
              Instale Node.js 22+
-             npm ci
+             npm install
              npm run dev
              abra a URL que aparecer no terminal.
           OU TESTAR BUILD PRONTO: utilize um servidor HTTP local na pasta dist
