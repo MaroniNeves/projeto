@@ -667,18 +667,25 @@ function seed(m){
  time=0;visualTime=0;acc=0;spawnAcc=0;lastUI=0;
  // Reiniciar no seco, sem poças pré-fabricadas: observar as poças se formando.
  for(let k=0;k<size;k++)soilMoisture[k]=soilCapacity[k]*.025;
+ initAtmosphere();updateAtmosphere(0);
  rebuild();updateInfo(true);
 }
 // A chuva é alimentada por um campo uniforme; gotas animadas representam a mesma chuva,
 // sem depositar um segundo volume ao colidir (evita contagem dupla).
 function hydrologyStep(dt){
- const rain=rainMeters[level]*dt*(mode==='storm'?1.28:mode==='lagoon'?1.36:1);
+ const manualRain=rainMeters[level]*dt*(mode==='storm'?1.28:mode==='lagoon'?1.36:1);
  const interp=process==='retention'?1.75:process==='infiltration'?.95:1;
  const infiltrate=process==='runoff'?.11:process==='infiltration'?3.0:process==='retention'?.8:1;
- const evaporate=process==='retention'?3.1:process==='runoff'?.65:1;
+ const sunIntensity=Math.max(0,solarAt(dayClock));
+ const climateEvap=physicalWeather?clamp(.29+sunIntensity*.82+(1-atmHumMean)*.18,.26,1.28):1;
+ const evaporate=(process==='retention'?3.1:process==='runoff'?.65:1)*climateEvap;
  const speed=process==='runoff'?1.65:1;
  for(let k=0;k<size;k++){
-  // As rochas não impedem a formação de nível d'água sobre a própria projeção.
+  // Precipitação regional derivada de nuvens, umidade e transporte pelo vento.
+  const rain=physicalWeather
+    ?(level===0?0:Math.min(rainField[k],rainMeters[level]*1.50)*
+      (mode==='storm'?1.24:mode==='lagoon'?1.10:1))*dt
+    :manualRain;
   if(rain>0){
    const canopyCap=.007+cover[k]*.037;
    const retained=Math.min(rain*cover[k]*.55*interp,Math.max(0,canopyCap-canopy[k]));
@@ -854,17 +861,24 @@ function spawnSplash(x,z,h){
  }
 }
 function dropStep(dt){
- const rainfall=rainLevels[level]*(mode==='storm'?1.4:1);
+ const rainfall=physicalWeather
+  ?(level===0?0:clamp(atmRainMean/.0028,0,2.5)*1.45)
+  :rainLevels[level]*(mode==='storm'?1.4:1);
  spawnAcc+=rainfall*(mobile?155:230)*dt;
  const toSpawn=Math.min(55,Math.floor(spawnAcc));spawnAcc-=toSpawn;
  for(let k=0;k<toSpawn&&drops.length<MAX_DROPS;k++){
   const x=(random()-.5)*(W-.8),z=(random()-.5)*(L-.8);
+  if(physicalWeather&&random()>clamp(atmosphereRainAt(x,z)/Math.max(.00005,atmRainPeak),0,1))continue;
   drops.push({x,z,y:2.2+random()*4.3,speed:4.4+random()*3.2,stretch:.70+random()*.75});
  }
  const factor=1+Math.log2(timeScale)*.12;
  let displayedImpacts=0;
  for(let i=drops.length-1;i>=0;i--){
   const d=drops[i];d.y-=d.speed*dt*factor;
+  if(physicalWeather){
+   d.x+=Math.cos(atmWindHeading)*atmWindMean*dt*.25;
+   d.z+=Math.sin(atmWindHeading)*atmWindMean*dt*.25;
+  }
   const gh=impactHeightAt(d.x,d.z);
   if(d.y<=gh){
    if(displayedImpacts<5){spawnSplash(d.x,d.z,gh);displayedImpacts++;}
@@ -925,7 +939,7 @@ function setRainLevel(value){
  level=clamp(value,0,5);
  if(level>0)lastRainLevel=level;
  $('intensity').value=String(level);
- if(climateChoice==='auto')applyClimate(automaticClimate(level));
+ if(climateChoice==='auto')applyClimate(physicalWeather?atmCloudPreset():automaticClimate(level));
  $('stopRain').textContent=level===0?'🌧 Retomar chuva':'☀ Parar chuva';
  $('stopRain').setAttribute('aria-pressed',String(level===0));
  updateInfo(true);
@@ -939,13 +953,19 @@ $('wetVisual').addEventListener('change',e=>{showWet=e.target.checked;rebuild();
 $('foamToggle').addEventListener('change',e=>{showFoam=e.target.checked;rebuild();updateInfo(true);});
 $('climate').addEventListener('change',e=>{
  climateChoice=e.target.value;
- applyClimate(climateChoice==='auto'?automaticClimate(level):climateChoice);
+ applyClimate(climateChoice==='auto'?(physicalWeather?atmCloudPreset():automaticClimate(level)):climateChoice);
  updateInfo(true);
 });
 $('reflectionToggle').addEventListener('change',e=>{
  reflectionsOn=e.target.checked;
  reflectionAge=999;
  waterM.uniforms.uReflect.value=(reflectionsOn&&reflectionReady)?.78:0;
+ updateInfo(true);
+});
+$('physicalWeather').addEventListener('change',e=>{
+ physicalWeather=e.target.checked;
+ if(physicalWeather)initAtmosphere();
+ if(climateChoice==='auto')applyClimate(physicalWeather?atmCloudPreset():automaticClimate(level));
  updateInfo(true);
 });
 $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo(true);});
@@ -1011,6 +1031,7 @@ let last=performance.now();function loop(now){
  requestAnimationFrame(loop);const dt=Math.min((now-last)/1000,.065);last=now;
  if(!paused&&!document.hidden){
   time+=dt*timeScale;visualTime+=dt*(1+.16*Math.log2(timeScale));
+  updateAtmosphere(dt);
   dropStep(dt);
   acc+=dt*timeScale;
   const step=timeScale>=64?.22:timeScale>=16?.14:timeScale>=4?.09:.06;
@@ -1027,6 +1048,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1218'))fail(e.error||e.message);});
-window.arcanoWaterV1218={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.arcanoWaterV1218={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
