@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.8 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.9 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.8]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.9]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -14,6 +14,8 @@ const soilMoisture=new Float32Array(size),soilCapacity=new Float32Array(size),de
 const canopy=new Float32Array(size),cover=new Float32Array(size),permeability=new Float32Array(size);
 const area=dx*dz,stats={rain:0,infiltrated:0,evaporated:0,transpired:0,outflow:0};
 const mudRGB=[.18,.11,.075];
+const turbidity=new Float32Array(size);
+const soilErosion={loam:.37,loose:1.0,clay:.73,compacted:.13};
 let soilType='loam',totalImpacts=0;
 const baseCapacity=new Float32Array(size),basePermeability=new Float32Array(size);
 const nx=i=>-W*.5+i*dx,nz=j=>-L*.5+j*dz, idx=(i,j)=>j*NX+i;
@@ -96,19 +98,20 @@ for(let k=0;k<grass.count;k++){
 // Uma única superfície: a água é armazenada em volumes por vértice, não em poças/planos sobrepostos.
 const waterG=grid(),wet=new Float32Array(size),flow=new Float32Array(size*2);
 waterG.setAttribute('wet',new T.BufferAttribute(wet,1));waterG.setAttribute('flow',new T.BufferAttribute(flow,2));
+waterG.setAttribute('turbidity',new T.BufferAttribute(turbidity,1));
 // Poça azulada, definida e com opacidade quase total fora da margem.
 const waterM=new T.ShaderMaterial({side:T.DoubleSide,transparent:true,depthWrite:false,
  uniforms:{uTime:{value:0}},
  vertexShader:`
- attribute float wet;attribute vec2 flow;uniform float uTime;
- varying float vWet;varying vec2 vFlow;varying vec3 vPos;
+ attribute float wet;attribute vec2 flow;attribute float turbidity;uniform float uTime;
+ varying float vWet;varying vec2 vFlow;varying vec3 vPos;varying float vTurbidity;
  void main(){
-  vec3 p=position;vWet=wet;vFlow=flow;
+  vec3 p=position;vWet=wet;vFlow=flow;vTurbidity=turbidity;
   p.y+=.0038*min(wet,1.)*(sin(p.x*9.0+uTime*2.1)+sin(p.z*7.0-uTime*1.6));
   vPos=p;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);
  }`,
  fragmentShader:`
- precision mediump float;uniform float uTime;
+ precision mediump float;uniform float uTime;varying float vTurbidity;
  varying float vWet;varying vec2 vFlow;varying vec3 vPos;
  void main(){
   float mask=smoothstep(.035,.20,vWet);
@@ -122,7 +125,11 @@ const waterM=new T.ShaderMaterial({side:T.DoubleSide,transparent:true,depthWrite
   vec3 blue=vec3(.115,.42,.54);
   vec3 crest=vec3(.51,.77,.83);
   vec3 col=mix(deep,blue,.36+.27*irregular);
-  col=mix(col,crest,pow(wave,19.)*.19);
+  // Sedimentos em suspensão tornam a água gradualmente castanho-esverdeada.
+  vec3 mud=vec3(.29,.195,.105);
+  float muddy=clamp(vTurbidity,0.,1.)*.88;
+  col=mix(col,mud,muddy);
+  col=mix(col,crest,pow(wave,19.)*(.19-.08*muddy));
   gl_FragColor=vec4(col,alpha);
  }`
 });
@@ -178,12 +185,12 @@ function sample(a,x,z){
 function waterHeight(x,z){return sample(soil,x,z)+sample(depth,x,z);}
 function setSoilType(next){
  soilType=next;
- const cfg={loam:[1,1],clay:[1.35,.24],compacted:[.66,.12]}[next]||[1,1];
+ const cfg={loam:[1,1],loose:[1.18,1.85],clay:[1.35,.24],compacted:[.66,.12]}[next]||[1,1];
  for(let k=0;k<size;k++){
   soilCapacity[k]=baseCapacity[k]*cfg[0];permeability[k]=basePermeability[k]*cfg[1];
   if(soilMoisture[k]>soilCapacity[k]){depth[k]+=soilMoisture[k]-soilCapacity[k];soilMoisture[k]=soilCapacity[k];}
  }
- land.material.color.set(next==='clay'?'#b6a08f':next==='compacted'?'#bcb5ad':'#ffffff');
+ land.material.color.set(next==='clay'?'#b6a08f':next==='loose'?'#c8ae94':next==='compacted'?'#bcb5ad':'#ffffff');
  rebuild();updateInfo(true);
 }
 function updateRipples(dt){
@@ -229,7 +236,7 @@ function add(x,z,vol){
  const k=idx(i,j);if(!blocked[k])depth[k]=Math.min(1.65,depth[k]+vol);
 }
 function seed(m){
- depth.fill(0);delta.fill(0);soilMoisture.fill(0);deepWater.fill(0);canopy.fill(0);
+ depth.fill(0);delta.fill(0);soilMoisture.fill(0);deepWater.fill(0);canopy.fill(0);turbidity.fill(0);
  ripples.forEach(r=>r.mesh.visible=false);ripples.length=0;totalImpacts=0;
  drops.length=0;splashes.length=0;dropG.setDrawRange(0,0);streak.count=splashMesh.count=0;
  stats.rain=stats.infiltrated=stats.evaporated=stats.transpired=stats.outflow=0;
@@ -273,6 +280,12 @@ function hydrologyStep(dt){
   soilMoisture[k]-=soilEvap;stats.evaporated+=soilEvap*area;
   const roots=Math.min(soilMoisture[k],cover[k]*.00013*evaporate*dt);
   soilMoisture[k]-=roots;stats.transpired+=roots*area;
+  // Formação progressiva de lama: partículas soltas sob chuva/turbulência.
+  const erosion=soilErosion[soilType]||.37;
+  const stirred=depth[k]>.002 ? rain*erosion*(7.0-4.5*cover[k]) : 0;
+  const runoffStir=depth[k]>.002 ? erosion*depth[k]*.006*dt : 0;
+  const settle=.0026*dt*(1.0+Math.max(0,1.0-erosion));
+  turbidity[k]=clamp(turbidity[k]+stirred+runoffStir-settle,0,1);
  }
  flowStep(dt,speed);
 }
@@ -314,7 +327,7 @@ function rebuild(){
   for(let m=0;m<3;m++)colors[3*k+m]=dry[3*k+m]*(1-sat)+mudRGB[m]*sat;
  }
  wetted=count*area;
- waterG.attributes.position.needsUpdate=true;waterG.attributes.wet.needsUpdate=true;waterG.attributes.flow.needsUpdate=true;
+ waterG.attributes.position.needsUpdate=true;waterG.attributes.wet.needsUpdate=true;waterG.attributes.flow.needsUpdate=true;waterG.attributes.turbidity.needsUpdate=true;
  landG.attributes.color.needsUpdate=true;waterG.computeVertexNormals();
 }
 function spawnSplash(x,z,h){
@@ -473,7 +486,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v128'))fail(e.error||e.message);});
-window.arcanoWaterV128={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,stats,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v129'))fail(e.error||e.message);});
+window.arcanoWaterV129={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,stats,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('rain');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
