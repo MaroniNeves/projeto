@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.16 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.17 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.16]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.17]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -44,11 +44,86 @@ try{renderer=new T.WebGLRenderer({canvas:stage,antialias:!mobile,powerPreference
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?1.35:1.8));renderer.outputColorSpace=T.SRGBColorSpace;
 renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=T.PCFSoftShadowMap;}catch(e){fail(e);return;}
-scene.add(new T.HemisphereLight('#fff5e4','#6c8378',2.2));
+const ambientSky=new T.HemisphereLight('#fff5e4','#6c8378',2.2);scene.add(ambientSky);
 const light=new T.DirectionalLight('#fff0c8',2.35);light.position.set(-8,13,7);
 light.castShadow=true;light.shadow.mapSize.set(mobile?512:1024,mobile?512:1024);
 Object.assign(light.shadow.camera,{left:-13,right:13,top:13,bottom:-13,near:.5,far:38});
 light.shadow.bias=-.00035;scene.add(light);
+// Atmosfera 3D: céu físico estilizado, disco solar e nuvens procedurais animadas.
+// O mesmo céu é visível à câmera do jogador e capturado pelos cubemaps da água.
+const skySunDir=light.position.clone().normalize();
+const skyM=new T.ShaderMaterial({
+ side:T.BackSide,depthWrite:false,depthTest:true,fog:false,toneMapped:false,
+ uniforms:{
+  uTime:{value:0},uCoverage:{value:.43},uWind:{value:.30},
+  uSunDir:{value:skySunDir},
+  uTop:{value:new T.Color('#7baec6')},
+  uHorizon:{value:new T.Color('#cededb')},
+  uCloud:{value:new T.Color('#e1e5df')},
+  uSunColor:{value:new T.Color('#fff0c9')},
+  uSunVisible:{value:.8}
+ },
+ vertexShader:[
+  'precision highp float;',
+  'varying vec3 vSkyDir;',
+  'void main(){vSkyDir=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}'
+ ].join('\n'),
+ fragmentShader:"precision highp float;\nvarying vec3 vSkyDir;\nuniform float uTime,uCoverage,uWind,uSunVisible;\nuniform vec3 uTop,uHorizon,uCloud,uSunColor,uSunDir;\nfloat hash2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}\nfloat noise2(vec2 p){\n vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);\n return mix(mix(hash2(i),hash2(i+vec2(1.,0.)),f.x),\n            mix(hash2(i+vec2(0.,1.)),hash2(i+vec2(1.,1.)),f.x),f.y);\n}\nfloat clouds(vec2 p){\n float v=0.;\n v+=noise2(p)*.53;\n v+=noise2(p*2.13+vec2(5.1,2.7))*.27;\n v+=noise2(p*4.26+vec2(1.3,8.4))*.14;\n v+=noise2(p*8.58)*.06;\n return v;\n}\nvoid main(){\n vec3 d=normalize(vSkyDir);\n vec3 sky=mix(uHorizon,uTop,smoothstep(-.05,.77,d.y));\n float haze=1.-smoothstep(.02,.28,abs(d.y));\n sky=mix(sky,uHorizon,haze*.26);\n vec2 uv=d.xz*2.6/max(.18,d.y+.22);\n float t=uTime*uWind;\n float c1=clouds(uv+vec2(t*.025,t*.011));\n float c2=clouds(uv*1.86+vec2(-t*.012,t*.017));\n float field=mix(c1,c2,.30);\n float coverage=smoothstep(.76-.42*uCoverage,.86-.49*uCoverage,field);\n coverage*=smoothstep(-.085,.10,d.y);\n float lightFacing=clamp(dot(d,normalize(uSunDir))*.5+.5,0.,1.);\n vec3 cloudColor=uCloud*(.79+.22*lightFacing);\n sky=mix(sky,cloudColor,coverage*(.73+.27*uCoverage));\n float sunDot=max(dot(d,normalize(uSunDir)),0.);\n float disc=smoothstep(.9987,.99985,sunDot);\n float glow=pow(sunDot,140.)*.23;\n sky+=uSunColor*(disc*.90+glow)*uSunVisible*(1.-coverage*.91);\n gl_FragColor=vec4(clamp(sky,0.,1.),1.);\n}"
+});
+const skyDome=new T.Mesh(new T.SphereGeometry(40,mobile?36:56,mobile?24:36),skyM);
+skyDome.name='Céu 3D com sol, nuvens volumétricas estilizadas e movimento';
+skyDome.frustumCulled=false;skyDome.renderOrder=-10;scene.add(skyDome);
+let climate='partlyCloudy',weatherCfg=null,weatherTime=0,weatherCloudCover=0;
+const CLIMATE={
+ sunny:{name:'Ensolarado',top:'#70b9eb',horizon:'#d6edf4',cloud:'#fcffff',
+  bg:'#b2d7e6',sun:'#fff0c5',ambient:'#fff8e8',ground:'#819084',
+  coverage:.13,wind:.12,sunPower:2.8,ambientPower:2.35,sunVisible:1.0,reflection:1.0,waterTint:'#c0edee'},
+ partlyCloudy:{name:'Parcialmente nublado',top:'#83b9d3',horizon:'#d7e4df',cloud:'#dfe9eb',
+  bg:'#bbd0c9',sun:'#fff0ca',ambient:'#fff5e9',ground:'#718679',
+  coverage:.43,wind:.35,sunPower:2.2,ambientPower:2.15,sunVisible:.81,reflection:.92,waterTint:'#a1c7d0'},
+ overcast:{name:'Nublado',top:'#8d9fab',horizon:'#c2ccd0',cloud:'#b3bec7',
+  bg:'#aebcbf',sun:'#ecf1f3',ambient:'#d9e4ed',ground:'#727d7a',
+  coverage:.82,wind:.48,sunPower:1.05,ambientPower:1.8,sunVisible:.15,reflection:.72,waterTint:'#849aa9'},
+ storm:{name:'Tempestade',top:'#576c7b',horizon:'#98a4ae',cloud:'#728490',
+  bg:'#8797a0',sun:'#d2dce6',ambient:'#b2c3d3',ground:'#596a69',
+  coverage:.98,wind:.94,sunPower:.46,ambientPower:1.32,sunVisible:.01,reflection:.58,waterTint:'#697b86'}
+};
+function applyClimate(next){
+ climate=CLIMATE[next]?next:'partlyCloudy';weatherCfg=CLIMATE[climate];
+ const c=weatherCfg;
+ skyM.uniforms.uTop.value.set(c.top);
+ skyM.uniforms.uHorizon.value.set(c.horizon);
+ skyM.uniforms.uCloud.value.set(c.cloud);
+ skyM.uniforms.uSunColor.value.set(c.sun);
+ skyM.uniforms.uCoverage.value=c.coverage;
+ skyM.uniforms.uWind.value=c.wind;
+ skyM.uniforms.uSunVisible.value=c.sunVisible;
+ scene.background.set(c.bg);scene.fog.color.set(c.bg);
+ ambientSky.color.set(c.ambient);ambientSky.groundColor.set(c.ground);
+ ambientSky.intensity=c.ambientPower;
+ light.color.set(c.sun);light.intensity=c.sunPower;
+ if(typeof waterM!=='undefined'){
+  waterM.uniforms.uCloudiness.value=c.coverage;
+  waterM.uniforms.uWind.value=c.wind;
+  waterM.uniforms.uSunPower.value=c.sunVisible;
+  waterM.uniforms.uWeatherTint.value.set(c.waterTint);
+  waterM.uniforms.uWeatherReflect.value=c.reflection;
+ }
+ // Nuvens e iluminação mudaram: a próxima captura precisa refletir o clima novo.
+ if(typeof reflectionAge!=='undefined')reflectionAge=999;
+ if($('climateStats'))$('climateStats').textContent=
+  'Céu: '+c.name+' · '+Math.round(c.coverage*100)+'% de nuvens · reflexos ajustados ao clima';
+}
+function animateClimate(dt){
+ if(!weatherCfg)return;
+ weatherTime+=dt;
+ skyM.uniforms.uTime.value=weatherTime;
+ // Passagem das nuvens diante do sol: variação sutil e contínua de iluminação.
+ const shade=Math.max(.72,1-weatherCfg.coverage*.13*(.5+.5*Math.sin(weatherTime*.16+
+   Math.sin(weatherTime*.065)*1.4)));
+ light.intensity=weatherCfg.sunPower*shade;
+ if(typeof waterM!=='undefined')waterM.uniforms.uSunPower.value=weatherCfg.sunVisible*shade;
+}
 function grid(){
  const g=new T.BufferGeometry(),p=new Float32Array(size*3),uv=new Float32Array(size*2),tri=[];
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
@@ -745,7 +820,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1216'))fail(e.error||e.message);});
-window.arcanoWaterV1216={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,reflectionCamera,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1217'))fail(e.error||e.message);});
+window.arcanoWaterV1217={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,reflectionCamera,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
