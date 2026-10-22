@@ -2,7 +2,7 @@ name: Publicar V12 agua anime sprites gotas e lagoa para Android
 on:
   push:
     branches: [atelie-arcano-public-demo]
-    paths: ['.github/workflows/build-agua-v12.yml']
+    paths: ['.github/workflows/build-agua-v12.yml', 'atelie-arcano-agua-v12/source/vite.config.js']
 permissions:
   contents: write
 jobs:
