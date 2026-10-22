@@ -1,0 +1,52 @@
+name: Construir piloto Rollshade 3D anime para Android
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths:
+      - '.github/workflows/atelie-rollshade-piloto.yml'
+permissions:
+  contents: write
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: atelie-arcano-public-demo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar bibliotecas Rollshade e Three.js r186
+        working-directory: atelie-arcano-rollshade-piloto/source
+        run: npm install --no-audit --no-fund
+      - name: Compilar aplicação independente
+        working-directory: atelie-arcano-rollshade-piloto/source
+        run: |
+          npm run build
+          test -s dist/index.html
+          test "$(find dist/assets -name '*.js' | wc -l)" -ge 1
+          echo 'Build Rollshade: SUCCESS'
+      - name: Publicar visualizador no GitHub
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p atelie-arcano-rollshade-piloto/preview
+          cp -a atelie-arcano-rollshade-piloto/source/dist/. atelie-arcano-rollshade-piloto/preview/
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f atelie-arcano-rollshade-piloto/preview/
+          git diff --cached --quiet || (git commit -m "Publicar demo Rollshade isolada com 20 magias animadas" && git push origin HEAD:atelie-arcano-public-demo)
+      - name: Criar pacote testável com código e aplicativo
+        shell: bash
+        run: |
+          cd atelie-arcano-rollshade-piloto
+          zip -qr -9 /tmp/atelie_rollshade_20_magias_piloto.zip source/src source/index.html source/package.json source/vite.config.js preview
+          unzip -t /tmp/atelie_rollshade_20_magias_piloto.zip | tail -1
+          ls -lh /tmp/atelie_rollshade_20_magias_piloto.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atelie-rollshade-20-magias-piloto
+          path: /tmp/atelie_rollshade_20_magias_piloto.zip
+          retention-days: 7
+          compression-level: 0
