@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#0b1220"><title>Ateliê Arcano — Raios 3D anime</title>
+<style>
+html,body{margin:0;height:100%;background:#0b1220;color:#f0f4fb;font:14px system-ui,Arial;overflow:hidden}
+.lil-gui{display:none!important}
+#arcano-bar{position:fixed;z-index:2001;top:calc(5px + env(safe-area-inset-top,0px));left:6px;right:6px;display:flex;align-items:center;gap:5px;padding:6px;background:#111b2af2;border:1px solid #ffffff35;border-radius:14px;box-shadow:0 5px 24px #0009}
+#arcano-bar span{font-weight:800;color:#ecd3a0;margin-right:auto;white-space:nowrap;font-size:12px}
+#arcano-bar button{background:#263950;border:1px solid #ffffff36;color:#e8f5ff;border-radius:8px;font:600 12px system-ui;padding:7px 8px;white-space:nowrap}
+#arcano-bar button[aria-current]{background:#b9854d;color:#12121b}
+#arcano-actions{position:fixed;z-index:1501;bottom:calc(13px + env(safe-area-inset-bottom,0px));left:8px;right:8px;display:flex;gap:8px;padding:9px;border-radius:15px;background:#101c2be9;border:1px solid #ffffff40}
+#arcano-actions button{flex:1;border:1px solid #83a7c0;background:#29405b;color:#f4f9ff;border-radius:11px;min-height:48px;font:700 14px system-ui}
+#arcano-actions #btn-single{background:#dfae69;color:#191209;border-color:#eec69b}
+#arcano-status{position:fixed;z-index:1500;left:8px;right:8px;top:calc(60px + env(safe-area-inset-top,0px));background:#0c1a2add;color:#c7e4f2;border:1px solid #ffffff30;padding:7px 9px;font:12px system-ui;border-radius:9px;pointer-events:none}
+#arcano-stats{position:fixed;right:9px;top:calc(101px + env(safe-area-inset-top,0px));z-index:1400;font:11px system-ui;color:#e3f4ff;background:#0a172ca0;padding:6px 9px;border-radius:8px;pointer-events:none}
+#arcano-error{position:fixed;left:8px;right:8px;top:48%;z-index:2800;background:#411d26ef;color:#fff;padding:15px;border-radius:10px;pointer-events:none}
+#arcano-error:empty{display:none}
+#flash-overlay{pointer-events:none!important}
+#click-text-overlay,#vfx-panel,#stats{display:none!important}
+.webgl{touch-action:manipulation}
+@media(max-width:385px){#arcano-bar span{font-size:10px}#arcano-bar button{font-size:11px;padding:6px 5px}}
+</style>  <script type="module" crossorigin src="./assets/index-DfEPV-QC.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-Cj60OJDk.css">
+</head>
+<body><div id="app"></div><canvas class="webgl"></canvas><div id="flash-overlay"></div><div id="click-text-overlay"></div>
+<nav id="arcano-bar" aria-label="Bibliotecas de efeitos"><span>✦ Arcano 201</span><button data-hub="index.html">V8</button><button data-hub="rollshade.html">Rollshade</button><button data-hub="lightning.html" aria-current="page">⚡ Raio</button><button data-hub="catalogo.html">Packs</button></nav>
+<div id="arcano-status"><span id="status-dot"></span> <span id="status-text">Toque em Lançar ou no cenário para invocar um raio.</span></div>
+<div id="arcano-stats">FPS <b id="fps">—</b> · Ativos <b id="bolt-count">0</b> · Invocados <b id="strike-count">0</b></div>
+<div id="arcano-actions"><button id="btn-single" type="button">⚡ Lançar raio 3D</button><button id="btn-auto" type="button"><span id="auto-dot" aria-hidden="true"></span> Repetir</button></div>
+<div id="arcano-error"></div>
+<script>document.querySelectorAll("[data-hub]").forEach(b=>b.addEventListener("click",()=>{const dest=new URL(b.dataset.hub,location.href);if(dest.pathname!==location.pathname)location.assign(dest.href)}, {passive:true}));window.addEventListener("error",e=>{const d=document.getElementById("arcano-error");if(d)d.textContent="Erro Three.js: "+(e.message||"indefinido")});</script></body></html>
