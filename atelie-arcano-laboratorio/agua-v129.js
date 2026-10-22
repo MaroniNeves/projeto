@@ -292,7 +292,7 @@ function hydrologyStep(dt){
   const stirred=depth[k]>.002 ? rain*erosion*(7.0-4.5*cover[k]) : 0;
   const runoffStir=depth[k]>.002 ? erosion*depth[k]*.006*dt : 0;
   const settle=.0026*dt*(1.0+Math.max(0,1.0-erosion));
-  turbidity[k]=clamp(turbidity[k]+stirred+runoffStir-settle,0,1);
+  turbidity[k]=clamp(turbidity[k]+stirred+runoffStir-settle,0,({loam:.32,loose:1,clay:.78,compacted:.14}[soilType]||.32));
  }
  flowStep(dt,speed);
 }
