@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.13 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.14 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.13]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.14]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -212,17 +212,67 @@ const SURFACE_VISIBLE=.006, SURFACE_RIPPLE=.012, SURFACE_POND=.018;
 // Ao contrário dos triângulos inteiros, o polígono termina entre os vértices.
 const wet=new Float32Array(size),flow=new Float32Array(size*2);
 const maxWaterVertices=(NX-1)*(NZ-1)*12;
-const waterPositions=new Float32Array(maxWaterVertices*3);
+const waterPositions=new Float32Array(maxWaterVertices*3),waterUVs=new Float32Array(maxWaterVertices*2);
 const waterColors=new Float32Array(maxWaterVertices*3),waterVertexColors=new Float32Array(size*3);
 const waterG=new T.BufferGeometry();
 waterG.setAttribute('position',new T.BufferAttribute(waterPositions,3).setUsage(T.DynamicDrawUsage));
 waterG.setAttribute('color',new T.BufferAttribute(waterColors,3).setUsage(T.DynamicDrawUsage));
+waterG.setAttribute('uv',new T.BufferAttribute(waterUVs,2).setUsage(T.DynamicDrawUsage));
 waterG.setDrawRange(0,0);
-const waterClearRGB=new T.Color('#347f99').toArray(),waterBrightRGB=new T.Color('#4894a8').toArray(),
- waterMudRGB=new T.Color('#876043').toArray();
+// Azul-turquesa, turquesa, azul profundo e sombra nos pontos mais fundos.
+const waterShallowRGB=new T.Color('#6deee2').toArray();
+const waterMidRGB=new T.Color('#25c4d1').toArray();
+const waterDeepRGB=new T.Color('#0873a2').toArray();
+const waterAbyssRGB=new T.Color('#073e70').toArray();
+const waterRimRGB=new T.Color('#d1fff3').toArray();
+const waterMudRGB=new T.Color('#876043').toArray();
+const wetShoreRGB=new T.Color('#4b3025').toArray();
 const waterM=new T.MeshBasicMaterial({vertexColors:true,side:T.DoubleSide,transparent:false,depthWrite:true,toneMapped:false,fog:true});
 const water=new T.Mesh(waterG,waterM);
-water.frustumCulled=false;water.renderOrder=3;water.name='Poças e lagoas orgânicas V12.12';scene.add(water);
+water.frustumCulled=false;water.renderOrder=3;
+water.name='Água turquesa em profundidades diferentes V12.14';scene.add(water);
+const causticTexture=(()=>{
+ const resolution=mobile?192:256,c=document.createElement('canvas');
+ c.width=c.height=resolution;const ctx=c.getContext('2d');
+ const data=ctx.createImageData(resolution,resolution),pixels=data.data;
+ // Diagrama de Voronoi periódico: veios orgânicos e delicados de luz.
+ const cells=7,spots=new Float32Array(cells*cells*2);
+ const rng=rand(274198);
+ for(let i=0;i<spots.length;i+=2){
+  const n=i/2,x=n%cells,y=Math.floor(n/cells);
+  spots[i]=x+.19+rng()*.62;spots[i+1]=y+.19+rng()*.62;
+ }
+ for(let py=0;py<resolution;py++){
+  const y=py/resolution*cells,cy=Math.floor(y);
+  for(let px=0;px<resolution;px++){
+   const x=px/resolution*cells,cx=Math.floor(x);
+   let closest=100,second=100;
+   for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){
+    const ix=cx+i,iy=cy+j,sx=((ix%cells)+cells)%cells,sy=((iy%cells)+cells)%cells;
+    const src=(sy*cells+sx)*2;
+    const ox=spots[src]+ix-sx-x,oy=spots[src+1]+iy-sy-y;
+    const dst=ox*ox+oy*oy;
+    if(dst<closest){second=closest;closest=dst;}
+    else if(dst<second)second=dst;
+   }
+   const ridge=Math.sqrt(second)-Math.sqrt(closest);
+   const web=clamp((.19-ridge)/.17,0,1);
+   const irregular=.82+.18*Math.sin(x*4.1-y*3.6+Math.sin(x*1.9+y*2.2));
+   const opacity=Math.pow(web,1.8)*irregular*.63,o=(py*resolution+px)*4;
+   pixels[o]=210;pixels[o+1]=253;pixels[o+2]=247;pixels[o+3]=Math.round(255*opacity);
+  }
+ }
+ ctx.putImageData(data,0,0);
+ const tex=new T.CanvasTexture(c);
+ tex.wrapS=tex.wrapT=T.RepeatWrapping;tex.colorSpace=T.SRGBColorSpace;
+ tex.anisotropy=mobile?2:4;return tex;
+})();
+const causticM=new T.MeshBasicMaterial({color:'#ffffff',map:causticTexture,
+ transparent:true,opacity:.59,depthWrite:false,depthTest:true,side:T.DoubleSide,
+ polygonOffset:true,polygonOffsetFactor:-1.5,polygonOffsetUnits:-2,toneMapped:false});
+const caustics=new T.Mesh(waterG,causticM);
+caustics.frustumCulled=false;caustics.renderOrder=4;
+caustics.name='Reflexos caústicos orgânicos animados';scene.add(caustics);
 // Instâncias de detritos/espuma baixa perto de alguns trechos calmos das margens.
 const foamLimit=mobile?120:220,foamObj=new T.Object3D();
 const foamMesh=new T.InstancedMesh(new T.PlaneGeometry(.060,.027),
@@ -246,6 +296,12 @@ function putCross(a,b,da,db){
  clipR[n]=waterVertexColors[a*3]*(1-t)+waterVertexColors[b*3]*t;
  clipG[n]=waterVertexColors[a*3+1]*(1-t)+waterVertexColors[b*3+1]*t;
  clipB[n]=waterVertexColors[a*3+2]*(1-t)+waterVertexColors[b*3+2]*t;
+ // Contorno turquesa-claro na linha de contato entre água e terra.
+ const mud=turbidity[a]*(1-t)+turbidity[b]*t;
+ const shine=.67*(1-clamp(mud*.72,0,.8));
+ clipR[n]+=(waterRimRGB[0]-clipR[n])*shine;
+ clipG[n]+=(waterRimRGB[1]-clipG[n])*shine;
+ clipB[n]+=(waterRimRGB[2]-clipB[n])*shine;
 }
 function appendCutTriangle(a,b,c){
  if(waterVertexCount+6>maxWaterVertices)return;
@@ -261,6 +317,8 @@ function appendCutTriangle(a,b,c){
   const v=e===0?0:e===1?n:n+1,off=waterVertexCount++*3;
   waterPositions[off]=clipX[v];waterPositions[off+1]=clipY[v];waterPositions[off+2]=clipZ[v];
   waterColors[off]=clipR[v];waterColors[off+1]=clipG[v];waterColors[off+2]=clipB[v];
+  const uv=(waterVertexCount-1)*2;
+  waterUVs[uv]=waterPositions[off]*.22;waterUVs[uv+1]=waterPositions[off+2]*.22;
  }
 }
 function impactHeightAt(x,z){
@@ -694,7 +752,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1213'))fail(e.error||e.message);});
-window.arcanoWaterV1213={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1214'))fail(e.error||e.message);});
+window.arcanoWaterV1214={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
