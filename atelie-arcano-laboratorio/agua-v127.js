@@ -118,9 +118,63 @@ halo.frustumCulled=false;halo.renderOrder=5;scene.add(halo);
 const streak=new T.InstancedMesh(new T.CylinderGeometry(.018,.028,.43,6),
  new T.MeshBasicMaterial({color:'#d4f6ff',transparent:true,opacity:.93,depthWrite:false}),MAX_DROPS);
 streak.frustumCulled=false;streak.renderOrder=5;streak.count=0;scene.add(streak);
-const splashMesh=new T.InstancedMesh(new T.RingGeometry(.08,.125,14),
- new T.MeshBasicMaterial({color:'#e9fcff',transparent:true,opacity:.58,depthWrite:false,side:T.DoubleSide}),MAX_SPLASH);
-splashMesh.frustumCulled=false;splashMesh.renderOrder=5;splashMesh.count=0;scene.add(splashMesh);
+// Sprays: true droplets of soil or water moving in small arcs.
+const splashMesh=new T.InstancedMesh(new T.IcosahedronGeometry(.055,0),
+ new T.MeshBasicMaterial({color:'#ffffff',transparent:true,opacity:.91,depthWrite:false}),MAX_SPLASH);
+splashMesh.frustumCulled=false;splashMesh.renderOrder=6;splashMesh.count=0;scene.add(splashMesh);
+const rippleMaterial=new T.ShaderMaterial({side:T.DoubleSide,transparent:true,depthWrite:false,depthTest:true,
+ vertexShader:'attribute float strength; varying float vStrength; void main(){vStrength=strength;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+ fragmentShader:'precision mediump float; varying float vStrength; void main(){if(vStrength<.015)discard;gl_FragColor=vec4(.80,.94,.95,min(.64,vStrength));}'
+});
+const RIPPLE_SEG=32,ripplePool=[];
+function ringGeometry(){
+ const geo=new T.BufferGeometry(),p=new Float32Array((RIPPLE_SEG+1)*2*3),
+ st=new Float32Array((RIPPLE_SEG+1)*2),tri=[];
+ for(let n=0;n<RIPPLE_SEG;n++){let k=n*2;tri.push(k,k+1,k+2,k+1,k+3,k+2);}
+ geo.setAttribute('position',new T.BufferAttribute(p,3).setUsage(T.DynamicDrawUsage));
+ geo.setAttribute('strength',new T.BufferAttribute(st,1).setUsage(T.DynamicDrawUsage));geo.setIndex(tri);return geo;
+}
+for(let i=0;i<MAX_RIPPLES;i++){
+ const mesh=new T.Mesh(ringGeometry(),rippleMaterial);mesh.visible=false;mesh.frustumCulled=false;mesh.renderOrder=6;
+ scene.add(mesh);ripplePool.push(mesh);
+}
+// Bilinear interpolation along every ripple vertex means the rings rise and bend with water and land.
+function sample(a,x,z){
+ const ix=clamp((x+W*.5)/dx,0,NX-1.001),iz=clamp((z+L*.5)/dz,0,NZ-1.001);
+ const i=Math.floor(ix),j=Math.floor(iz),tx=ix-i,tz=iz-j;
+ return (a[idx(i,j)]*(1-tx)+a[idx(i+1,j)]*tx)*(1-tz)+
+ (a[idx(i,j+1)]*(1-tx)+a[idx(i+1,j+1)]*tx)*tz;
+}
+function waterHeight(x,z){return sample(soil,x,z)+sample(depth,x,z);}
+function setSoilType(next){
+ soilType=next;
+ const cfg={loam:[1,1],clay:[1.35,.24],compacted:[.66,.12]}[next]||[1,1];
+ for(let k=0;k<size;k++){
+  soilCapacity[k]=baseCapacity[k]*cfg[0];permeability[k]=basePermeability[k]*cfg[1];
+  if(soilMoisture[k]>soilCapacity[k]){depth[k]+=soilMoisture[k]-soilCapacity[k];soilMoisture[k]=soilCapacity[k];}
+ }
+ land.material.color.set(next==='clay'?'#b6a08f':next==='compacted'?'#bcb5ad':'#ffffff');
+ rebuild();updateInfo(true);
+}
+function updateRipples(dt){
+ for(let i=ripples.length-1;i>=0;i--){
+  const r=ripples[i];r.age+=dt;
+  if(r.age>=r.life){r.mesh.visible=false;ripples.splice(i,1);continue;}
+  const mesh=r.mesh,g=mesh.geometry,p=g.attributes.position.array,a=g.attributes.strength.array;
+  const q=r.age/r.life,rad=.045+q*.85,fade=(1-q)*.74;
+  let intensity=0;
+  for(let n=0;n<=RIPPLE_SEG;n++){
+   const angle=n/RIPPLE_SEG*Math.PI*2,cs=Math.cos(angle),sn=Math.sin(angle);
+   for(let e=0;e<2;e++){
+    const rr=rad*(e?.95:1.07),x=r.x+cs*rr,z=r.z+sn*rr,k=n*2+e;
+    const d=sample(depth,x,z),edge=x>W/2-.1||x<-W/2+.1||z>L/2-.1||z<-L/2+.1;
+    p[k*3]=x;p[k*3+1]=waterHeight(x,z)+.025;p[k*3+2]=z;
+    a[k]=(!edge&&!rockAt(x,z)&&d>.002)?fade:0;intensity+=a[k];
+   }
+  }
+  mesh.visible=intensity>.08;g.attributes.position.needsUpdate=true;g.attributes.strength.needsUpdate=true;
+ }
+}
 const dropObj=new T.Object3D(),splashObj=new T.Object3D();
 let mode='rain',process='combined',level=3,timeScale=16,paused=false,showWet=true,enableInfiltration=true;
 let rainStyle='enhanced',time=0,visualTime=0,acc=0,spawnAcc=0,lastUI=0,wetted=0,frame=0;
@@ -134,6 +188,7 @@ function add(x,z,vol){
 }
 function seed(m){
  depth.fill(0);delta.fill(0);soilMoisture.fill(0);deepWater.fill(0);canopy.fill(0);
+ ripples.forEach(r=>r.mesh.visible=false);ripples.length=0;totalImpacts=0;
  drops.length=0;splashes.length=0;dropG.setDrawRange(0,0);streak.count=splashMesh.count=0;
  stats.rain=stats.infiltrated=stats.evaporated=stats.transpired=stats.outflow=0;
  time=0;visualTime=0;acc=0;spawnAcc=0;lastUI=0;
@@ -221,11 +276,33 @@ function rebuild(){
  landG.attributes.color.needsUpdate=true;waterG.computeVertexNormals();
 }
 function spawnSplash(x,z,h){
- if(splashes.length>=MAX_SPLASH)return;
- splashes.push({x,z,y:h+.025,t:0,life:.32+random()*.25});
+ const i=Math.round((x+W*.5)/dx),j=Math.round((z+L*.5)/dz);
+ if(i<0||j<0||i>=NX||j>=NZ)return;
+ const k=idx(i,j);if(blocked[k])return;
+ totalImpacts++;
+ const saturation=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
+ const ponded=depth[k]>.0025;
+ // Dry ground gives very little brown spatter; wet clay gives muddy spatters;
+ // a puddle gives pale blue water droplets and a slope-conforming ripple.
+ let n=ponded?5+Math.floor(random()*4):saturation>.70?4+Math.floor(random()*3):2+Math.floor(random()*2);
+ if(soilType==='clay'&&!ponded)n+=2;
+ const tint=ponded?'#acdbe3':soilType==='clay'?(saturation>.4?'#665043':'#8d6650'):
+            soilType==='compacted'?'#8c8175':(saturation>.4?'#6c513b':'#9e8061');
+ const tintWet=new T.Color(tint);
+ const thrust=ponded?.77:soilType==='clay'?.53:soilType==='compacted'?.38:.47;
+ for(let t=0;t<n&&splashes.length<MAX_SPLASH;t++){
+  const a=random()*Math.PI*2,v=thrust*(.5+random()*.8);
+  const spark={x,z,y:h+.032,vx:Math.cos(a)*v,vz:Math.sin(a)*v,
+  vy:(ponded?.94:.48)*(.65+random()),life:.27+random()*.36,age:0,
+  color:tintWet.clone(),size:(ponded?.54:soilType==='clay'?.68:.36)*(0.65+random()*.7)};
+  splashes.push(spark);
+ }
+ if(ponded&&ripples.length<MAX_RIPPLES){
+  const mesh=ripplePool.find(m=>!m.visible&&!ripples.some(r=>r.mesh===m));
+  if(mesh){mesh.visible=true;ripples.push({mesh,x,z,age:0,life:.50+random()*.42});}
+ }
 }
 function dropStep(dt){
- // Gotas visíveis sempre têm movimento legível em 1x e em time-lapse.
  const rainfall=rainLevels[level]*(mode==='storm'?1.4:1);
  spawnAcc+=rainfall*(mobile?155:230)*dt;
  const toSpawn=Math.min(55,Math.floor(spawnAcc));spawnAcc-=toSpawn;
@@ -234,17 +311,14 @@ function dropStep(dt){
   drops.push({x,z,y:2.2+random()*4.3,speed:4.4+random()*3.2,stretch:.70+random()*.75});
  }
  const factor=1+Math.log2(timeScale)*.12;
+ let displayedImpacts=0;
  for(let i=drops.length-1;i>=0;i--){
   const d=drops[i];d.y-=d.speed*dt*factor;
-  const gx=Math.round((d.x+W/2)/dx),gz=Math.round((d.z+L/2)/dz);
-  if(gx<0||gz<0||gx>=NX||gz>=NZ||d.y<=soil[idx(gx,gz)]+depth[idx(gx,gz)]){
-   if(gx>=0&&gz>=0&&gx<NX&&gz<NZ)spawnSplash(d.x,d.z,soil[idx(gx,gz)]+depth[idx(gx,gz)]);
+  const gh=waterHeight(d.x,d.z);
+  if(d.y<=gh){
+   if(displayedImpacts<5){spawnSplash(d.x,d.z,gh);displayedImpacts++;}
    drops[i]=drops[drops.length-1];drops.pop();
   }
- }
- for(let i=splashes.length-1;i>=0;i--){
-  splashes[i].t+=dt;
-  if(splashes[i].t>splashes[i].life){splashes[i]=splashes[splashes.length-1];splashes.pop();}
  }
  const enhanced=rainStyle==='enhanced';
  streak.material.opacity=enhanced?.98:.73;
@@ -252,20 +326,26 @@ function dropStep(dt){
  halo.material.opacity=enhanced?.92:.53;
  for(let i=0;i<drops.length;i++){
   const d=drops[i],o=i*3;dropPos[o]=d.x;dropPos[o+1]=d.y-.1;dropPos[o+2]=d.z;
-  dropObj.position.set(d.x,d.y,d.z);
-  dropObj.rotation.set(0,0,-.095);
+  dropObj.position.set(d.x,d.y,d.z);dropObj.rotation.set(0,0,-.095);
   dropObj.scale.set(enhanced?1.5:1,enhanced?d.stretch*1.55:d.stretch,enhanced?1.5:1);
   dropObj.updateMatrix();streak.setMatrixAt(i,dropObj.matrix);
  }
  dropG.setDrawRange(0,drops.length);dropG.attributes.position.needsUpdate=true;
  streak.count=drops.length;streak.instanceMatrix.needsUpdate=true;
+ for(let i=splashes.length-1;i>=0;i--){
+  const p=splashes[i];p.age+=dt;p.vy-=4.8*dt;p.x+=p.vx*dt;p.z+=p.vz*dt;p.y+=p.vy*dt;
+  if(p.age>=p.life||p.y<waterHeight(p.x,p.z)){
+   splashes[i]=splashes[splashes.length-1];splashes.pop();
+  }
+ }
  for(let i=0;i<splashes.length;i++){
-  const p=splashes[i],q=p.t/p.life;
-  splashObj.position.set(p.x,p.y,p.z);
-  splashObj.rotation.set(-Math.PI/2,0,0);splashObj.scale.set(1+q*3,1+q*3,1);
-  splashObj.updateMatrix();splashMesh.setMatrixAt(i,splashObj.matrix);
+  const p=splashes[i];splashObj.position.set(p.x,p.y,p.z);
+  splashObj.rotation.set(0,0,0);splashObj.scale.setScalar(p.size);
+  splashObj.updateMatrix();splashMesh.setMatrixAt(i,splashObj.matrix);splashMesh.setColorAt(i,p.color);
  }
  splashMesh.count=splashes.length;splashMesh.instanceMatrix.needsUpdate=true;
+ if(splashMesh.instanceColor)splashMesh.instanceColor.needsUpdate=true;
+ updateRipples(dt);
 }
 function resize(){
  const w=innerWidth,h=innerHeight;
@@ -296,6 +376,7 @@ $('timelapse').addEventListener('change',e=>{timeScale=clamp(+e.target.value,1,6
 $('infiltration').addEventListener('change',e=>{enableInfiltration=e.target.checked;updateInfo(true);});
 $('wetVisual').addEventListener('change',e=>{showWet=e.target.checked;rebuild();updateInfo(true);});
 $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo(true);});
+$('soilType').addEventListener('change',e=>setSoilType(e.target.value));
 for(const btn of document.querySelectorAll('[data-mode]'))btn.addEventListener('click',()=>setMode(btn.dataset.mode));
 function setMode(next){
  mode=next;level=next==='storm'?5:next==='lagoon'?4:next==='puddle'?3:3;
@@ -322,6 +403,7 @@ function updateInfo(force){
  $('rainDetail').textContent='Chuva '+name+' • '+timeScale+'× • '+drops.length+' gotas 3D';
  $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
  $('waterStats').textContent='Superfície '+surface.toFixed(1)+' m³ · poças '+wetted.toFixed(1)+' m² · aquífero '+ground.toFixed(1)+' m³';
+ $('splashStats').textContent='Impactos visíveis '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondulações no relevo';
  $('cycleStats').textContent='Infiltrou '+stats.infiltrated.toFixed(1)+' m³ · folhas '+leaf.toFixed(1)+' m³ · evapotranspiração '+(stats.evaporated+stats.transpired).toFixed(1)+' m³ · drenou '+stats.outflow.toFixed(1)+' m³';
  $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
  $('info').textContent='Toque: adicionar água • arraste: girar • pinça: zoom · modelo ilustrativo';
@@ -344,6 +426,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v127'))fail(e.error||e.message);});
-window.arcanoWaterV127={scene,renderer,seed,setMode,add,terrain:land,water,stones,soilMoisture,deepWater,canopy,stats,getMode:()=>mode,getWetArea:()=>wetted};
+window.arcanoWaterV127={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,stats,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('rain');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
