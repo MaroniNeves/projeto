@@ -278,7 +278,7 @@ const foamLimit=mobile?120:220,foamObj=new T.Object3D();
 const foamMesh=new T.InstancedMesh(new T.PlaneGeometry(.060,.027),
  new T.MeshBasicMaterial({color:'#e2d5bb',transparent:true,opacity:.60,side:T.DoubleSide,depthWrite:false}),foamLimit);
 foamMesh.count=0;foamMesh.frustumCulled=false;foamMesh.renderOrder=5;scene.add(foamMesh);
-const foamClean=new T.Color('#c8c5b8'),foamDirty=new T.Color('#a48a69');
+const foamClean=new T.Color('#c6f3e9'),foamDirty=new T.Color('#a48a69');
 const clipX=new Float32Array(5),clipY=new Float32Array(5),clipZ=new Float32Array(5),
  clipR=new Float32Array(5),clipG=new Float32Array(5),clipB=new Float32Array(5);
 let clipN=0,waterVertexCount=0;
