@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Água 3D V12.5 · Escoamento contínuo</title>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Água 3D V12.6 · Ciclo da água e terra</title>
 <style>
 :root{color-scheme:dark;--bg:#101d29;--edge:#45606b;--font:#eaf1ed;--muted:#aabfc7;--accent:#80c0bf}*{box-sizing:border-box}
 body{margin:0;background:#0b131b;color:var(--font);font:14px/1.35 system-ui,Segoe UI,sans-serif;overflow:hidden}
@@ -18,12 +18,60 @@ canvas{position:fixed;inset:0;width:100vw;height:100dvh;display:block;touch-acti
 @media(max-width:440px){.rain-row{flex-wrap:wrap}}
 #info{margin-top:5px;color:#b7cbd2;font-size:11px}#diag{position:fixed;z-index:30;top:50%;left:12px;right:12px;padding:16px;background:#4d2222ef;color:#fff;border-radius:12px;font-weight:600}#diag:empty{display:none}
 .ar-legacy{font-size:10px!important;padding:7px!important;opacity:.75}@media(max-width:390px){.name strong{font-size:12px}.name small{font-size:10px}.pills button{font-size:11px;padding:9px 2px}.bottom button{padding:9px 8px}.bottom input{max-width:65px}}
-</style>  <script defer src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script><script defer src="./agua-v125.js"></script>
+
+/* V12.6: painel compacto e rolável, adequado ao Android */
+.top{max-width:780px;margin-inline:auto}.bottom{max-width:780px;margin-inline:auto;max-height:55dvh;overflow-y:auto;overscroll-behavior:contain}
+.sim-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,.43fr);gap:8px;margin:9px 0}
+.sim-row label,.rain-appearance{font:600 11px system-ui;color:#d2e2df;display:flex;flex-direction:column;align-items:stretch;gap:5px}
+.sim-row select,.rain-appearance select{width:100%;min-height:38px;padding:7px 9px;border:1px solid #5d7a7d;background:#1b3038;color:#eef5eb;border-radius:9px;font:600 12px system-ui}
+.hydro-options{border-top:1px solid #56707870;margin:4px 0;padding-top:6px}
+.hydro-options summary{font:600 11px system-ui;color:#dae6dc;padding:6px 2px;cursor:pointer;list-style:inside}
+.hydro-flags{display:flex;flex-wrap:wrap;gap:4px 15px;margin:6px 0}
+.hydro-flags label{display:inline-flex;align-items:center;justify-content:flex-start;gap:7px;white-space:normal;font:11px system-ui;color:#e0e8dd}
+.hydro-flags input{accent-color:#8ec4ac;width:17px;height:17px}
+.rain-appearance{margin:7px 0}
+.hydro-metrics{display:grid;gap:3px;padding:7px 8px;border-radius:9px;background:#132932b0;border:1px solid #3a5859;color:#c8ded7;font:11px/1.35 system-ui}
+#simClock{color:#edd3a9;font-weight:750}
+#info{padding:5px 0}
+@media(max-width:390px){.sim-row{grid-template-columns:minmax(0,1fr) minmax(95px,.45fr)}.sim-row select{font-size:11px;padding:6px}.hydro-metrics{font-size:10px}}
+</style>  <script defer src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script><script defer src="./agua-v126.js"></script>
 </head>
 <body><canvas id="stage" aria-label="Cena tridimensional de chuva, poças e lagoas"></canvas>
-<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Água V12.5 · fluxo vivo</strong><small>Solo arenoso anime · poças contínuas · pedras que desviam a água</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
+<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Água V12.6 · terra viva</strong><small>Terra e barro · infiltração · poças · gotas visíveis</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
 <nav class="pills" aria-label="Escolher efeito"><button type="button" data-mode="rain">🌧 Chuva</button><button type="button" data-mode="puddle">💧 Poças</button><button type="button" data-mode="lagoon">🌊 Lagoa</button><button type="button" data-mode="storm">⛈ Temporal</button></nav></header>
-<div class="hint" id="hint">Preparando relevo, água contínua e obstáculos 3D…</div>
-<footer class="bottom"><div class="row"><button class="primary" id="replay">↻ Fazer surgir</button><button id="pause">⏸ Pausar</button><button id="cam">◎ Câmera</button></div><div class="rain-row"><label for="intensity">🌧 Intensidade <select id="intensity" aria-label="Nível da chuva"><option value="0">0 · Sem chuva</option><option value="1">1 · Garoa</option><option value="2">2 · Chuva fraca</option><option selected value="3">3 · Chuva moderada</option><option value="4">4 · Chuva forte</option><option value="5">5 · Temporal intenso</option></select></label><output id="intensityName" for="intensity">Chuva moderada</output></div><div id="rainMeter" aria-hidden="true"></div><div id="rainDetail" aria-live="polite"></div><div id="info">Arraste para girar • pinça para zoom • toque no terreno para criar água</div></footer>
+<div class="hint" id="hint">Preparando terra, ciclo hidrológico, gotas e poças 3D…</div>
+<footer class="bottom"><div class="row"><button class="primary" id="replay">↻ Fazer surgir</button><button id="pause">⏸ Pausar</button><button id="cam">◎ Câmera</button></div><div class="rain-row"><label for="intensity">🌧 Intensidade <select id="intensity" aria-label="Nível da chuva"><option value="0">0 · Sem chuva</option><option value="1">1 · Garoa</option><option value="2">2 · Chuva fraca</option><option selected value="3">3 · Chuva moderada</option><option value="4">4 · Chuva forte</option><option value="5">5 · Temporal intenso</option></select></label><output id="intensityName" for="intensity">Chuva moderada</output></div><div id="rainMeter" aria-hidden="true"></div><div id="rainDetail" aria-live="polite"></div>
+<div class="sim-row" role="group" aria-label="Simulação hidrológica">
+  <label for="process">Processo
+    <select id="process" aria-label="Processo hidrológico">
+      <option value="combined" selected>Combinado</option>
+      <option value="infiltration">Infiltração</option>
+      <option value="runoff">Escoamento superficial</option>
+      <option value="retention">Retenção / evaporação</option>
+    </select>
+  </label>
+  <label for="timelapse">⏩ Time-lapse
+    <select id="timelapse" aria-label="Velocidade da simulação">
+      <option value="1">1×</option><option value="4">4×</option>
+      <option value="16" selected>16×</option><option value="64">64×</option>
+    </select>
+  </label>
+</div>
+<details class="hydro-options" id="hydroOptions">
+ <summary>⚙️ Solo, infiltração e aparência das gotas</summary>
+ <div class="hydro-flags">
+   <label for="infiltration"><input id="infiltration" type="checkbox" checked> Permitir infiltração na terra</label>
+   <label for="wetVisual"><input id="wetVisual" type="checkbox" checked> Escurecer terra molhada</label>
+ </div>
+ <label for="rainStyle" class="rain-appearance">Gotas de chuva
+   <select id="rainStyle"><option value="enhanced" selected>Destacadas + respingos</option><option value="natural">Mais discretas</option></select>
+ </label>
+</details>
+<div class="hydro-metrics" aria-live="off">
+  <div id="simClock">Tempo simulado: 0 s</div>
+  <div id="soilStats">Terra: seca</div>
+  <div id="waterStats">Poças: começando a se formar</div>
+  <div id="cycleStats">Infiltração · escoamento · evapotranspiração</div>
+</div><div id="info">Arraste para girar • pinça para zoom • toque no terreno para criar água</div></footer>
 <div id="diag" role="alert"></div>
 </body></html>
