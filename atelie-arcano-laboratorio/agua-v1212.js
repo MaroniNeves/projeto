@@ -277,7 +277,7 @@ const rainLevels=[0,.32,.63,1,1.57,2.4],rainNames=['Sem chuva','Garoa','Chuva fr
 // Chuva ampliada para visualizar a formação no time-lapse, sem criar lagos artificialmente.
 // Chuva moderada: parte infiltra, parte escoa às depressões; temporal ainda pode inundar.
 // Chuva normal menor, poças crescem em depressões e não sobre todo o solo.
-const rainMeters=[0,.00018,.00055,.00170,.0040,.0088];
+const rainMeters=[0,.00018,.00055,.0028,.0040,.0088];
 function add(x,z,vol){
  const i=Math.round((x+W/2)/dx),j=Math.round((z+L/2)/dz);
  if(i<1||j<1||i>=NX-1||j>=NZ-1)return;
@@ -312,7 +312,7 @@ function hydrologyStep(dt){
   if(enableInfiltration&&depth[k]>.000001){
    const remaining=soilCapacity[k]-soilMoisture[k];
    const intake=Math.min(depth[k],Math.max(0,remaining),
-     permeability[k]*infiltrate*(.13+1.37*(1-sat)**1.4)*(1.65-1.20*basinHold[k])*dt);
+     permeability[k]*infiltrate*(.13+1.37*(1-sat)**1.4)*Math.max(.19,1.65-1.80*basinHold[k])*dt);
    depth[k]-=intake;soilMoisture[k]+=intake;stats.infiltrated+=intake*area;
   }
   // Parte da água sai dos poros superficiais e alimenta a camada subterrânea.
