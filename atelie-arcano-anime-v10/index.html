@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b121c">
+<title>Ateliê Arcano V10 — 3D Android estável</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#e9edf2;background:#090f17;--dark:#111d2b;--border:#304052;--muted:#a6b8c8;--amber:#ebb983}*{box-sizing:border-box} body{margin:0;overflow:hidden;width:100vw;height:100vh;height:100dvh;background:#090f17}button,input,select{font:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.4}canvas#scene{position:fixed;inset:0;display:block;width:100vw;height:100vh;height:100dvh;touch-action:none;z-index:0}.ui{position:fixed;z-index:4;color:#e9edf2}.head{left:8px;right:8px;top:calc(env(safe-area-inset-top) + 8px);background:#0e1926ea;border:1px solid var(--border);border-radius:17px;padding:9px 11px;display:flex;align-items:center;gap:8px;box-shadow:0 6px 22px #0007}.head main{flex:1;min-width:0}.head strong{font-size:14px;line-height:1.2;display:block}.head small{font-size:11px;display:block;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:4px}.ctrl{padding:9px 10px;border:1px solid #6f829255;background:#172635;color:#e6edf3;border-radius:11px;min-height:41px}.ctrl.primary{background:#af7549;color:#130f0c;font-weight:800;border-color:#e9b37e}.ctrl.selected{background:#384a61}.dock{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));display:flex;justify-content:center;align-items:center;gap:7px;background:#0e1926ed;border:1px solid var(--border);border-radius:16px;padding:8px 7px;box-shadow:0 8px 24px #0009}.dock .ctrl{flex-shrink:1;min-width:0}.dock .primary{flex:1}.small{font-size:12px}.diagnostics{top:calc(env(safe-area-inset-top) + 74px);left:12px;right:12px;display:flex;align-items:center;gap:5px;pointer-events:none}.pill{font-size:10px;line-height:1.5;background:#122233ce;color:#b3d3e1;border:1px solid #3d596388;padding:3px 7px;border-radius:999px;white-space:nowrap}.pill.warn{color:#f2c699;background:#372b21ef}.drawer{position:fixed;z-index:8;top:0;bottom:0;right:0;width:min(94vw,395px);background:#101c2af5;border-left:1px solid #3a4c5e;box-shadow:-10px 0 35px #000a;transform:translateX(105%);transition:transform .23s;display:flex;flex-direction:column;min-height:0}.drawer.open{transform:translateX(0)}.drawerHead{display:flex;align-items:center;padding:18px 12px 9px;justify-content:space-between}.drawer h2{font-size:17px;margin:0}.search{margin:4px 11px 10px;background:#09131f;border:1px solid #435467;border-radius:10px;color:#fff;padding:11px;width:calc(100% - 22px)}.items{overflow:auto;overscroll-behavior:contain;flex:1;padding:0 8px 22px}.item{display:flex;gap:8px;align-items:center;padding:11px 10px;border-radius:10px;border:1px solid #354657;margin:4px;background:#18283a;width:calc(100% - 8px);text-align:left;color:#e9eef3}.item.sel{background:#394c62;border-color:#b18a64}.item span{flex:1}.item em{font-size:10px;font-style:normal;color:#b4c5d3}.shade{position:fixed;z-index:7;inset:0;background:#0008;display:none}.shade.open{display:block}.help{bottom:calc(85px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);font-size:11px;color:#c5d1d9;background:#152535bb;border-radius:20px;padding:6px 10px;pointer-events:none;white-space:nowrap;max-width:94vw;overflow:hidden;text-overflow:ellipsis}.message{left:10px;right:10px;bottom:calc(132px + env(safe-area-inset-bottom));text-align:center;pointer-events:none}.message span{display:inline-block;background:#0d1a2bdc;border:1px solid #566779;border-radius:12px;color:#e9ebef;font-size:12px;padding:7px 10px;max-width:98%}.quality{font-size:11px;color:#fff;background:#18283b;border:1px solid #476077;border-radius:9px;padding:6px}.classic{position:fixed;z-index:3;inset:0;background:#090f17;display:none}.classic.active{display:block}.classic iframe{border:0;width:100%;height:100%;display:block}.classicAlert{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 82px);left:15px;right:15px;text-align:center;background:#152335e0;padding:6px;border-radius:8px;font-size:11px;color:#deebf3;pointer-events:none}.cover{position:fixed;inset:0;z-index:20;background:#091322ed;display:flex;align-items:center;justify-content:center;padding:25px}.cover .panel{text-align:center;max-width:370px;color:#f4f4f5}.cover h2{font-size:21px}.cover p{line-height:1.6;color:#b3c1cf}.cover[hidden]{display:none}@media(min-width:720px){.head{max-width:800px;margin:auto}.dock{max-width:800px;margin:auto}.help{bottom:90px}.message{bottom:130px}}
+</style>
+<!-- No legacy V8 postprocessing, HDR bloom, depth pass, or mixed Three runtimes. -->
+<script src="../atelie-arcano-anime-v9/vendor/three-glb-draco.min.js"></script>
+<script>
+/* Ateliê Arcano V9: original procedural 3D anime magic sequences + optional Holokat runtime.
+   No copyrighted game assets, no 2D sprite-sheet billboards. MIT license for this file. */
+(()=>{'use strict';
+const THREE=window.ARCANO?.THREE;
+const MOBILE= /Android|iPhone|Mobile/i.test(navigator.userAgent) || (window.matchMedia?.('(pointer:coarse)').matches ?? false) || window.innerWidth<800;
+const MAX_ACTIVE = MOBILE ? 1 : 2;
+const ENABLE_REMOTE_EMITTERS = false; // disabled pending shader/Android GPU compatibility review
+
+const EXTRAS=[
+ ['arcano_water_whirlpool','Vórtice das Marés','tide','#45dcf5','creek_ripples'],
+ ['arcano_water_shield','Escudo de Água','tide','#7fe9ef','marsh_bubbles'],
+ ['arcano_water_rain','Chuva Lunar','tide','#a7d5ff','rain_shower'],
+ ['arcano_water_spray','Coroa de Maré','tide','#4ddcf8','waterfall_spray'],
+ ['arcano_fire_spiral','Espiral Carmesim','flame','#ff8045','watch_fire'],
+ ['arcano_fire_embers','Chuva de Brasas','flame','#f5bc75','chimney_embers'],
+ ['arcano_light_halo','Halo Celestial','lumen','#f8dfa1','woodland_shafts'],
+ ['arcano_light_stars','Constelação Curativa','lumen','#dfedb9','fireflies'],
+ ['arcano_storm_chain','Corrente de Trovão','storm','#8ecaff','rain_shower'],
+ ['arcano_storm_prison','Prisão Elétrica','storm','#c1b2fa','mist_bank'],
+ ['arcano_ice_shards','Estilhaços de Inverno','frost','#b8f0ff','snow_flurries'],
+ ['arcano_ice_crown','Coroa Boreal','frost','#91dbef','snow_flurries'],
+ ['arcano_void_portal','Portal do Abismo','void','#9670f0','mist_bank'],
+ ['arcano_void_mist','Névoa da Necromancia','void','#b69ad8','chimney_smoke'],
+ ['arcano_arcane_sigil','Selo do Invocador','arcane','#e4a4ed','pollen_motes'],
+ ['arcano_arcane_orbit','Órbita Estelar','arcane','#9cb8fc','floating_seeds'],
+ ['arcano_wind_slash','Lâmina do Vendaval','aether','#cfe7c9','dust_gust'],
+ ['arcano_nature_petal','Ritual das Pétalas','verdant','#eab9d7','drifting_petals']
+].map(([id,label,school,accent,source])=>({id,label,school,accent,source,cast:'ZONE',isNew:true}));
+const effects=[];let paused=false,clock=0,raf=0,last=performance.now();
+const C=(hex)=>new THREE.Color(hex);
+const basic=(c,opacity=1,blend=THREE.NormalBlending)=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:Math.min(opacity,MOBILE?0.62:0.78),side:THREE.DoubleSide,depthWrite:false,depthTest:true,blending:THREE.NormalBlending,toneMapped:true}); // avoid additive HDR+bloom overflow on mobile
+const mesh=(root,geo,mat,x=0,y=0,z=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);root.add(m);return m};
+const ring=(root,r,c,w=.035,op=.85)=>{const m=mesh(root,new THREE.TorusGeometry(r,w,6,72),basic(c,op,THREE.AdditiveBlending));m.rotation.x=-Math.PI/2;return m};
+const orb=(root,r,c,op=.8)=>mesh(root,new THREE.IcosahedronGeometry(r,1),basic(c,op,THREE.AdditiveBlending));
+const shard=(root,r,h,c,x=0,y=0,z=0)=>{const m=mesh(root,new THREE.ConeGeometry(r,h,5),basic(c,.85),x,y,z);return m};
+const particles=(root,n,c,r=2.5,kind='orb')=>{const s=[];n=Math.min(n,MOBILE?16:26);const g=kind==='quad'?new THREE.TetrahedronGeometry(.07):new THREE.OctahedronGeometry(.045,0);const material=basic(c,.8,THREE.AdditiveBlending);for(let i=0;i<n;i++){const a=i*2.399963,b=((i*37)%101)/101,t=i/n;const m=mesh(root,g,material,Math.cos(a)*r*Math.sqrt(t),b*2.3,Math.sin(a)*r*Math.sqrt(t));m.userData.phase=a;m.userData.life=t;s.push(m)}return s};
+function curlGeo(r0,r1,height,phase=0,turns=2,thickness=.032){const pts=[];for(let k=0;k<(MOBILE?26:55);k++){const t=k/(MOBILE?25:54);const a=t*Math.PI*2*turns+phase;const r=r0*(1-t)+r1*t;pts.push(new THREE.Vector3(Math.cos(a)*r,t*height+.04,Math.sin(a)*r));}return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),MOBILE?28:60,thickness,MOBILE?4:5,false)}
+function lightningPoints(from,to,seed=5){const list=[from.clone()], dir=to.clone().sub(from),axis=new THREE.Vector3(dir.z,.04,-dir.x).normalize(),other=new THREE.Vector3().crossVectors(dir,axis).normalize();for(let i=1;i<13;i++){const t=i/13,p=from.clone().addScaledVector(dir,t);let wobble=Math.sin(seed*21+i*54.1)*.35*Math.sin(t*Math.PI);p.addScaledVector(axis,wobble).addScaledVector(other,Math.cos(i*23+seed)*.13);list.push(p)}list.push(to.clone());return list}
+function lightning(root,from,to,color,seed){const positions=lightningPoints(from,to,seed);const curve=new THREE.CatmullRomCurve3(positions,false,'centripetal',.1);return mesh(root,new THREE.TubeGeometry(curve,positions.length*2,.052,5,false),basic(color,.9,THREE.AdditiveBlending))}
+function crescent(root,color){const v=[],ix=[],seg=70;for(let i=0;i<=seg;i++){const t=i/seg,a=-1.23+2.46*t;for(const p of [0,1]){const r=p?2.15:1.48+Math.sin(Math.PI*t)*.22;v.push(Math.cos(a)*r,Math.sin(a)*r+1.35,Math.sin(t*Math.PI)*.3);}}for(let i=0;i<seg;i++){const j=i*2;ix.push(j,j+1,j+2,j+1,j+3,j+2)}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setIndex(ix);g.computeVertexNormals();return mesh(root,g,basic(color,.77,THREE.AdditiveBlending));}
+function spawn(id,app){if(!THREE||!app?.scene)throw Error('Motor Three.js 3D não inicializado');const entry=EXTRAS.find(a=>a.id===id);if(!entry)throw Error('Magia desconhecida '+id);
+ const root=new THREE.Group();root.name='V9 '+entry.label;const origin=app.character.position.clone(), dir=app.camera.position.clone().sub(origin);dir.y=0;dir.normalize().multiplyScalar(-1);if(dir.lengthSq()<.001)dir.set(0,0,1);
+ root.position.copy(app.effectPosition || new THREE.Vector3(0,.08,0));app.scene.add(root);
+ const idv=id.slice(7),accent=entry.accent, nodes=[],rings=[],spheres=[];let base=null,twist=null,light=null;
+ const addring=(r,c=accent,w=.038,op=.85)=>{const m=ring(root,r,c,w,op);rings.push(m);return m};
+ const spar=particles(root,34,accent,2.2);const center=orb(root,.24,accent,.54);center.position.y=1.1;
+ // Several reusable source emitters are already animated by their own JS timeline.
+ let source=null,sourcePromise=null;
+ if(ENABLE_REMOTE_EMITTERS&&window.ArcanoHolokat?.createEffectModel){sourcePromise=window.ArcanoHolokat.createEffectModel(entry.source,{intensity:1.35}).then(api=>{source=api;api.group.scale.setScalar(1.15);root.add(api.group);}).catch(err=>console.warn('[V9] Efeito de ambiente indisponível',err));}
+ if(/water_whirlpool|fire_spiral|ice_crown|arcane_orbit|wind_slash|void_portal/.test(idv)){
+  twist=new THREE.Group();root.add(twist);for(let i=0;i<4;i++){const m=mesh(twist,curlGeo(1.75,.22,3.4,i*Math.PI/2,2.35,.035),basic(i%2?accent:'#eafaff',.74,THREE.AdditiveBlending));nodes.push(m)}
+ }
+ if(/water_shield|void_portal|arcane_sigil|light_halo|ice_crown|storm_prison/.test(idv)){
+   addring(1.25);addring(1.65,'#e9efff',.025,.52);addring(2.25,accent,.025,.35);for(let i=0;i<12;i++){const a=i*Math.PI/6;const o=shard(root,.11,.45,accent,Math.cos(a)*1.85,.65,Math.sin(a)*1.85);o.rotation.z=a;nodes.push(o)}
+ }
+ if(/light_stars|nature_petal|arcane_orbit|fire_embers/.test(idv)){
+  for(let i=0;i<16;i++){const a=2*Math.PI*i/16;const p=shard(root,.11,.54,i%2?accent:'#fff4e3',Math.cos(a)*1.8,1.3,Math.sin(a)*1.8);p.rotation.z=a;p.rotation.x=.8;spheres.push(p)}addring(1.7);
+ }
+ if(/fire_spiral|fire_embers|void_mist/.test(idv)){
+  for(let i=0;i<11;i++){const a=i*2.399963;const p=shard(root,.17+i%3*.045,1.1+i%4*.22,i%2?accent:'#f8c78c',Math.cos(a)*.9,.7,Math.sin(a)*.9);p.rotation.z=Math.sin(a)*.15;nodes.push(p)}
+ }
+ if(/ice_shards|ice_crown/.test(idv)){
+  for(let i=0;i<(MOBILE?12:20);i++){const a=i*Math.PI/10;const p=shard(root,.16,.6+i%5*.33,i%2?accent:'#e6f8ff',Math.cos(a)*(1+i%3*.28),.4,Math.sin(a)*(1+i%3*.28));p.rotation.x=.25*Math.sin(a);p.rotation.z=.4*Math.cos(a);nodes.push(p)}
+ }
+ if(/water_rain|water_spray/.test(idv)){
+  for(let i=0;i<(MOBILE?20:45);i++){const a=i*2.4,r=(.4+(i%16)/16*2.4),p=mesh(root,new THREE.CapsuleGeometry(.024,.18,2,5),basic(accent,.66),Math.cos(a)*r,2+i%12*.25,Math.sin(a)*r);nodes.push(p)}addring(1.4);
+ }
+ if(/storm_chain|storm_prison/.test(idv)){
+  let n=idv==='storm_prison'?(MOBILE?4:7):(MOBILE?3:4);for(let i=0;i<n;i++){let a=2*Math.PI*i/n;const start=new THREE.Vector3(Math.cos(a)*1.65,3.5,Math.sin(a)*1.65);const end=new THREE.Vector3(Math.cos(a)*1.6,.2,Math.sin(a)*1.6);const bolt=lightning(root,start,end,accent,i+2);nodes.push(bolt)}addring(2.1);}
+ if(/wind_slash/.test(idv)){const c=crescent(root,'#f3fff9');c.rotation.y=-.6;c.position.y=.25;nodes.push(c);}
+ if(/light_halo|light_stars/.test(idv)) {light=new THREE.PointLight(accent,2.3,8,2);light.position.y=1.7;root.add(light);light.intensity=MOBILE?0.6:1.1;}
+ if(/arcane_sigil|void_portal/.test(idv)){const r=addring(2.2,accent,.07,.7);r.rotation.x=0;for(let i=0;i<9;i++){const a=i*Math.PI*2/9;shard(root,.15,.7,accent,Math.cos(a)*2.2,.3,Math.sin(a)*2.2)}}
+ const fx={id,entry,root,start:clock,duration:MOBILE?4.8:6.7,source,sourcePromise,dispose(){source?.dispose();root.traverse(o=>{o.geometry?.dispose?.();if(o.material&&!o.material.userData?.isShared)o.material.dispose?.()});root.parent?.remove(root)},update(t){const age=t-this.start,dt=age/this.duration,life=Math.min(1,dt),ease=Math.min(1,age*3);root.scale.setScalar((.12+.88*ease)*(age>this.duration-1.1?Math.max(0,1-(age-this.duration+1.1)/1.1):1));
+    center.scale.setScalar(1+.2*Math.sin(t*7));center.position.y=1.2+.22*Math.sin(t*2.1);rings.forEach((m,i)=>{m.rotation.z=t*(.4+i*.1)*(i%2?-1:1);m.scale.setScalar(1+.08*Math.sin(t*4+i));});
+    if(twist)twist.rotation.y=t*1.45;
+    for(let i=0;i<spar.length;i++){const p=spar[i],p0=p.userData;const a=p0.phase+t*(.3+i%5*.08);const r=(.3+p0.life*2.1)*(1+.1*Math.sin(t*2+i));p.position.set(Math.cos(a)*r,.18+((t*.65+i*.068)%3),Math.sin(a)*r);p.scale.setScalar(.45+.7*Math.sin((p0.life+t)*3.1)**2)}
+    nodes.forEach((p,i)=>{if(/storm_chain|storm_prison/.test(idv)&&p.geometry?.type==='TubeGeometry'&&!MOBILE&&Math.floor(t*8)!==Math.floor((t-.02)*8)){const a=(i/nodes.length)*Math.PI*2;const from=new THREE.Vector3(Math.cos(a)*1.65,3.4,Math.sin(a)*1.65);const to=new THREE.Vector3(Math.cos(a)*1.3,.15,Math.sin(a)*1.3);p.geometry.dispose();p.geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lightningPoints(from,to,Math.floor(t*12)+i)),20,.045,5,false)}else if(/water_rain|water_spray/.test(idv)){p.position.y= .1+((i*.49-t*3.2)%4+4)%4;}});
+    spheres.forEach((p,i)=>{const a=t*.6+i*Math.PI*2/spheres.length;p.position.set(Math.cos(a)*1.8,1.25+Math.sin(t*1.5+i)*.4,Math.sin(a)*1.8);p.rotation.y=t+i;});
+    if(light)light.intensity=(MOBILE?.55:.9)+Math.sin(t*6)*.13;
+    if(source)source.update(Math.max(0,age));
+ }};
+ effects.push(fx);while(effects.length>MAX_ACTIVE){const old=effects.shift();old.dispose();}return fx;
+}
+function loop(){const now=performance.now();if(MOBILE&&now-last<33){raf=requestAnimationFrame(loop);return;}const dt=Math.min(.05,(now-last)/1000);last=now;if(!paused)clock+=dt;for(let i=effects.length-1;i>=0;i--){let e=effects[i];if(clock-e.start>=e.duration){e.dispose();effects.splice(i,1)}else e.update(clock)}raf=requestAnimationFrame(loop)}if(THREE)loop();
+window.ArcanoV9={EXTRAS,spawn,clear(){effects.splice(0).forEach(e=>e.dispose())},getActive:()=>effects.length,sourceReady:()=>false,mobile:MOBILE,maxActive:MAX_ACTIVE,pause:(v)=>{paused=!!v},paused:()=>paused,version:'9.1.1-safe'};
+})();
+
+</script>
+</head>
+<body>
+<canvas id="scene" aria-label="Cena WebGL de magias 3D"></canvas>
+<div id="classic" class="classic"><div class="classicAlert">100 magias originais · Cena V8 isolada da cena nova</div></div>
+<header class="head ui"><main><strong>✦ Ateliê Arcano V10 · Anime 3D</strong><small id="chosen">18 magias novas · Cena leve para Android</small></main><button class="ctrl small" id="mode" title="Mudar laboratório">100 clássicas</button><button class="ctrl" id="open" title="Escolher nova magia">☰ Magias</button></header>
+<div class="diagnostics ui"><span id="statusChip" class="pill">WebGL iniciando…</span><span id="renderChip" class="pill">Render isolado · sem bloom</span><label><select id="quality" class="quality" aria-label="Qualidade"><option value="0.75">Econômico</option><option value="1" selected>Normal</option></select></label></div>
+<div id="message" class="message ui"><span>Carregando laboratório independente…</span></div>
+<div class="help ui">Arraste para girar · 2 dedos ou +/− para zoom</div>
+<nav class="dock ui"><button class="ctrl primary" id="cast">✦ Lançar magia</button><button class="ctrl small" id="auto">↻ Auto OFF</button><button class="ctrl" id="minus">−</button><button class="ctrl" id="plus">+</button><button class="ctrl" id="pause">⏸</button><button class="ctrl small" id="reset">⌖</button></nav>
+<div class="shade" id="shade"></div><section class="drawer" id="drawer" aria-label="Magias"><div class="drawerHead"><h2>18 magias 3D da V9</h2><button class="ctrl" id="close">Fechar ✕</button></div><input id="search" class="search" placeholder="Buscar por elemento ou magia" autocomplete="off"><div id="items" class="items"></div></section>
+<div class="cover" id="cover" hidden><div class="panel"><h2>WebGL indisponível</h2><p id="fatal">Não foi possível inicializar a renderização 3D.</p><button class="ctrl" onclick="location.reload()">Recarregar</button></div></div>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id), errorVisible=e=>{$('cover').hidden=false;$('fatal').textContent=e?.message||String(e);};
+window.addEventListener('error',e=>console.error('[Arcano V10]',e.message));
+const T=window.ARCANO?.THREE;const A=window.ArcanoV9;
+if(!T||!A){errorVisible(new Error('Biblioteca 3D ou magias não carregadas'));return;}
+const mobile=/Android|Mobile|iPhone/i.test(navigator.userAgent),canvas=$('scene');
+let renderer,scene,camera,glowBase,selected=A.EXTRAS[0],paused=false,auto=false,autoTimer=null,last=performance.now(),frames=0,frameTime=performance.now(),fps=0,mode='new',alive=true;
+const target=new T.Vector3(0,1.25,0);let azimuth=.55,elevation=1.07,distance=10.8,dragging=false,lastX=0,lastY=0,pinch=0;
+function message(s){$('message').firstElementChild.textContent=s;}
+function init(){
+ renderer=new T.WebGLRenderer({canvas,antialias:false,alpha:false,depth:true,powerPreference:'low-power',preserveDrawingBuffer:false});
+ renderer.setPixelRatio(Math.min(devicePixelRatio||1,Number($('quality').value)));
+ renderer.setSize(innerWidth,innerHeight,false);
+ renderer.setClearColor(0x0a111b,1);renderer.shadowMap.enabled=false;renderer.toneMapping=T.NoToneMapping;renderer.outputColorSpace=T.SRGBColorSpace;
+ scene=new T.Scene();scene.background=new T.Color('#0a111b');scene.fog=new T.FogExp2('#0a111b',.015);
+ camera=new T.PerspectiveCamera(46,innerWidth/innerHeight,.1,70);
+ scene.add(new T.HemisphereLight(0xa8c5e5,0x242636,1.35));const sun=new T.DirectionalLight(0xffe1ba,1.3);sun.position.set(-4,9,6);scene.add(sun);
+ const floorMat=new T.MeshStandardMaterial({color:0x26313c,roughness:.94,metalness:.03});const floor=new T.Mesh(new T.CircleGeometry(42,80),floorMat);floor.rotation.x=-Math.PI/2;floor.position.y=-.06;scene.add(floor);
+ const pad=new T.Mesh(new T.CylinderGeometry(2.2,2.3,.15,64),new T.MeshStandardMaterial({color:0x243347,roughness:.85,metalness:.24}));pad.position.y=-.085;scene.add(pad);
+ for(let i=0;i<3;i++){const ring=new T.Mesh(new T.TorusGeometry(2.35+i*.22,.012,6,96),new T.MeshBasicMaterial({color:i===1?0x607788:0x566779,transparent:true,opacity:i===1?.38:.18,depthWrite:false}));ring.rotation.x=-Math.PI/2;ring.position.y=.006;scene.add(ring)}
+ const emberGroup=new T.Group();scene.add(emberGroup);const g=new T.OctahedronGeometry(.027,0),m=new T.MeshBasicMaterial({color:0x96a8b7,transparent:true,opacity:.48});for(let i=0;i<26;i++){const p=new T.Mesh(g,m);const a=i*2.4,r=.4+(i%12)*.28;p.position.set(Math.cos(a)*r,.4+i%10*.27,Math.sin(a)*r);p.userData.offset=i*.73;emberGroup.add(p)}glowBase=emberGroup;
+ const getPos=()=>new T.Vector3(0,.06,0);window.__v10app={scene,camera,character:{position:new T.Vector3(0,0,0)},effectPosition:getPos()};
+ canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();alive=false;stopAuto();$('statusChip').textContent='⚠ GPU perdeu contexto';message('A GPU interrompeu o WebGL. Recarregue a página.');});
+ canvas.addEventListener('webglcontextrestored',()=>{message('GPU restabelecida. Recarregue para reiniciar corretamente.');});
+ function resize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight,false)}window.addEventListener('resize',resize);
+ canvas.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture?.(e.pointerId)});
+ canvas.addEventListener('pointermove',e=>{if(!dragging||pinch)return;azimuth-=(e.clientX-lastX)*.008;elevation=Math.max(.27,Math.min(1.47,elevation+(e.clientY-lastY)*.006));lastX=e.clientX;lastY=e.clientY});
+ canvas.addEventListener('pointerup',()=>dragging=false);canvas.addEventListener('pointercancel',()=>dragging=false);
+ canvas.addEventListener('touchmove',e=>{if(e.touches.length===2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(pinch)distance=Math.max(5,Math.min(20,distance*pinch/d));pinch=d}else pinch=0},{passive:true});canvas.addEventListener('touchend',()=>pinch=0,{passive:true});
+ canvas.addEventListener('wheel',e=>{distance=Math.max(5,Math.min(22,distance+e.deltaY*.012))},{passive:true});
+ function frame(ts){if(!alive)return;requestAnimationFrame(frame);if(mode!=='new')return;let now=ts||performance.now();if(mobile&&now-last<26)return;let dt=Math.min(.04,(now-last)/1000);last=now;
+ camera.position.set(Math.sin(azimuth)*Math.sin(elevation)*distance,Math.cos(elevation)*distance+target.y,Math.cos(azimuth)*Math.sin(elevation)*distance);camera.lookAt(target);
+ if(!paused)for(const [i,p] of glowBase.children.entries()){p.position.y=.2+((now*.0002+i*.19)%2.3);p.rotation.y=now*.00022+i;}
+ try{renderer.render(scene,camera)}catch(e){alive=false;errorVisible(e);return;}
+ frames++;if(now-frameTime>1500){fps=Math.round(frames*1000/(now-frameTime));frames=0;frameTime=now;$('statusChip').textContent='✓ '+fps+' FPS · 3D próprio';$('statusChip').classList.remove('warn');}
+ }
+ requestAnimationFrame(frame);$('statusChip').textContent='✓ WebGL independente';message('Selecione uma magia e toque em Lançar.');
+ }
+function cast(){if(mode!=='new'||!alive)return;try{A.clear();A.spawn(selected.id,window.__v10app);message('✦ '+selected.label+' · magia 3D animada');}catch(e){message('Erro ao criar magia: '+e.message);console.error(e)}}
+function stopAuto(){if(autoTimer)clearInterval(autoTimer);autoTimer=null;auto=false;$('auto').textContent='↻ Auto OFF'}
+function close(){ $('drawer').classList.remove('open');$('shade').classList.remove('open');}
+function items(){let q=$('search').value.trim().toLocaleLowerCase();$('items').replaceChildren();let filtered=A.EXTRAS.filter(e=>(e.label+' '+e.school).toLocaleLowerCase().includes(q));for(const x of filtered){let b=document.createElement('button');b.className='item'+(selected.id===x.id?' sel':'');b.innerHTML='<span>'+x.label+'</span><em>'+x.school+'</em>';b.addEventListener('click',()=>{selected=x;$('chosen').textContent=x.label+' · 3D anime (V10)';close();items();cast()});$('items').appendChild(b)}}
+$('open').addEventListener('click',()=>{$('drawer').classList.add('open');$('shade').classList.add('open');items()});$('shade').addEventListener('click',close);$('close').addEventListener('click',close);$('search').addEventListener('input',items);
+$('cast').addEventListener('click',cast);$('auto').addEventListener('click',()=>{if(auto){stopAuto();return;}cast();auto=true;$('auto').textContent='↻ Auto ON';autoTimer=setInterval(()=>{if(!paused&&mode==='new'&&alive)cast()},6200)});
+$('pause').addEventListener('click',()=>{paused=!paused;A.pause(paused);$('pause').textContent=paused?'▶':'⏸';message(paused?'Animação pausada':'Animação em execução')});
+$('plus').addEventListener('click',()=>distance=Math.max(5,distance-1.0));$('minus').addEventListener('click',()=>distance=Math.min(21,distance+1.0));$('reset').addEventListener('click',()=>{distance=10.8;elevation=1.07;azimuth=.55;A.clear();message('Câmera centralizada e cena limpa')});
+$('quality').addEventListener('change',()=>{renderer.setPixelRatio(Math.min(devicePixelRatio||1,Number($('quality').value)));renderer.setSize(innerWidth,innerHeight,false);message('Qualidade de renderização ajustada')});
+$('mode').addEventListener('click',()=>{stopAuto();close();A.clear();mode=mode==='new'?'classic':'new';const classic=$('classic');if(mode==='classic'){
+ if(!classic.querySelector('iframe')){let f=document.createElement('iframe');f.src='../atelie-arcano-anime-v8/index.html';f.title='100 magias clássicas V8';f.loading='eager';classic.prepend(f)}classic.classList.add('active');$('mode').textContent='18 novas';$('cast').disabled=true;$('open').disabled=true;$('chosen').textContent='100 clássicas V8 · versão original isolada';message('100 magias V8 em cena separada');}else{classic.classList.remove('active');$('mode').textContent='100 clássicas';$('cast').disabled=false;$('open').disabled=false;$('chosen').textContent=selected.label+' · cena estável';message('18 magias novas · render isolado do original');}});
+window.arcanoV10={cast,select(id){let e=A.EXTRAS.find(x=>x.id===id);if(!e)throw new Error('Not found');selected=e;$('chosen').textContent=e.label;cast()},getActive:()=>A.getActive(),THREE:T,getApp:()=>window.__v10app,renderer:()=>renderer,scene:()=>scene,mode:()=>mode,quality:()=>renderer.getPixelRatio()};
+try{init();items();}catch(e){console.error(e);errorVisible(e)}
+})();
+</script>
+</body></html>
