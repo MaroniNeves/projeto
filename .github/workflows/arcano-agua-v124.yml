@@ -122,6 +122,10 @@ jobs:
           Promise.all(soilTextureURLs.map(url=>load.loadAsync(url).then(applySoil))).then(([dry,wet])=>{
             soilMaps.dry=dry;soilMaps.wet=wet;
             floor.material.map=dry;floor.material.needsUpdate=true;
+            // Smooth dry -> wet texture transition; no abrupt texture swap.
+            const wetLayer=new THREE.Mesh(terrainGeo.clone(),new THREE.MeshStandardMaterial({map:wet,transparent:true,depthWrite:false,opacity:0,roughness:.74,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));
+            wetLayer.position.y=-.064;
+            wetLayer.renderOrder=1;scene.add(wetLayer);soilMaps.layer=wetLayer;
           }).catch(e=>diag('Textura CC0 de solo não carregou: '+(e.message||e)));
           """)
           replace_once("function pool(x,z,w,h,deep,shallow,seed){", "function pool(x,z,w,h,deep,shallow,seed,rot=0){")
@@ -169,28 +173,32 @@ jobs:
           "function reset(){state.time=0;state.emitAt=0;state.wetness=0;state.waterLevel=0;for(const p of [lagoon,...puddles,...channels.map(o=>o.p),...rivulets.map(o=>o.p)])p.mat.uniforms.uGrow.value=0;for(const r of rings){r.life=99;r.mesh.visible=false;}}")
           replace_once("for(const p of puddles){p.mesh.visible=(mode==='puddle'||mode==='rain');p.damp.visible=p.mesh.visible;}",
           "for(const p of puddles){p.mesh.visible=(mode==='puddle'||mode==='rain');p.damp.visible=p.mesh.visible;p.mud.visible=p.mesh.visible;}for(const o of [...channels,...rivulets]){o.p.mesh.visible=false;o.p.damp.visible=false;o.p.mud.visible=false;}")
-          replace_once("const growthLagoon=smooth(t/4.4);lagoon.mat.uniforms.uGrow.value=growthLagoon;\n for(const [i,p] of puddles.entries()){p.mat.uniforms.uGrow.value=state.mode==='rain'?smooth((t-i*.3)/1.8):smooth((t-i*.4)/3);p.mat.uniforms.uTime.value=t;p.mat.uniforms.uWave.value=.52;p.mat.uniforms.uReflect.value=1.3;p.mat.uniforms.uShore.value=.60;}\n lagoon.mat.uniforms.uTime.value=t;lagoon.mat.uniforms.uWave.value=1.25;lagoon.mat.uniforms.uReflect.value=.82;lagoon.mat.uniforms.uShore.value=1.15;\n const cfg=levelSpec(); const n=countDrops();rain.count=n;",
-          """const growthLagoon=smooth(t/4.4);lagoon.mat.uniforms.uGrow.value=growthLagoon;
+          # Replace exactly the V12.1 animation setup through the beginning of
+          # the rain instance update, keeping the original rain physics untouched.
+          anchorA=" const growthLagoon=smooth(t/4.4);lagoon.mat.uniforms.uGrow.value=growthLagoon;"
+          anchorB=" if(!state.paused && n>0){for(let i=0;i<n;i++){"
+          if s.count(anchorA)!=1 or s.count(anchorB)!=1: raise RuntimeError('animation boundaries changed')
+          prefix,rest=s.split(anchorA,1)
+          _,suffix=rest.split(anchorB,1)
+          animateSetup=""" const growthLagoon=smooth(t/4.4);lagoon.mat.uniforms.uGrow.value=growthLagoon;
           const cfg=levelSpec();
           const targetRain=cfg.drizzle;
           const blend=1-Math.exp(-dt*1.35);
           if(!state.paused){
             state.rainNow=THREE.MathUtils.lerp(state.rainNow,targetRain,blend);
-            const targetWet=state.rainNow>0.02?Math.min(1,state.wetness+dt*(.014+.047*state.rainNow)):Math.max(0,state.wetness-dt*.009);
-            state.wetness=targetWet;
+            state.wetness=state.rainNow>0.02?Math.min(1,state.wetness+dt*(.014+.047*state.rainNow)):Math.max(0,state.wetness-dt*.009);
             state.waterLevel=Math.min(1,Math.max(0,state.waterLevel+dt*(state.rainNow*.069-.009)));
           }
           const rainFactor=state.rainNow;
           const n=Math.round(THREE.MathUtils.lerp(0,cfg.drops,smooth(rainFactor/Math.max(.01,cfg.drizzle))));
           rain.count=n;
           for(const [i,p] of puddles.entries()){
-            // Depressions fill in staggered order, avoiding instant growth.
             const depressionBias=[.035,.105,.20,.29][i];
             const localWet=Math.max(0,state.waterLevel-depressionBias);
             const fill=smooth(localWet*(i===0?1.85:1.62));
             p.mat.uniforms.uGrow.value=fill;
             p.mat.uniforms.uTime.value=t;
-            p.mat.uniforms.uWave.value=.26+.55*rainFactor;
+            p.mat.uniforms.uWave.value=.24+.55*rainFactor;
             p.mat.uniforms.uReflect.value=1.20;
             p.mat.uniforms.uShore.value=.38;
             p.damp.visible=p.mesh.visible && fill>.004;
@@ -222,18 +230,15 @@ jobs:
             p.mud.material.opacity=.07+.30*f;p.damp.material.opacity=.03+.17*f;
             p.mud.material.color.setRGB(.54-state.wetness*.19,.42-state.wetness*.12,.30-state.wetness*.09);
           }
-          lagoon.mat.uniforms.uTime.value=t;lagoon.mat.uniforms.uWave.value=.8+.6*rainFactor;lagoon.mat.uniforms.uReflect.value=.82;lagoon.mat.uniforms.uShore.value=1.15;""")
-          replace_once("const waveExtra=cfg.wave;\n for(const p of puddles) p.mat.uniforms.uWave.value=.32 + .38*waveExtra;\n lagoon.mat.uniforms.uWave.value=.72 + .72*waveExtra;\n const targetGround = 1-.17*cfg.drizzle;\n floor.material.color.setRGB(targetGround,targetGround,targetGround);",
-          """const waveExtra=cfg.wave;
-          for(const p of puddles) p.mat.uniforms.uWave.value=.24 + .55*waveExtra;
-          lagoon.mat.uniforms.uWave.value=.68 + .72*waveExtra;
-          const groundBrightness=1-.35*state.wetness;
+          lagoon.mat.uniforms.uTime.value=t;
+          lagoon.mat.uniforms.uWave.value=.68+.72*cfg.wave;
+          lagoon.mat.uniforms.uReflect.value=.82;lagoon.mat.uniforms.uShore.value=1.15;
+          const groundBrightness=1-.20*state.wetness;
           floor.material.color.setRGB(groundBrightness,groundBrightness*.98,groundBrightness*.95);
           floor.material.roughness=.94-.21*state.wetness;
-          if(soilMaps.dry&&soilMaps.wet){
-            const chosen=state.wetness>.42?soilMaps.wet:soilMaps.dry;
-            if(floor.material.map!==chosen){floor.material.map=chosen;floor.material.needsUpdate=true;}
-          }""")
+          if(soilMaps.layer)soilMaps.layer.material.opacity=.92*smooth(state.wetness);
+          """
+          s=prefix+animateSetup+anchorB+suffix
           replace_once("const p=puddles[Math.floor(rnd()*4)],a=rnd()*Math.PI*2,r=Math.sqrt(rnd())*.38*p.mat.uniforms.uGrow.value;\n    splash(p.x+Math.cos(a)*p.w*r,p.z+Math.sin(a)*p.h*r,true);",
           """const p=puddles[Math.floor(rnd()*4)],a=rnd()*Math.PI*2;
             const grown=p.mat.uniforms.uGrow.value;
