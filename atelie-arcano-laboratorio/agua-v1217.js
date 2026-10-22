@@ -73,7 +73,7 @@ const skyM=new T.ShaderMaterial({
 const skyDome=new T.Mesh(new T.SphereGeometry(40,mobile?36:56,mobile?24:36),skyM);
 skyDome.name='Céu 3D com sol, nuvens volumétricas estilizadas e movimento';
 skyDome.frustumCulled=false;skyDome.renderOrder=-10;scene.add(skyDome);
-let climate='partlyCloudy',weatherCfg=null,weatherTime=0,weatherCloudCover=0;
+let climate='partlyCloudy',climateChoice='auto',weatherCfg=null,weatherTime=0;
 const CLIMATE={
  sunny:{name:'Ensolarado',top:'#70b9eb',horizon:'#d6edf4',cloud:'#fcffff',
   bg:'#b2d7e6',sun:'#fff0c5',ambient:'#fff8e8',ground:'#819084',
@@ -88,6 +88,12 @@ const CLIMATE={
   bg:'#8797a0',sun:'#d2dce6',ambient:'#b2c3d3',ground:'#596a69',
   coverage:.98,wind:.94,sunPower:.46,ambientPower:1.32,sunVisible:.01,reflection:.58,waterTint:'#697b86'}
 };
+function automaticClimate(level){
+ if(level===0)return 'sunny';
+ if(level>=5)return 'storm';
+ if(level>=4)return 'overcast';
+ return 'partlyCloudy';
+}
 function applyClimate(next){
  climate=CLIMATE[next]?next:'partlyCloudy';weatherCfg=CLIMATE[climate];
  const c=weatherCfg;
@@ -758,6 +764,7 @@ function setRainLevel(value){
  level=clamp(value,0,5);
  if(level>0)lastRainLevel=level;
  $('intensity').value=String(level);
+ if(climateChoice==='auto')applyClimate(automaticClimate(level));
  $('stopRain').textContent=level===0?'🌧 Retomar chuva':'☀ Parar chuva';
  $('stopRain').setAttribute('aria-pressed',String(level===0));
  updateInfo(true);
@@ -769,6 +776,11 @@ $('timelapse').addEventListener('change',e=>{timeScale=clamp(+e.target.value,1,6
 $('infiltration').addEventListener('change',e=>{enableInfiltration=e.target.checked;updateInfo(true);});
 $('wetVisual').addEventListener('change',e=>{showWet=e.target.checked;rebuild();updateInfo(true);});
 $('foamToggle').addEventListener('change',e=>{showFoam=e.target.checked;rebuild();updateInfo(true);});
+$('climate').addEventListener('change',e=>{
+ climateChoice=e.target.value;
+ applyClimate(climateChoice==='auto'?automaticClimate(level):climateChoice);
+ updateInfo(true);
+});
 $('reflectionToggle').addEventListener('change',e=>{
  reflectionsOn=e.target.checked;
  reflectionAge=999;
@@ -813,7 +825,12 @@ function updateInfo(force){
  $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
  $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
  $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondas · '+foamCount+' manchas de espuma/sujeira';
-  $('reflectionStats').textContent='Superfície visual '+VIS_NX+'×'+VIS_NZ+' · reflexos do cenário '+(reflectionsOn?(reflectionReady?'ativos':'preparando'):'desligados')+' · '+reflectionFrames+' capturas';
+  $('reflectionStats').textContent='Superfície '+VIS_NX+'×'+VIS_NZ+
+  ' · reflexos '+(reflectionsOn?(reflectionReady?'ativos':'preparando'):'desligados')+
+  ' · '+(mobile?'1 captura':'2 regiões')+' · '+reflectionFrames+' atualizações';
+ $('climateStats').textContent='Céu: '+(weatherCfg?weatherCfg.name:'preparando')+
+  (climateChoice==='auto'?' (automático)':'')+
+  ' · '+Math.round((weatherCfg?weatherCfg.coverage:0)*100)+'% nuvens · sol e reflexos climáticos';
   $('mudStats').textContent='Sedimentos suspensos: '+Math.round(mudTotal/Math.max(.0001,mudWeight)*100)+'% · '+({loam:'terra comum',loose:'terra solta',clay:'barro argiloso',compacted:'terra compactada'}[soilType]||soilType);
  // Conta apenas rochas que realmente encontram a lâmina, não rochas sobre terra seca.
  let touchedRocks=0,coveredRocks=0;
@@ -840,6 +857,7 @@ let last=performance.now();function loop(now){
   if(acc>step*14)acc=step*14;
   if(++frame%2===0)rebuild();
   waterM.uniforms.uTime.value=visualTime;
+  animateClimate(dt);
   updateReflections(dt);
   updateInfo(false);
  }
@@ -848,6 +866,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1217'))fail(e.error||e.message);});
-window.arcanoWaterV1217={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,reflectionCamera,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.arcanoWaterV1217={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
