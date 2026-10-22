@@ -888,9 +888,64 @@ function setFloraVisible(v){
  if($('floraToggle'))$('floraToggle').checked=floraWanted;
  forestStatus(floraWanted?(floraLoaded?'ativos':'carregando'):'vegetação clássica');
 }
+// V12.24 — Folhas e ramos finos animados pelo vento no shader GLSL.
+// A intensidade vem do vento da atmosfera, direção e rajadas ao longo do tempo.
+const leafWindUniforms={
+ time:{value:0},power:{value:.03},gust:{value:0},direction:{value:new T.Vector3(1,0,.2)}
+};
+const leafWindMaterials=new Set();let leafWindMeshes=0;
+function addLeafWind(mesh){
+ if(!mesh.isMesh)return;
+ const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+ for(const mat of materials){
+  if(!mat||!/(leaf|leaves|grass|flower|fern|plant)/i.test(mat.name||''))continue;
+  if(mat.userData.arcanoWindReady)continue;
+  const geo=mesh.geometry;
+  if(!geo.boundingBox)geo.computeBoundingBox();
+  const box=geo.boundingBox;
+  const uBottom={value:box?.min?.y??0};
+  const uTall={value:Math.max(.20,(box?.max?.y??1)-uBottom.value)};
+  mat.userData.arcanoWindReady=true;
+  mat.onBeforeCompile=shader=>{
+   Object.assign(shader.uniforms,{
+    uArcWindTime:leafWindUniforms.time,
+    uArcWindPower:leafWindUniforms.power,
+    uArcWindGust:leafWindUniforms.gust,
+    uArcWindDirection:leafWindUniforms.direction,
+    uArcWindBottom:uBottom,uArcWindTall:uTall
+   });
+   shader.vertexShader=[
+    'uniform float uArcWindTime;',
+    'uniform float uArcWindPower;',
+    'uniform float uArcWindGust;',
+    'uniform float uArcWindBottom;',
+    'uniform float uArcWindTall;',
+    'uniform vec3 uArcWindDirection;'
+   ].join('\n')+'\n'+shader.vertexShader;
+   const snippet=[
+    '#include <begin_vertex>',
+    'vec3 arcWorld=(modelMatrix*vec4(position,1.0)).xyz;',
+    'float arcHeight=clamp((position.y-uArcWindBottom)/uArcWindTall,.23,1.0);',
+    'vec3 arcForward=normalize(modelMatrix[0].xyz);',
+    'vec3 arcSide=normalize(modelMatrix[2].xyz);',
+    'vec2 arcWindLocal=vec2(dot(arcForward,uArcWindDirection),dot(arcSide,uArcWindDirection));',
+    'float arcWave=sin(uArcWindTime*1.55+dot(arcWorld.xz,vec2(.54,.91))+position.y*.32);',
+    'float arcFlutter=sin(uArcWindTime*6.7+arcWorld.x*2.41+arcWorld.z*1.82+position.y*3.26);',
+    'float arcAmount=uArcWindPower*(.60+.40*arcWave+uArcWindGust*.45);',
+    'transformed.xz+=arcWindLocal*arcAmount*arcHeight;',
+    'transformed.y+=arcFlutter*uArcWindPower*.13*arcHeight;'
+   ].join('\n');
+   shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',snippet);
+  };
+  mat.customProgramCacheKey=()=> 'arcano-leaves-wind-v1224';
+  mat.needsUpdate=true;leafWindMaterials.add(mat);leafWindMeshes++;
+ }
+}
+
 function placeForestModel(item,root){
  const randomForest=rand(9157+item.name.split('').reduce((a,c)=>a+c.charCodeAt(0),0));
  root.updateMatrixWorld(true);
+ root.traverse(mesh=>addLeafWind(mesh));
  const bbox=new T.Box3().setFromObject(root);
  const h=Math.max(.001,bbox.max.y-bbox.min.y);
  const count=mobile?item.mobile:item.desktop;
@@ -967,11 +1022,25 @@ function updateForestHealth(){
  }
 }
 function animateForest(dt){
+ const t=visualTime;
+ const gust=(Math.sin(t*.83+Math.sin(t*.21)*1.7)+
+             .45*Math.sin(t*2.11+.75))*.5;
+ const weatherMin=climate==='storm'?1.55:climate==='overcast'?.53:.05;
+ const actualWind=Math.max(atmWindMean,weatherMin);
+ const strength=clamp(actualWind/2.4,0,1);
+ leafWindUniforms.time.value=t;
+ leafWindUniforms.power.value=.018+strength*.145;
+ leafWindUniforms.gust.value=gust*strength;
+ leafWindUniforms.direction.value.set(Math.cos(atmWindHeading),0,
+  Math.sin(atmWindHeading)).normalize();
+ // Copas e folhas são deformadas no shader; troncos pouco se deslocam.
  if(!forestGroup.visible)return;
- const wind=clamp(atmWindMean*.0025,0,.012),t=visualTime;
+ const trunkSway=(.002+.014*strength)*(.65+.35*gust);
  for(const a of forestInstances){
   if(a.type==='rock')continue;
-  a.obj.rotation.z=wind*Math.sin(t*(.62+atmWindMean*.13)+a.phase);
+  const amount=trunkSway*(a.type==='tree'||a.type==='pine'?1:.80);
+  a.obj.rotation.z=amount*Math.sin(t*(.57+actualWind*.12)+a.phase);
+  a.obj.rotation.x=amount*.51*Math.cos(t*(.72+actualWind*.10)+a.phase*1.36);
  }
 }
 loadPainterlyForest();
