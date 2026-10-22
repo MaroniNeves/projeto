@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.10 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.11 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.10]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.11]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -222,11 +222,12 @@ function updateRipples(dt){
  }
 }
 const dropObj=new T.Object3D(),splashObj=new T.Object3D();
-let mode='rain',process='combined',level=3,timeScale=4,paused=false,showWet=true,enableInfiltration=true;
+let mode='rain',process='combined',level=3,lastRainLevel=3,timeScale=4,paused=false,showWet=true,enableInfiltration=true;
 let rainStyle='enhanced',time=0,visualTime=0,acc=0,spawnAcc=0,lastUI=0,wetted=0,frame=0;
 const rainLevels=[0,.32,.63,1,1.57,2.4],rainNames=['Sem chuva','Garoa','Chuva fraca','Chuva moderada','Chuva forte','Temporal intenso'];
 // Chuva ampliada para visualizar a formação no time-lapse, sem criar lagos artificialmente.
-const rainMeters=[0,.0007,.0018,.0043,.0085,.015];
+// Chuva moderada: parte infiltra, parte escoa às depressões; temporal ainda pode inundar.
+const rainMeters=[0,.0004,.0012,.0035,.007,.013];
 function add(x,z,vol){
  const i=Math.round((x+W/2)/dx),j=Math.round((z+L/2)/dz);
  if(i<1||j<1||i>=NX-1||j>=NZ-1)return;
@@ -266,12 +267,14 @@ function hydrologyStep(dt){
   }
   // Parte da água sai dos poros superficiais e alimenta a camada subterrânea.
   const saturation=clamp(soilMoisture[k]/soilCapacity[k],0,1);
-  const seep=Math.min(soilMoisture[k],Math.max(0,saturation-.42)*.00044*dt);
+  // Percolação continua após a chuva, abrindo poros para absorver água da superfície.
+  const seep=Math.min(soilMoisture[k],Math.max(0,saturation-.42)*.0030*dt);
   soilMoisture[k]-=seep;deepWater[k]+=seep;
   // Água interceptada por folhas / palhada evapora antes de tocar a terra.
   const ec=Math.min(canopy[k],(.00020+cover[k]*.00012)*evaporate*dt);
   canopy[k]-=ec;stats.evaporated+=ec*area;
-  const es=Math.min(depth[k],.00013*evaporate*dt);
+  // Evaporação da água exposta continua mesmo quando a chuva é desligada.
+  const es=Math.min(depth[k],.00040*evaporate*dt);
   depth[k]-=es;stats.evaporated+=es*area;
   const soilEvap=Math.min(soilMoisture[k],.000065*evaporate*dt);
   soilMoisture[k]-=soilEvap;stats.evaporated+=soilEvap*area;
@@ -336,14 +339,11 @@ function rebuild(){
  // Escolhemos triângulos molhados, em vez de um plano transparente sobre todo o relevo.
  for(let j=0;j<NZ-1;j++)for(let i=0;i<NX-1;i++){
   const a=idx(i,j),b=a+1,c=a+NX,d=c+1;
-  if(Math.max(depth[a],depth[b],depth[c])>=SURFACE_VISIBLE&&
-    depth[a]+depth[b]+depth[c]>=SURFACE_VISIBLE*1.2){
-   waterIndices[faceIndex++]=a;waterIndices[faceIndex++]=c;waterIndices[faceIndex++]=b;
-  }
-  if(Math.max(depth[b],depth[c],depth[d])>=SURFACE_VISIBLE&&
-    depth[b]+depth[c]+depth[d]>=SURFACE_VISIBLE*1.2){
-   waterIndices[faceIndex++]=b;waterIndices[faceIndex++]=c;waterIndices[faceIndex++]=d;
-  }
+  // Apenas triângulos com 2 ou 3 vértices molhados; evita pintar os trechos secos.
+  const triA=(depth[a]>=SURFACE_VISIBLE?1:0)+(depth[b]>=SURFACE_VISIBLE?1:0)+(depth[c]>=SURFACE_VISIBLE?1:0);
+  const triB=(depth[b]>=SURFACE_VISIBLE?1:0)+(depth[c]>=SURFACE_VISIBLE?1:0)+(depth[d]>=SURFACE_VISIBLE?1:0);
+  if(triA>=2){waterIndices[faceIndex++]=a;waterIndices[faceIndex++]=c;waterIndices[faceIndex++]=b;}
+  if(triB>=2){waterIndices[faceIndex++]=b;waterIndices[faceIndex++]=c;waterIndices[faceIndex++]=d;}
  }
  waterG.setDrawRange(0,faceIndex);
  wetted=count*area;
@@ -465,7 +465,16 @@ stage.addEventListener('touchmove',e=>{if(e.touches.length!==2){pinch=0;return;}
  const a=e.touches[0],b=e.touches[1],dist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
  if(pinch)radius=clamp(radius+(pinch-dist)*.04,11,34);pinch=dist;},{passive:true});
 stage.addEventListener('touchend',()=>pinch=0,{passive:true});
-$('intensity').addEventListener('change',e=>{level=clamp(+e.target.value,0,5);updateInfo(true);});
+function setRainLevel(value){
+ level=clamp(value,0,5);
+ if(level>0)lastRainLevel=level;
+ $('intensity').value=String(level);
+ $('stopRain').textContent=level===0?'🌧 Retomar chuva':'☀ Parar chuva';
+ $('stopRain').setAttribute('aria-pressed',String(level===0));
+ updateInfo(true);
+}
+$('intensity').addEventListener('change',e=>setRainLevel(+e.target.value));
+$('stopRain').addEventListener('click',()=>setRainLevel(level===0?(lastRainLevel||3):0));
 $('process').addEventListener('change',e=>{process=e.target.value;updateInfo(true);});
 $('timelapse').addEventListener('change',e=>{timeScale=clamp(+e.target.value,1,64);acc=0;updateInfo(true);});
 $('infiltration').addEventListener('change',e=>{enableInfiltration=e.target.checked;updateInfo(true);});
@@ -475,7 +484,7 @@ $('soilType').addEventListener('change',e=>setSoilType(e.target.value));
 for(const btn of document.querySelectorAll('[data-mode]'))btn.addEventListener('click',()=>setMode(btn.dataset.mode));
 function setMode(next){
  mode=next;level=next==='storm'?5:next==='lagoon'?4:next==='puddle'?3:3;
- $('intensity').value=String(level);seed(mode);
+ setRainLevel(level);seed(mode);
  document.querySelectorAll('[data-mode]').forEach(el=>el.classList.toggle('active',el.dataset.mode===mode));
  $('hint').textContent={rain:'Chuva cai sobre a terra e se divide em infiltração, escoamento e evapotranspiração.',
  puddle:'Relevo seco no começo: observe as poças surgirem e se unirem nas depressões.',
@@ -490,11 +499,13 @@ function updateInfo(force){
  const pct=Math.round(level/5*100),name=rainNames[level];
  $('intensityName').textContent=name;$('rainMeter').style.setProperty('--rain-fill',pct+'%');
  let surface=0,stored=0,ground=0,leaf=0,saturated=0,participating=0;
- let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0,mudTotal=0,mudWeight=0;
+ let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0,mudTotal=0,mudWeight=0,wetSoilOnly=0;
  for(let k=0;k<size;k++)if(!blocked[k]){
   surface+=depth[k];stored+=soilMoisture[k];ground+=deepWater[k];leaf+=canopy[k];
    if(depth[k]>.010){mudTotal+=turbidity[k]*depth[k];mudWeight+=depth[k];}
-  saturated+=clamp(soilMoisture[k]/soilCapacity[k],0,1);participating++;
+  const soilSat=clamp(soilMoisture[k]/soilCapacity[k],0,1);
+  saturated+=soilSat;participating++;
+  if(soilSat>.18&&depth[k]<SURFACE_VISIBLE)wetSoilOnly++;
   const i=k%NX,j=Math.floor(k/NX),x=nx(i),z=nz(j),b=basins[1];
   const q=((x-b.x)/b.sx)**2+((z-b.z)/b.sz)**2;
   if(q<.72){lagoonCells++;if(depth[k]>=SURFACE_VISIBLE)lagoonWet++;lagoonMax=Math.max(lagoonMax,depth[k]);}
@@ -503,13 +514,14 @@ function updateInfo(force){
  surface*=area;stored*=area;ground*=area;leaf*=area;
  $('rainDetail').textContent='Chuva '+name+' • '+timeScale+'× • '+drops.length+' gotas 3D';
  $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
- $('waterStats').textContent='Superfície '+surface.toFixed(1)+' m³ · poças '+wetted.toFixed(1)+' m² · aquífero '+ground.toFixed(1)+' m³';
+ $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
+ $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
  $('splashStats').textContent='Impactos visíveis '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondulações no relevo';
   $('mudStats').textContent='Sedimentos suspensos: '+Math.round(mudTotal/Math.max(.0001,mudWeight)*100)+'% · '+({loam:'terra comum',loose:'terra solta',clay:'barro argiloso',compacted:'terra compactada'}[soilType]||soilType);
  $('lakeStats').textContent='Lagoa: '+Math.round(lagoonWet/Math.max(1,lagoonCells)*100)+'% da bacia coberta · profundidade '+lagoonMax.toFixed(2)+' m · '+otherPuddles+' células de poças';
  $('cycleStats').textContent='Infiltrou '+stats.infiltrated.toFixed(1)+' m³ · folhas '+leaf.toFixed(1)+' m³ · evapotranspiração '+(stats.evaporated+stats.transpired).toFixed(1)+' m³ · drenou '+stats.outflow.toFixed(1)+' m³';
  $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
- $('info').textContent='Toque: adicionar água • arraste: girar • pinça: zoom · modelo ilustrativo';
+ $('info').textContent=level===0?'Chuva cessou: poças infiltram, evaporam e escoam • toque para adicionar água':'Parte da chuva infiltra na terra; as depressões concentram poças • arraste para girar';
 }
 
 let last=performance.now();function loop(now){
@@ -528,7 +540,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1210'))fail(e.error||e.message);});
-window.arcanoWaterV1210={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1211'))fail(e.error||e.message);});
+window.arcanoWaterV1211={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
