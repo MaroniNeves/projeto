@@ -146,17 +146,23 @@ streak.frustumCulled=false;streak.renderOrder=5;streak.count=0;scene.add(streak)
 const splashMesh=new T.InstancedMesh(new T.IcosahedronGeometry(.055,0),
  new T.MeshBasicMaterial({color:'#e1ebee',transparent:true,opacity:.80,depthWrite:false}),MAX_SPLASH);
 splashMesh.frustumCulled=false;splashMesh.renderOrder=6;splashMesh.count=0;scene.add(splashMesh);
+// Cada gota em uma poça cria duas cristas sucessivas sem planos flutuantes.
 const rippleMaterial=new T.ShaderMaterial({side:T.DoubleSide,transparent:true,depthWrite:false,depthTest:true,
- vertexShader:'attribute float strength; varying float vStrength; void main(){vStrength=strength;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
- fragmentShader:'precision mediump float; varying float vStrength; void main(){if(vStrength<.015)discard;gl_FragColor=vec4(.80,.94,.95,min(.64,vStrength));}'
+ vertexShader:'attribute float strength; varying float vStrength; void main(){vStrength=strength;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+ fragmentShader:'precision mediump float; varying float vStrength; void main(){if(vStrength<.012)discard;vec3 col=mix(vec3(.42,.68,.74),vec3(.76,.90,.92),min(vStrength,1.));gl_FragColor=vec4(col,clamp(vStrength,0.,.84));}'
 });
 const RIPPLE_SEG=32,ripplePool=[];
 function ringGeometry(){
- const geo=new T.BufferGeometry(),p=new Float32Array((RIPPLE_SEG+1)*2*3),
- st=new Float32Array((RIPPLE_SEG+1)*2),tri=[];
- for(let n=0;n<RIPPLE_SEG;n++){let k=n*2;tri.push(k,k+1,k+2,k+1,k+3,k+2);}
- geo.setAttribute('position',new T.BufferAttribute(p,3).setUsage(T.DynamicDrawUsage));
- geo.setAttribute('strength',new T.BufferAttribute(st,1).setUsage(T.DynamicDrawUsage));geo.setIndex(tri);return geo;
+ // Dois anéis, três vértices em cada seção: borda - crista - borda.
+ const g=new T.BufferGeometry(),p=new Float32Array((RIPPLE_SEG+1)*6*3);
+ const strengths=new Float32Array((RIPPLE_SEG+1)*6),tri=[];
+ for(let n=0;n<RIPPLE_SEG;n++)for(let band=0;band<2;band++){
+  const k=n*6+band*3,j=(n+1)*6+band*3;
+  for(let e=0;e<2;e++)tri.push(k+e,j+e,k+e+1,k+e+1,j+e,j+e+1);
+ }
+ g.setAttribute('position',new T.BufferAttribute(p,3).setUsage(T.DynamicDrawUsage));
+ g.setAttribute('strength',new T.BufferAttribute(strengths,1).setUsage(T.DynamicDrawUsage));
+ g.setIndex(tri);return g;
 }
 for(let i=0;i<MAX_RIPPLES;i++){
  const mesh=new T.Mesh(ringGeometry(),rippleMaterial);mesh.visible=false;mesh.frustumCulled=false;mesh.renderOrder=6;
@@ -184,19 +190,31 @@ function updateRipples(dt){
  for(let i=ripples.length-1;i>=0;i--){
   const r=ripples[i];r.age+=dt;
   if(r.age>=r.life){r.mesh.visible=false;ripples.splice(i,1);continue;}
-  const mesh=r.mesh,g=mesh.geometry,p=g.attributes.position.array,a=g.attributes.strength.array;
-  const q=r.age/r.life,rad=.045+q*.85,fade=(1-q)*.74;
-  let intensity=0;
+  const mesh=r.mesh,g=mesh.geometry,p=g.attributes.position.array,fadeArray=g.attributes.strength.array;
+  const phase=r.age/r.life;
+  const outerRadius=.045+phase*.93;
+  const innerRadius=.025+Math.max(0,phase-.15)*.82;
+  const outerFade=(1-phase)*.90;
+  const innerFade=(1-phase)*.66*clamp((phase-.14)*6,0,1);
+  let visibility=0;
   for(let n=0;n<=RIPPLE_SEG;n++){
-   const angle=n/RIPPLE_SEG*Math.PI*2,cs=Math.cos(angle),sn=Math.sin(angle);
-   for(let e=0;e<2;e++){
-    const rr=rad*(e?.95:1.07),x=r.x+cs*rr,z=r.z+sn*rr,k=n*2+e;
-    const d=sample(depth,x,z),edge=x>W/2-.1||x<-W/2+.1||z>L/2-.1||z<-L/2+.1;
-    p[k*3]=x;p[k*3+1]=waterHeight(x,z)+.025;p[k*3+2]=z;
-    a[k]=(!edge&&!rockAt(x,z)&&d>.015)?fade:0;intensity+=a[k];
+   const angle=n/RIPPLE_SEG*Math.PI*2,c=Math.cos(angle),sn=Math.sin(angle);
+   for(let band=0;band<2;band++){
+    const radius=band===0?outerRadius:innerRadius,fade=band===0?outerFade:innerFade;
+    const halfWidth=.022+radius*.012;
+    for(let e=0;e<3;e++){
+     const rr=Math.max(.004,radius+(e-1)*halfWidth);
+     const x=r.x+c*rr,z=r.z+sn*rr,k=n*6+band*3+e;
+     const d=sample(depth,x,z);
+     const edge=x>W*.5-.08||x<-W*.5+.08||z>L*.5-.08||z<-L*.5+.08;
+     p[k*3]=x;p[k*3+1]=waterHeight(x,z)+.035;p[k*3+2]=z;
+     fadeArray[k]=(!edge&&!rockAt(x,z)&&d>.014&&e===1)?fade:0;
+     visibility+=fadeArray[k];
+    }
    }
   }
-  mesh.visible=intensity>.08;g.attributes.position.needsUpdate=true;g.attributes.strength.needsUpdate=true;
+  mesh.visible=visibility>.02;
+  g.attributes.position.needsUpdate=true;g.attributes.strength.needsUpdate=true;
  }
 }
 const dropObj=new T.Object3D(),splashObj=new T.Object3D();
@@ -305,7 +323,7 @@ function spawnSplash(x,z,h){
  const k=idx(i,j);if(blocked[k])return;
  totalImpacts++;
  const saturation=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
- const ponded=depth[k]>.018;
+ const ponded=depth[k]>.015;
  // Dry ground gives very little brown spatter; wet clay gives muddy spatters;
  // a puddle gives pale blue water droplets and a slope-conforming ripple.
  let n=ponded?5+Math.floor(random()*4):saturation>.70?4+Math.floor(random()*3):2+Math.floor(random()*2);
@@ -323,7 +341,7 @@ function spawnSplash(x,z,h){
  }
  if(ponded&&ripples.length<MAX_RIPPLES){
   const mesh=ripplePool.find(m=>!m.visible&&!ripples.some(r=>r.mesh===m));
-  if(mesh){mesh.visible=true;ripples.push({mesh,x,z,age:0,life:.50+random()*.42});}
+  if(mesh){mesh.visible=true;ripples.push({mesh,x,z,age:0,life:.57+random()*.42});}
  }
 }
 function dropStep(dt){
