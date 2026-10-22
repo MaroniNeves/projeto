@@ -1624,6 +1624,11 @@ $('physicalWeather').addEventListener('change',e=>{
 });
 $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo(true);});
 $('floraToggle').addEventListener('change',e=>setFloraVisible(e.target.checked));
+$('fogToggle').addEventListener('change',e=>{
+ fogEnabled=e.target.checked;
+ if(!fogEnabled)fogStrength=fogTarget=0;
+ updateGroundFog(0);updateInfo(true);
+});
 $('soilType').addEventListener('change',e=>setSoilType(e.target.value));
 $('addOrganic').addEventListener('click',addSoilOrganic);
 $('addNutrients').addEventListener('click',addSoilNutrients);
@@ -1678,6 +1683,13 @@ function updateInfo(force){
   ' · N '+asPct(nAvg)+'% · P '+asPct(pAvg)+'% · K '+asPct(kAvg)+'% · Ca '+asPct(caAvg)+'% · húmus '+asPct(omAvg)+'%';
  $('plantStats').textContent='🌱 Biomassa '+asPct(growthAvg)+'% · condição de crescimento '+asPct(healthAvg)+
   '% · principal limitante: '+SOIL_LIMITS[mainLimit]+' · pH '+(phAvg/size).toFixed(1)+' · salinidade '+asPct(salAvg)+'% · biota '+asPct(biotaAvg)+'%';
+ $('windStatus').textContent='🍃 Vento '+atmWindMean.toFixed(2)+
+  ' (índice de jogo) · folhas '+(forestGroup.visible?'animadas na GPU':'floresta anterior')+
+  ' · direção '+Math.round((atmWindHeading*180/Math.PI+360)%360)+'°'+
+  ' · '+(climate==='storm'||stormActive()?'rajadas fortes':'rajadas variáveis');
+ $('fogStatus').textContent='🌫 Neblina '+Math.round(fogStrength*100)+
+  '% · '+fogCause+' · solo '+Math.round(fogWetness*100)+
+  '% úmido · ar-superfície/orvalho '+fogDewGap.toFixed(1)+' °C';
  $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
  $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
  $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondas · '+foamCount+' manchas de espuma/sujeira';
@@ -1749,6 +1761,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1224'))fail(e.error||e.message);});
-window.arcanoWaterV1224={scene,renderer,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.arcanoWaterV1224={scene,renderer,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
