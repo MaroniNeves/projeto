@@ -681,14 +681,14 @@ const RAIN_SCALE=[
  {rate:.00042,  dropsM:64,  dropsD:100, speed:4.2, speedVar:2.0,length:.53,  thick:.68},
  {rate:.00140,  dropsM:130, dropsD:210, speed:5.5, speedVar:2.5,length:.75,  thick:.82},
  {rate:.00330,  dropsM:235, dropsD:380, speed:7.5, speedVar:3.3,length:1.05, thick:.91},
- {rate:.00730,  dropsM:440, dropsD:690, speed:9.5, speedVar:4.6,length:1.75, thick:.94}
+ {rate:.00610,  dropsM:440, dropsD:690, speed:9.5, speedVar:4.6,length:1.75, thick:.94}
 ];
 const rainLevels=[0,.18,.38,.66,.87,1];
 const rainMeters=RAIN_SCALE.map(p=>p.rate);
 // A atmosfera decide ONDE chove; a escala decide QUANTO cai naquele local.
 function rainRateFromAtmos(source,selected=level){
  if(selected===0||source<=.0000001)return 0;
- const available=clamp(source/.00090,0,1);
+ const available=clamp(source/.00050,0,1);
  return RAIN_SCALE[selected].rate*Math.pow(available,.72);
 }
 let appliedRainMean=0,appliedRainPeak=0,activeRainRegions=0;
@@ -1069,7 +1069,7 @@ function updateInfo(force){
  }
  surface*=area;stored*=area;ground*=area;leaf*=area;
  $('rainDetail').textContent=(physicalWeather
-  ?'Escala '+level+'/5 · chuva regional '+Math.round(clamp(appliedRainMean/.0073,0,1)*100)+
+  ?'Escala '+level+'/5 · chuva regional '+Math.round(clamp(appliedRainMean/.0061,0,1)*100)+
     '% · '+activeRainRegions+'/'+ATM_N+' zonas com chuva'
   :'Escala '+level+'/5 · chuva manual '+name)+
    ' • '+timeScale+'× • '+drops.length+' gotas 3D';
@@ -1106,7 +1106,7 @@ function updateInfo(force){
  $('atmosStats').textContent=(physicalWeather?'Atmosfera física':'Clima manual')+
   ' · '+atmTempMean.toFixed(1)+' °C · umidade '+Math.round(atmHumMean*100)+
   '% · '+atmPressureMean.toFixed(0)+' hPa · vento '+atmWindMean.toFixed(1)+
-  ' · nuvens '+Math.round(atmCloudMean*100)+'% · chuva efetiva '+Math.round(clamp(appliedRainMean/.0073,0,1)*100)+'%';
+  ' · nuvens '+Math.round(atmCloudMean*100)+'% · chuva efetiva '+Math.round(clamp(appliedRainMean/.0061,0,1)*100)+'%';
  $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
  $('info').textContent=level===0
  ?'Chuva suspensa: poças infiltram e evaporam; o ciclo solar continua'
