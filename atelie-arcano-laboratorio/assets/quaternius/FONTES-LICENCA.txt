@@ -1,0 +1,9 @@
+Quaternius Stylized Nature MegaKit Standard — 8 modelos reais do pacote CC0.
+Fonte: https://quaternius.com/packs/stylizednaturemegakit.html
+Espelho de arquivos: github.com/Julien-Turcotte/BongBongAdventure
+Modelos: CommonTree_1/2, Pine_2, Bush_Common_Flowers, Grass_Common_Short, Flower_3_Group, Fern_1, Rock_Medium_2.
+Arquivos .bin e 4 imagens PNG preservados. Arquivos .gltf modificados para trocar os
+mapas grandes de Bark/Rocks por materiais de cor e Leaves.png por Leaves_NormalTree_C.png.
+Pack Watercolor Terrain Voxel Core Lab e CC0: https://voxelcorelab.itch.io/watercolor-terrain-textures
+As texturas desse pack NAO foram incluídas por requererem download via Itch.io.
+O solo pictórico do laboratório é uma textura procedural original, não cópia do pack.
