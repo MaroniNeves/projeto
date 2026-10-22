@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.7 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.8 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.7]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.8]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -96,11 +96,35 @@ for(let k=0;k<grass.count;k++){
 // Uma única superfície: a água é armazenada em volumes por vértice, não em poças/planos sobrepostos.
 const waterG=grid(),wet=new Float32Array(size),flow=new Float32Array(size*2);
 waterG.setAttribute('wet',new T.BufferAttribute(wet,1));waterG.setAttribute('flow',new T.BufferAttribute(flow,2));
+// Poça azulada, definida e com opacidade quase total fora da margem.
 const waterM=new T.ShaderMaterial({side:T.DoubleSide,transparent:true,depthWrite:false,
  uniforms:{uTime:{value:0}},
- vertexShader:'attribute float wet; attribute vec2 flow; uniform float uTime; varying float vWet; varying vec2 vFlow; varying vec3 vPos; void main(){vec3 p=position;vWet=wet;vFlow=flow;p.y+=.005*min(wet,1.)*(sin(p.x*8.+uTime*2.)+sin(p.z*6.-uTime*1.6));vPos=p;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}',
- fragmentShader:'precision mediump float; uniform float uTime; varying float vWet; varying vec2 vFlow; varying vec3 vPos; void main(){float alpha=smoothstep(.022,.25,vWet);if(alpha<.015) discard;vec2 dir=normalize(vFlow+vec2(.22,.36));float wave=dot(vPos.xz,dir)*11.-uTime*(1.1+min(length(vFlow),2.));float rings=.5+.5*sin(wave+sin(vPos.x*4.+vPos.z*3.));float skew=.5+.5*sin(vPos.x*2.7-vPos.z*3.8+uTime*1.3);vec3 a=vec3(.075,.25,.30),b=vec3(.23,.48,.52),c=vec3(.75,.86,.83);vec3 col=mix(a,b,.42+.32*skew);col=mix(col,c,pow(rings,15.)*.21);gl_FragColor=vec4(col,alpha*.96);}'
-// fragment remains intentionally restrained: water is not a glowing spell.
+ vertexShader:`
+ attribute float wet;attribute vec2 flow;uniform float uTime;
+ varying float vWet;varying vec2 vFlow;varying vec3 vPos;
+ void main(){
+  vec3 p=position;vWet=wet;vFlow=flow;
+  p.y+=.0038*min(wet,1.)*(sin(p.x*9.0+uTime*2.1)+sin(p.z*7.0-uTime*1.6));
+  vPos=p;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);
+ }`,
+ fragmentShader:`
+ precision mediump float;uniform float uTime;
+ varying float vWet;varying vec2 vFlow;varying vec3 vPos;
+ void main(){
+  float mask=smoothstep(.035,.20,vWet);
+  if(mask<.015)discard;
+  float alpha=mask*(.95+.035*smoothstep(.12,.9,vWet));
+  vec2 dir=normalize(vFlow+vec2(.20,.36));
+  float motion=dot(vPos.xz,dir)*11.-uTime*(1.1+min(length(vFlow),1.8));
+  float wave=.5+.5*sin(motion+sin(vPos.x*4.1+vPos.z*3.4));
+  float irregular=.5+.5*sin(vPos.x*3.-vPos.z*4.+uTime*1.4);
+  vec3 deep=vec3(.045,.235,.34);
+  vec3 blue=vec3(.115,.42,.54);
+  vec3 crest=vec3(.51,.77,.83);
+  vec3 col=mix(deep,blue,.36+.27*irregular);
+  col=mix(col,crest,pow(wave,19.)*.19);
+  gl_FragColor=vec4(col,alpha);
+ }`
 });
 const water=new T.Mesh(waterG,waterM);water.renderOrder=3;water.name='Superfície compartilhada de água';scene.add(water);
 // Gotas físicas visuais: cilindro alongado, brilho em pixels e halos suaves.
@@ -431,7 +455,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v127'))fail(e.error||e.message);});
-window.arcanoWaterV127={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,stats,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v128'))fail(e.error||e.message);});
+window.arcanoWaterV128={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,stats,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('rain');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
