@@ -271,7 +271,7 @@ function updateRipples(dt){
  }
 }
 const dropObj=new T.Object3D(),splashObj=new T.Object3D();
-let mode='rain',process='combined',level=3,lastRainLevel=3,timeScale=4,paused=false,showWet=true,enableInfiltration=true;
+let mode='rain',process='combined',level=3,lastRainLevel=3,timeScale=4,paused=false,showWet=true,showFoam=true,enableInfiltration=true;
 let rainStyle='enhanced',time=0,visualTime=0,acc=0,spawnAcc=0,lastUI=0,wetted=0,frame=0;
 const rainLevels=[0,.32,.63,1,1.57,2.4],rainNames=['Sem chuva','Garoa','Chuva fraca','Chuva moderada','Chuva forte','Temporal intenso'];
 // Chuva ampliada para visualizar a formação no time-lapse, sem criar lagos artificialmente.
@@ -392,7 +392,7 @@ function rebuild(){
  waterG.attributes.color.needsUpdate=true;landG.attributes.color.needsUpdate=true;
  wetted=count*area;
  // Espuma e folhas sujas somente em faixas localizadas de água rasa e calma.
- for(let j=1;j<NZ-1&&foamCount<foamLimit;j++)for(let i=1;i<NX-1&&foamCount<foamLimit;i++){
+ if(showFoam)for(let j=1;j<NZ-1&&foamCount<foamLimit;j++)for(let i=1;i<NX-1&&foamCount<foamLimit;i++){
   const k=idx(i,j),v=depth[k];if(blocked[k]||v<SURFACE_VISIBLE+.002||v>.071)continue;
   const edge=Math.min(shoreField[k-1],shoreField[k+1],shoreField[k-NX],shoreField[k+NX]);
   if(edge>.003)continue;
@@ -534,6 +534,7 @@ $('process').addEventListener('change',e=>{process=e.target.value;updateInfo(tru
 $('timelapse').addEventListener('change',e=>{timeScale=clamp(+e.target.value,1,64);acc=0;updateInfo(true);});
 $('infiltration').addEventListener('change',e=>{enableInfiltration=e.target.checked;updateInfo(true);});
 $('wetVisual').addEventListener('change',e=>{showWet=e.target.checked;rebuild();updateInfo(true);});
+$('foamToggle').addEventListener('change',e=>{showFoam=e.target.checked;rebuild();updateInfo(true);});
 $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo(true);});
 $('soilType').addEventListener('change',e=>setSoilType(e.target.value));
 for(const btn of document.querySelectorAll('[data-mode]'))btn.addEventListener('click',()=>setMode(btn.dataset.mode));
