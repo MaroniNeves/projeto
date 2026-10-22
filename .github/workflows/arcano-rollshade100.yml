@@ -1,0 +1,51 @@
+name: Compilar e testar Rollshade 100 magias
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/arcano-rollshade100.yml']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: atelie-arcano-public-demo}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Test source and build Rollshade for Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd atelie-arcano-rollshade-v2/source
+          node --check src/main.js
+          npm install --no-audit --no-fund --no-package-lock
+          npm run build
+          test -s dist/index.html
+          test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
+          node --input-type=module <<'EOF'
+          import {effect} from 'rollshade';
+          const e=effect('projectile','water',{seed:'arcano0'});
+          const f=effect('pound','arcane',{seed:'arcano23'});
+          const g=effect('buff','light',{seed:'arcano24'});
+          if(!e || !f || !g) throw new Error('Rollshade effects not created');
+          console.log('Rollshade effect smoke test successful');
+          EOF
+          cd ..
+          rm -rf preview
+          mkdir -p preview
+          cp -R source/dist/. preview/
+          cp source/node_modules/rollshade/LICENSE preview/ROLLSHADE-LICENSE-MIT.txt || cp source/node_modules/rollshade/LICENSE.md preview/ROLLSHADE-LICENSE-MIT.txt
+      - name: Publish isolated Rollshade 100 preview
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add atelie-arcano-rollshade-v2/preview
+          git diff --cached --quiet || (git commit -m "Publish 100 animated Rollshade spells for isolated Android viewer" && git push origin HEAD:atelie-arcano-public-demo)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rollshade100-compiled-preview
+          path: atelie-arcano-rollshade-v2/preview/
+          retention-days: 7
