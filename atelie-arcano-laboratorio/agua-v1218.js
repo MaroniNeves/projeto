@@ -55,7 +55,7 @@ const skySunDir=light.position.clone().normalize();
 const skyM=new T.ShaderMaterial({
  side:T.BackSide,depthWrite:false,depthTest:true,fog:false,toneMapped:false,
  uniforms:{
-  uTime:{value:0},uCoverage:{value:.43},uWind:{value:.30},
+  uTime:{value:0},uCoverage:{value:.43},uWind:{value:.30},uNight:{value:0},
   uSunDir:{value:skySunDir},
   uTop:{value:new T.Color('#7baec6')},
   uHorizon:{value:new T.Color('#cededb')},
@@ -68,7 +68,7 @@ const skyM=new T.ShaderMaterial({
   'varying vec3 vSkyDir;',
   'void main(){vSkyDir=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}'
  ].join('\n'),
- fragmentShader:"precision highp float;\nvarying vec3 vSkyDir;\nuniform float uTime,uCoverage,uWind,uSunVisible;\nuniform vec3 uTop,uHorizon,uCloud,uSunColor,uSunDir;\nfloat hash2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}\nfloat noise2(vec2 p){\n vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);\n return mix(mix(hash2(i),hash2(i+vec2(1.,0.)),f.x),\n            mix(hash2(i+vec2(0.,1.)),hash2(i+vec2(1.,1.)),f.x),f.y);\n}\nfloat clouds(vec2 p){\n float v=0.;\n v+=noise2(p)*.53;\n v+=noise2(p*2.13+vec2(5.1,2.7))*.27;\n v+=noise2(p*4.26+vec2(1.3,8.4))*.14;\n v+=noise2(p*8.58)*.06;\n return v;\n}\nvoid main(){\n vec3 d=normalize(vSkyDir);\n vec3 sky=mix(uHorizon,uTop,smoothstep(-.05,.77,d.y));\n float haze=1.-smoothstep(.02,.28,abs(d.y));\n sky=mix(sky,uHorizon,haze*.26);\n vec2 uv=d.xz*2.6/max(.18,d.y+.22);\n float t=uTime*uWind;\n float c1=clouds(uv+vec2(t*.025,t*.011));\n float c2=clouds(uv*1.86+vec2(-t*.012,t*.017));\n float field=mix(c1,c2,.30);\n float coverage=smoothstep(.76-.42*uCoverage,.86-.49*uCoverage,field);\n coverage*=smoothstep(-.085,.10,d.y);\n float lightFacing=clamp(dot(d,normalize(uSunDir))*.5+.5,0.,1.);\n vec3 cloudColor=uCloud*(.79+.22*lightFacing);\n sky=mix(sky,cloudColor,coverage*(.73+.27*uCoverage));\n float sunDot=max(dot(d,normalize(uSunDir)),0.);\n float disc=smoothstep(.9987,.99985,sunDot);\n float glow=pow(sunDot,140.)*.23;\n sky+=uSunColor*(disc*.90+glow)*uSunVisible*(1.-coverage*.91);\n gl_FragColor=vec4(clamp(sky,0.,1.),1.);\n}"
+ fragmentShader:"precision highp float;\nvarying vec3 vSkyDir;\nuniform float uTime,uCoverage,uWind,uSunVisible,uNight;\nuniform vec3 uTop,uHorizon,uCloud,uSunColor,uSunDir;\nfloat hash2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}\nfloat noise2(vec2 p){\n vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);\n return mix(mix(hash2(i),hash2(i+vec2(1.,0.)),f.x),\n            mix(hash2(i+vec2(0.,1.)),hash2(i+vec2(1.,1.)),f.x),f.y);\n}\nfloat clouds(vec2 p){\n float v=0.;\n v+=noise2(p)*.53;\n v+=noise2(p*2.13+vec2(5.1,2.7))*.27;\n v+=noise2(p*4.26+vec2(1.3,8.4))*.14;\n v+=noise2(p*8.58)*.06;\n return v;\n}\nvoid main(){\n vec3 d=normalize(vSkyDir);\n vec3 sky=mix(uHorizon,uTop,smoothstep(-.05,.77,d.y));\n sky=mix(sky,vec3(.008,.017,.041),uNight*.92);\n float haze=1.-smoothstep(.02,.28,abs(d.y));\n sky=mix(sky,uHorizon,haze*.26);\n vec2 uv=d.xz*2.6/max(.18,d.y+.22);\n float t=uTime*uWind;\n float c1=clouds(uv+vec2(t*.025,t*.011));\n float c2=clouds(uv*1.86+vec2(-t*.012,t*.017));\n float field=mix(c1,c2,.30);\n float coverage=smoothstep(.76-.42*uCoverage,.86-.49*uCoverage,field);\n coverage*=smoothstep(-.085,.10,d.y);\n float lightFacing=clamp(dot(d,normalize(uSunDir))*.5+.5,0.,1.);\n vec3 cloudColor=uCloud*(.79+.22*lightFacing);\n cloudColor=mix(cloudColor,vec3(.032,.045,.077),uNight*.91);\n sky=mix(sky,cloudColor,coverage*(.73+.27*uCoverage));\n float sunDot=max(dot(d,normalize(uSunDir)),0.);\n float disc=smoothstep(.9987,.99985,sunDot);\n float glow=pow(sunDot,140.)*.23;\n sky+=uSunColor*(disc*.90+glow)*uSunVisible*(1.-coverage*.91);\n // Lua e pontos estelares discretos, visíveis só à noite e fora das nuvens.\n float moon=max(dot(d,-normalize(uSunDir)),0.);\n float moonDisc=smoothstep(.9987,.99967,moon);\n float starHash=hash2(floor(d.xz*314.0+d.y*219.0));\n float stars=step(.9945,starHash)*smoothstep(.5,.95,d.y);\n sky+=vec3(.47,.56,.70)*moonDisc*uNight*(1.-coverage*.87);\n sky+=vec3(.37,.48,.64)*stars*uNight*(1.-coverage*.89)*.36;\n gl_FragColor=vec4(clamp(sky,0.,1.),1.);\n}"
 });
 const skyDome=new T.Mesh(new T.SphereGeometry(40,mobile?36:56,mobile?24:36),skyM);
 skyDome.name='Céu 3D com sol, nuvens volumétricas estilizadas e movimento';
@@ -129,11 +129,8 @@ function animateClimate(dt){
  if(!weatherCfg)return;
  weatherTime+=dt;
  skyM.uniforms.uTime.value=weatherTime;
- // Passagem das nuvens diante do sol: variação sutil e contínua de iluminação.
- const shade=Math.max(.72,1-weatherCfg.coverage*.13*(.5+.5*Math.sin(weatherTime*.16+
-   Math.sin(weatherTime*.065)*1.4)));
- light.intensity=weatherCfg.sunPower*shade;
- if(typeof waterM!=='undefined')waterM.uniforms.uSunPower.value=weatherCfg.sunVisible*shade;
+ // O fotoperíodo e o sol são controlados pelo relógio de 24 minutos.
+ // Esta função só anima as nuvens e evita sobrescrever a escuridão da noite.
 }
 // V12.18 — Atmosfera acoplada: UM dia = 24 minutos REAIS (1440 segundos).
 // Inspirada no vídeo analisado: calor solar -> transpiração/evaporação -> umidade,
@@ -273,7 +270,9 @@ function updateAtmosphere(dt){
  skyM.uniforms.uSunDir.value.copy(skySunDir);
  skyM.uniforms.uSunVisible.value=weatherCfg?weatherCfg.sunVisible*dayLight:dayLight;
  light.position.set(sunX*22,Math.max(.08,sunY)*22,sunZ*22);
- light.intensity=(weatherCfg?weatherCfg.sunPower:2.0)*dayLight;
+ const shade=Math.max(.72,1-atmCloudMean*.12*(.5+.5*Math.sin(weatherTime*.16+
+    Math.sin(weatherTime*.065)*1.4)));
+ light.intensity=(weatherCfg?weatherCfg.sunPower:2.0)*dayLight*shade;
  ambientSky.intensity=(weatherCfg?weatherCfg.ambientPower:2.1)*(.17+.83*dayLight);
  if(typeof waterM!=='undefined'){
   waterM.uniforms.uSun.value.copy(skySunDir);
