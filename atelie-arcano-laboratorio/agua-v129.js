@@ -335,31 +335,47 @@ function rebuild(){
  waterG.attributes.position.needsUpdate=true;waterG.attributes.wet.needsUpdate=true;waterG.attributes.flow.needsUpdate=true;waterG.attributes.turbidity.needsUpdate=true;
  landG.attributes.color.needsUpdate=true;waterG.computeVertexNormals();
 }
+// O solo define a cor, a altura e o número das partículas expelidas.
 function spawnSplash(x,z,h){
  const i=Math.round((x+W*.5)/dx),j=Math.round((z+L*.5)/dz);
  if(i<0||j<0||i>=NX||j>=NZ)return;
  const k=idx(i,j);if(blocked[k])return;
  totalImpacts++;
  const saturation=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
- const ponded=depth[k]>.015;
- // Dry ground gives very little brown spatter; wet clay gives muddy spatters;
- // a puddle gives pale blue water droplets and a slope-conforming ripple.
- let n=ponded?5+Math.floor(random()*4):saturation>.70?4+Math.floor(random()*3):2+Math.floor(random()*2);
- if(soilType==='clay'&&!ponded)n+=2;
- const tint=ponded?'#acdbe3':soilType==='clay'?(saturation>.4?'#665043':'#8d6650'):
-            soilType==='compacted'?'#8c8175':(saturation>.4?'#6c513b':'#9e8061');
- const tintWet=new T.Color(tint);
- const thrust=ponded?.77:soilType==='clay'?.53:soilType==='compacted'?.38:.47;
- for(let t=0;t<n&&splashes.length<MAX_SPLASH;t++){
-  const a=random()*Math.PI*2,v=thrust*(.5+random()*.8);
-  const spark={x,z,y:h+.032,vx:Math.cos(a)*v,vz:Math.sin(a)*v,
-  vy:(ponded?.94:.48)*(.65+random()),life:.27+random()*.36,age:0,
-  color:tintWet.clone(),size:(ponded?.54:soilType==='clay'?.68:.36)*(0.65+random()*.7)};
-  splashes.push(spark);
+ const inWater=depth[k]>.015;
+ const muddy=turbidity[k];
+ // Um impacto em poça mobiliza pequenas partículas; água barrenta expele gotículas castanhas.
+ if(inWater)turbidity[k]=clamp(turbidity[k]+.0018*(soilErosion[soilType]||.37),0,1);
+ const waterTint=new T.Color('#a8c8d6').lerp(new T.Color('#907058'),muddy*.91);
+ const dirtTint=new T.Color(soilType==='clay'?'#795743':soilType==='loose'?'#82634c':
+   soilType==='compacted'?'#8e847b':'#90745b');
+ dirtTint.lerp(new T.Color('#584436'),saturation*.45);
+ const count=inWater?7+Math.floor(random()*5):
+   saturation>.58?4+Math.floor(random()*3):1+Math.floor(random()*3);
+ const tint=inWater?waterTint:dirtTint;
+ const power=inWater?.45:saturation>.58?.28:.17;
+ for(let j=0;j<count&&splashes.length<MAX_SPLASH;j++){
+  const a=random()*Math.PI*2,v=power*(.52+random()*.8);
+  // Partículas minúsculas, sem faíscas de luz: pequenos fragmentos de água ou lama.
+  splashes.push({
+   x,z,y:h+(inWater?.018:.012),vx:Math.cos(a)*v,vz:Math.sin(a)*v,
+   vy:(inWater?.52:saturation>.58?.30:.16)*(.5+random()*.8),
+   life:inWater?.20+random()*.23:.14+random()*.15,age:0,
+   color:tint.clone(),
+   size:inWater?.13+random()*.10:saturation>.58?.11+random()*.10:.08+random()*.07
+  });
  }
- if(ponded&&ripples.length<MAX_RIPPLES){
-  const mesh=ripplePool.find(m=>!m.visible&&!ripples.some(r=>r.mesh===m));
-  if(mesh){mesh.visible=true;ripples.push({mesh,x,z,age:0,life:.57+random()*.42});}
+ if(ripples.length<MAX_RIPPLES){
+  // Ondas de solo são pontuais; as de água propagam-se por mais tempo e distância.
+  if(inWater||random()<.54){
+   const mesh=ripplePool.find(m=>!m.visible&&!ripples.some(r=>r.mesh===m));
+   if(mesh){
+    mesh.material=inWater?rippleMaterial:groundRippleMaterial;
+    mesh.visible=true;
+    ripples.push({mesh,x,z,kind:inWater?'water':'ground',age:0,
+     life:inWater?.55+random()*.40:.16+random()*.15});
+   }
+  }
  }
 }
 function dropStep(dt){
