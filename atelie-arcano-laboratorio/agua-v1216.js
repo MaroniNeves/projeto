@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.15 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.16 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.15]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.16]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -145,6 +145,8 @@ const stoneModels=[
  makeAnimeStone(63,2,4),makeAnimeStone(81,1,5),
  makeAnimeStone(107,1,6)
 ];
+// Perfil físico aproximado das rochas: gotas atingem a parte exposta, não a submersa.
+const rockSolids=[];
 let visibleRocks=0;
 for(let i=0;i<rocks.length;i++){
  const [x,z,r]=rocks[i];
@@ -162,6 +164,9 @@ for(let i=0;i<rocks.length;i++){
   rock.scale.set(sx,sy,sz);
   rock.rotation.set((random()-.5)*.15,random()*Math.PI*2,(random()-.5)*.11);
   rock.castShadow=true;rock.receiveShadow=true;
+  rockSolids.push({x:px,z:pz,rx:sx*1.04,rz:sz*1.04,
+    bottom:rock.position.y+geo.userData.lowest*sy,
+    top:rock.position.y+geo.userData.highest*sy});
   // Outline discreto de anime, aplicado à silhueta, não uma borda preta larga.
   const outline=new T.Mesh(geo,stoneOutlineMaterial);
   outline.scale.set(1.025,1.034,1.025);outline.renderOrder=1;
@@ -257,9 +262,19 @@ function updateReflections(dt){
  waterM.uniforms.uReflect.value=reflectionReady?.78:0;
 }
 
+function rockHeightAt(x,z){
+ let top=-Infinity;
+ for(const r of rockSolids){
+  const a=(x-r.x)/r.rx,b=(z-r.z)/r.rz,q=a*a+b*b;
+  if(q>=1)continue;
+  top=Math.max(top,r.bottom+(r.top-r.bottom)*Math.sqrt(1-q));
+ }
+ return top;
+}
 function impactHeightAt(x,z){
  const h=sample(soil,x,z),d=sample(depth,x,z);
- return d>=SURFACE_RIPPLE?h+d:h;
+ const liquid=d>=SURFACE_RIPPLE?h+d:h;
+ return Math.max(liquid,rockHeightAt(x,z));
 }
 function displayWaterHeightAt(x,z){
  const h=sample(soil,x,z),d=sample(depth,x,z);
@@ -351,7 +366,7 @@ function updateRipples(dt){
      // Amostra topografia em todos os vértices, sem anel em plano horizontal.
      const y=liquid?displayWaterHeightAt(x,z):sample(soil,x,z);
      p[k*3]=x;p[k*3+1]=y+(liquid?.008:.004);p[k*3+2]=z;
-     const allowed=!edge&&!rockAt(x,z)&&(!liquid||waterHere>=SURFACE_RIPPLE)&&!( !liquid&&waterHere>=SURFACE_RIPPLE);
+     const allowed=!edge&&(!liquid||waterHere>=SURFACE_RIPPLE)&&!(!liquid&&waterHere>=SURFACE_RIPPLE)&&y+.005>=rockHeightAt(x,z);
      fade[k]=(allowed&&e===1&&strength>.01)?strength:0;
      mud[k]=liquid?sample(turbidity,x,z):0;
      visible+=fade[k];
@@ -373,7 +388,7 @@ const rainMeters=[0,.00018,.00055,.0028,.0040,.0088];
 function add(x,z,vol){
  const i=Math.round((x+W/2)/dx),j=Math.round((z+L/2)/dz);
  if(i<1||j<1||i>=NX-1||j>=NZ-1)return;
- const k=idx(i,j);if(!blocked[k])depth[k]=Math.min(1.65,depth[k]+vol);
+ const k=idx(i,j);depth[k]=Math.min(1.65,depth[k]+vol);
 }
 function seed(m){
  depth.fill(0);delta.fill(0);soilMoisture.fill(0);deepWater.fill(0);canopy.fill(0);turbidity.fill(0);
@@ -394,7 +409,7 @@ function hydrologyStep(dt){
  const evaporate=process==='retention'?3.1:process==='runoff'?.65:1;
  const speed=process==='runoff'?1.65:1;
  for(let k=0;k<size;k++){
-  if(blocked[k])continue;
+  // As rochas não impedem a formação de nível d'água sobre a própria projeção.
   if(rain>0){
    const canopyCap=.007+cover[k]*.037;
    const retained=Math.min(rain*cover[k]*.55*interp,Math.max(0,canopyCap-canopy[k]));
@@ -434,18 +449,21 @@ function hydrologyStep(dt){
 function flowStep(dt,multiplier){
  delta.fill(0);const speed=(.62+rainLevels[level]*.07)*dt*2.0*multiplier;
  for(let j=1;j<NZ-1;j++)for(let i=1;i<NX-1;i++){
-  const k=idx(i,j),v=depth[k];if(blocked[k]||v<.000008)continue;
+  const k=idx(i,j),v=depth[k];if(v<.000008)continue;
   const head=soil[k]+v,neigh=[k-1,k+1,k-NX,k+NX],transfer=[0,0,0,0];let sum=0;
-  for(let n=0;n<4;n++){const q=neigh[n];if(blocked[q])continue;
+  for(let n=0;n<4;n++){const q=neigh[n];
    const diff=head-soil[q]-depth[q];if(diff<=0)continue;
-   const amount=diff*speed*(n<2?dz/dx:dx/dz)*.38;transfer[n]=amount;sum+=amount;
+   const resistance=(blocked[k]||blocked[q])?
+       .54+.46*clamp(Math.max(v,depth[q])/.30,0,1):1;
+    const amount=diff*speed*(n<2?dz/dx:dx/dz)*.38*resistance;
+    transfer[n]=amount;sum+=amount;
   }
   const fraction=sum>v?v/sum:1;
   for(let n=0;n<4;n++)if(transfer[n]){const a=transfer[n]*fraction;delta[k]-=a;delta[neigh[n]]+=a;}
  }
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
   const k=idx(i,j);
-  if(blocked[k]){depth[k]=0;continue;}
+  // A profundidade junto às pedras não é zerada: a malha 3D as oculta parcialmente.
   depth[k]=Math.max(0,depth[k]+delta[k]);
   if(i===0||j===0||i===NX-1||j===NZ-1){
    const escape=depth[k]*Math.min(.25,dt*.35);
@@ -458,10 +476,10 @@ function rebuild(){
  // A grade física só controla profundidade, escoamento e infiltração.
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
   const k=idx(i,j),d=depth[k],x=nx(i),z=nz(j);
-  shoreField[k]=blocked[k]?-.25:d-SURFACE_VISIBLE-
+  shoreField[k]=d-SURFACE_VISIBLE-
     .0017*Math.sin(x*3.9+z*4.2)-.0011*Math.sin(x*8.7-z*5.1);
   wet[k]=clamp((d-.002)/.014,0,1);
-  if(d>=SURFACE_VISIBLE&&!blocked[k])count++;
+  if(d>=SURFACE_VISIBLE)count++;
   const left=idx(Math.max(0,i-1),j),right=idx(Math.min(NX-1,i+1),j);
   const up=idx(i,Math.max(0,j-1)),down=idx(i,Math.min(NZ-1,j+1));
   flow[k*2]=flowXField[k]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
@@ -477,7 +495,7 @@ function rebuild(){
    for(let oy=-2;oy<=2;oy++)for(let ox=-2;ox<=2;ox++){
     const ix=i+ox,iz=j+oy;if(ix<0||iz<0||ix>=NX||iz>=NZ)continue;
     const other=idx(ix,iz),h=depth[other];
-    if(blocked[other]||h<SURFACE_VISIBLE)continue;
+    if(h<SURFACE_VISIBLE)continue;
     const dist=Math.hypot(ox*dx,oy*dz);
     shoreDamp=Math.max(shoreDamp,clamp(1-dist/.82,0,1)*clamp(h/.030,0,1));
    }
@@ -506,7 +524,7 @@ function rebuild(){
  // Espuma localizada apenas em alguns trechos calmos da margem.
  if(showFoam)for(let j=1;j<NZ-1&&foamCount<foamLimit;j++)
  for(let i=1;i<NX-1&&foamCount<foamLimit;i++){
-  const k=idx(i,j),v=depth[k];if(blocked[k]||v<SURFACE_VISIBLE+.002||v>.071)continue;
+  const k=idx(i,j),v=depth[k];if(v<SURFACE_VISIBLE+.002||v>.071)continue;
   const edge=Math.min(shoreField[k-1],shoreField[k+1],shoreField[k-NX],shoreField[k+NX]);
   if(edge>.003)continue;
   const x=nx(i),z=nz(j),variation=.5+.5*Math.sin(x*8.13+z*6.7);
@@ -526,7 +544,8 @@ function rebuild(){
 function spawnSplash(x,z,h){
  const i=Math.round((x+W*.5)/dx),j=Math.round((z+L*.5)/dz);
  if(i<0||j<0||i>=NX||j>=NZ)return;
- const k=idx(i,j);if(blocked[k])return;
+ const k=idx(i,j);
+ if(rockHeightAt(x,z)>sample(soil,x,z)+sample(depth,x,z)+.007)return;
  totalImpacts++;
  const saturation=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
  const inWater=sample(depth,x,z)>=SURFACE_RIPPLE;
@@ -675,7 +694,7 @@ function updateInfo(force){
  $('intensityName').textContent=name;$('rainMeter').style.setProperty('--rain-fill',pct+'%');
  let surface=0,stored=0,ground=0,leaf=0,saturated=0,participating=0;
  let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0,mudTotal=0,mudWeight=0,wetSoilOnly=0;
- for(let k=0;k<size;k++)if(!blocked[k]){
+ for(let k=0;k<size;k++){
   surface+=depth[k];stored+=soilMoisture[k];ground+=deepWater[k];leaf+=canopy[k];
    if(depth[k]>.010){mudTotal+=turbidity[k]*depth[k];mudWeight+=depth[k];}
   const soilSat=clamp(soilMoisture[k]/soilCapacity[k],0,1);
@@ -718,7 +737,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1215'))fail(e.error||e.message);});
-window.arcanoWaterV1215={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,reflectionCamera,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1216'))fail(e.error||e.message);});
+window.arcanoWaterV1216={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,reflectionCamera,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
