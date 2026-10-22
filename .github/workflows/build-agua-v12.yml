@@ -1,0 +1,75 @@
+name: Publicar V12 agua anime sprites gotas e lagoa para Android
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/build-agua-v12.yml']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: atelie-arcano-public-demo}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Gerar sprites transparentes originais e compilar Three.js
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd atelie-arcano-agua-v12/source
+          python3 -m pip install --quiet pillow numpy --break-system-packages || python3 -m pip install --quiet --user pillow numpy
+          python3 scripts/make_textures.py
+          npm install --no-audit --no-fund --ignore-scripts
+          npm run build
+          test -s dist/index.html
+          test -s dist/sprites/rain_streak.png
+          test -s dist/sprites/water_caustics.png
+          test -n "$(find dist/assets -maxdepth 1 -name '*.js' -print -quit)"
+          mkdir -p ../preview
+          cp -a dist/. ../preview/
+          cp node_modules/three/LICENSE ../preview/THREE_LICENSE_MIT.txt
+          echo 'Original PNG rain and water sprites created for Atelie Arcano V12.' > ../preview/SPRITES_LICENSE.txt
+          echo "BUILD VERIFIED V12"
+      - name: Atualizar pagina de agua no hub sem alterar V8 nem Rollshade
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          hub=Path('atelie-arcano-laboratorio')
+          main=Path('atelie-arcano-agua-v12/preview/index.html').read_text()
+          assert '<head>' in main and '<title>' in main
+          main=main.replace('<head>','<head><base href="../atelie-arcano-agua-v12/preview/">',1)
+          main=main.replace('href="index.html" id="back"','href="../../atelie-arcano-laboratorio/index.html" id="back"',1)
+          (hub/'agua.html').write_text(main)
+          assert (hub/'index.html').exists()
+          assert (hub/'rollshade.html').exists()
+          assert (hub/'lightning.html').exists()
+          assert 'sprites/' in Path('atelie-arcano-agua-v12/source/src/main.js').read_text()
+          assert 'atelie-arcano-agua-v12/preview/' in main
+          print('WATER V12 HUB LINK VERIFIED')
+          PY
+      - name: Publicar versao e licencas
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add atelie-arcano-agua-v12/source/{README.md,index.html,package.json,vite.config.js,src,scripts,public}
+          git add atelie-arcano-agua-v12/preview atelie-arcano-laboratorio/agua.html
+          git diff --cached --quiet || (git commit -m "Upgrade Arcano water to V12 animated anime shader with 5 new splash and rainfall sprite textures" && git push origin HEAD:atelie-arcano-public-demo)
+      - name: Empacotar laboratorios 201 magias mais aqua v12
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip -qr -9 /tmp/atelie_arcano_v12_201_magias_agua_anime.zip atelie-arcano-laboratorio atelie-arcano-anime-v8 atelie-arcano-rollshade-v2 atelie-arcano-lightning-vfx atelie-arcano-agua-v12 -x '*/node_modules/*' -x '*/.git/*'
+          unzip -t /tmp/atelie_arcano_v12_201_magias_agua_anime.zip | tail -1
+          ls -lh /tmp/atelie_arcano_v12_201_magias_agua_anime.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arcano-v12-agua-anime-sprites-201-magias
+          path: /tmp/atelie_arcano_v12_201_magias_agua_anime.zip
+          retention-days: 7
+          compression-level: 0
