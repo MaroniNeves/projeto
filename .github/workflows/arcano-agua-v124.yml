@@ -1,0 +1,299 @@
+name: Atelie Arcano V12.4 — lama e chuva anime
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/arcano-agua-v124.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: atelie-arcano-public-demo
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Preparar V12.4 e texturas Poly Haven CC0
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p atelie-arcano-agua-v124
+          cp -a atelie-arcano-agua-v12/source atelie-arcano-agua-v124/source
+          cd atelie-arcano-agua-v124/source
+          python3 -m pip install --quiet pillow requests --break-system-packages || python3 -m pip install --quiet --user pillow requests
+          mkdir -p public/terrain
+          python3 - <<'PY'
+          from pathlib import Path
+          from io import BytesIO
+          from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+          import requests
+          def fetch(asset):
+              # Poly Haven API: original 1K diffuse/albedo JPEG only. CC0.
+              api=requests.get('https://api.polyhaven.com/files/'+asset,timeout=35)
+              api.raise_for_status()
+              j=api.json()
+              def urls(obj,key_path=()):
+                  if isinstance(obj,dict):
+                      for key,value in obj.items():
+                          yield from urls(value,key_path+(key,))
+                  elif isinstance(obj,str) and obj.startswith('http') and key_path[-1:] == ('url',):
+                      yield (key_path,obj)
+              choices=[]
+              for keys,url in urls(j):
+                  path=' '.join(keys).lower()
+                  if ('diffuse' in path or 'albedo' in path or 'basecolor' in path) and ('jpg' in path or '.jpg' in url.lower()):
+                      priority=0 if '1k' in path else 1 if '2k' in path else 2
+                      choices.append((priority,url))
+              choices.sort(key=lambda t:t[0])
+              manual=f'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/{asset}/{asset}_diff_1k.jpg'
+              candidates=[u for _,u in choices]+[manual]
+              for url in dict.fromkeys(candidates):
+                  try:
+                      r=requests.get(url,timeout=45)
+                      r.raise_for_status()
+                      im=Image.open(BytesIO(r.content)).convert('RGB')
+                      if min(im.size)<128: continue
+                      return im,url
+                  except Exception as e:
+                      print('Try next texture URL',asset,type(e).__name__)
+              raise RuntimeError('CC0 texture could not be downloaded: '+asset)
+          out=Path('public/terrain')
+          sources={}
+          for asset,target,tint,weight in [
+             ('dirt','soil_dry_anime.jpg',(142,131,108),.32),
+             ('mud_forest','mud_wet_anime.jpg',(78,78,65),.28)
+          ]:
+              im,url=fetch(asset)
+              im=ImageOps.fit(im,(512,512),method=Image.Resampling.LANCZOS)
+              im=ImageEnhance.Color(im).enhance(.68)
+              im=im.filter(ImageFilter.GaussianBlur(radius=.38))
+              im=Image.blend(im,Image.new('RGB',im.size,tint),weight)
+              # Restrained hand-painted anime finish, retain subtle substrate detail.
+              bands=im.quantize(colors=30,method=Image.Quantize.FASTOCTREE).convert('RGB')
+              im=Image.blend(im,bands,.37)
+              im.save(out/target,'JPEG',quality=83,optimize=True)
+              assert (out/target).stat().st_size>5000
+              sources[target]=url
+          Path('TEXTURAS-CC0.md').write_text(
+              '# Texturas incorporadas: Poly Haven CC0\n'
+              'Ambas são versões 512×512 recoloridas e simplificadas para estilo anime.\n'
+              'Licença das originais: CC0, permitida redistribuição e uso comercial.\n'
+              'Fonte: https://polyhaven.com/license\n'+
+              '\n'.join(f'- {k}: {v}' for k,v in sources.items())+'\n'
+          )
+          print('Textures verified',[(x.name,x.stat().st_size) for x in out.glob('*.jpg')])
+          PY
+      - name: Implementar transicao de solo e acumulo gradual
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('atelie-arcano-agua-v124/source/src/main.js')
+          s=p.read_text()
+          def replace_once(old,new):
+              global s
+              if s.count(old)!=1: raise Exception('Patch anchor not unique: '+old[:115]+' count='+str(s.count(old)))
+              s=s.replace(old,new,1)
+          replace_once("const floor=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshStandardMaterial({map:groundTex,roughness:.94,metalness:.02}));floor.rotation.x=-Math.PI/2;floor.position.y=-.067;scene.add(floor);",
+          """// Subtle basins model the actual lower areas where the water gathers.
+          const basins=[[-3.2,1.45,2.4,1.6],[2.6,.86,2.7,1.9],[.1,-2.5,2,1.4],[4.9,-2.7,1.85,1.15]];
+          const terrainGeo=new THREE.PlaneGeometry(100,100,96,96);terrainGeo.rotateX(-Math.PI/2);
+          const vertices=terrainGeo.attributes.position;
+          for(let i=0;i<vertices.count;i++){
+            const x=vertices.getX(i),z=vertices.getZ(i);
+            let depression=0;
+            for(const [cx,cz,rx,rz] of basins){
+              const d=((x-cx)/rx)**2+((z-cz)/rz)**2;
+              depression-=.13*Math.exp(-d*1.55);
+            }
+            const micro=.014*Math.sin(x*.8+z*.38)*Math.cos(z*.55-x*.24);
+            vertices.setY(i,depression+micro);
+          }
+          terrainGeo.computeVertexNormals();
+          const floor=new THREE.Mesh(terrainGeo,new THREE.MeshStandardMaterial({map:groundTex,roughness:.94,metalness:.02}));
+          floor.position.y=-.067;scene.add(floor);
+          const soilMaps={dry:null,wet:null};
+          const soilTextureURLs=['./terrain/soil_dry_anime.jpg','./terrain/mud_wet_anime.jpg'];
+          const applySoil=(tex)=>{tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(7,7);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=2;return tex;};
+          Promise.all(soilTextureURLs.map(url=>load.loadAsync(url).then(applySoil))).then(([dry,wet])=>{
+            soilMaps.dry=dry;soilMaps.wet=wet;
+            floor.material.map=dry;floor.material.needsUpdate=true;
+          }).catch(e=>diag('Textura CC0 de solo não carregou: '+(e.message||e)));
+          """)
+          replace_once("function pool(x,z,w,h,deep,shallow,seed){", "function pool(x,z,w,h,deep,shallow,seed,rot=0){")
+          replace_once("mesh.position.set(x,.02,z);mesh.frustumCulled=false;", "mesh.position.set(x,.02,z);mesh.rotation.y=rot;mesh.frustumCulled=false;")
+          replace_once("return {mesh,mat,x,z,w,h};","return {mesh,mat,x,z,w,h,rot};")
+          replace_once("// Soft shadows/damp ground under each puddle. These are physical ground quads, not fake ponds.",
+          """// Três canais reúnem poças somente quando o nível da chuva está alto.
+          const channels=[
+            {p:pool(-.35,1.18,2.45,.47,'#225e67','#75a9ad',8.1,-.10),begin:.25},
+            {p:pool(3.70,-.86,.55,2.75,'#24565f','#76b5b7',8.8,-.06),begin:.43},
+            {p:pool(2.53,-2.57,2.20,.40,'#255d68','#7cb6b9',9.2,.05),begin:.60}
+          ];
+          // Tiny surface run-offs feed basins; thin 3D moving water, not 2D decals.
+          const rivulets=[
+            {p:pool(-5.10,2.07,3.1,.30,'#2d6e73','#83aeb0',9.6,-.10),begin:.20},
+            {p:pool(6.20,.31,3.2,.27,'#285d65','#80b0b1',10.2,-.55),begin:.34},
+            {p:pool(5.27,-4.31,2.6,.24,'#285c66','#78acad',10.7,.18),begin:.51}
+          ];
+          // Soft shadows/damp ground under each puddle. These are physical ground quads, not fake ponds.""")
+          old="""for(const p of puddles){const damp=new THREE.Mesh(new THREE.PlaneGeometry(p.w*1.25,p.h*1.3),new THREE.MeshBasicMaterial({map:dampTex,transparent:true,depthWrite:false,opacity:.8}));damp.rotation.x=-Math.PI/2;damp.position.set(p.x,-.05,p.z);damp.renderOrder=1;scene.add(damp);p.damp=damp;}"""
+          new="""// Two translucent meshes provide an earthy shoreline independent of the water plane.
+          const mudCanvas=document.createElement('canvas');mudCanvas.width=mudCanvas.height=256;
+          const mudCtx=mudCanvas.getContext('2d');
+          const grad=mudCtx.createRadialGradient(128,128,65,128,128,124);
+          grad.addColorStop(0,'rgba(39,25,16,0)');grad.addColorStop(.23,'rgba(55,40,27,.08)');
+          grad.addColorStop(.56,'rgba(57,39,25,.78)');grad.addColorStop(.76,'rgba(89,62,39,.90)');
+          grad.addColorStop(1,'rgba(41,27,18,0)');mudCtx.fillStyle=grad;mudCtx.fillRect(0,0,256,256);
+          const mudTex=new THREE.CanvasTexture(mudCanvas);
+          function shore(p,large=1){
+            const mud=new THREE.Mesh(new THREE.PlaneGeometry(p.w*1.57*large,p.h*1.56*large),
+              new THREE.MeshBasicMaterial({map:mudTex,transparent:true,depthWrite:false,opacity:0,color:0x79664e}));
+            mud.rotation.x=-Math.PI/2;mud.rotation.z=p.rot||0;mud.position.set(p.x,-.049,p.z);
+            mud.renderOrder=0;scene.add(mud);p.mud=mud;
+            const damp=new THREE.Mesh(new THREE.PlaneGeometry(p.w*1.40,p.h*1.37),
+              new THREE.MeshBasicMaterial({map:dampTex,transparent:true,depthWrite:false,opacity:0}));
+            damp.rotation.x=-Math.PI/2;damp.rotation.z=p.rot||0;
+            damp.position.set(p.x,-.047,p.z);damp.renderOrder=1;scene.add(damp);p.damp=damp;
+          }
+          for(const p of puddles)shore(p);
+          for(const o of [...channels,...rivulets]){shore(o.p,.70);o.p.mesh.visible=false;o.p.damp.visible=false;o.p.mud.visible=false;}"""
+          replace_once(old,new)
+          replace_once("const state={mode:'rain',time:0,paused:false,level:modeLevels.rain,emitAt:0,frames:0,fpsTime:0};",
+          "const state={mode:'rain',time:0,paused:false,level:modeLevels.rain,emitAt:0,frames:0,fpsTime:0,wetness:0,rainNow:0,waterLevel:0};")
+          replace_once("function reset(){state.time=0;state.emitAt=0;for(const p of [lagoon,...puddles]){p.mat.uniforms.uGrow.value=0;}for(const r of rings){r.life=99;r.mesh.visible=false;}}",
+          "function reset(){state.time=0;state.emitAt=0;state.wetness=0;state.waterLevel=0;for(const p of [lagoon,...puddles,...channels.map(o=>o.p),...rivulets.map(o=>o.p)])p.mat.uniforms.uGrow.value=0;for(const r of rings){r.life=99;r.mesh.visible=false;}}")
+          replace_once("for(const p of puddles){p.mesh.visible=(mode==='puddle'||mode==='rain');p.damp.visible=p.mesh.visible;}",
+          "for(const p of puddles){p.mesh.visible=(mode==='puddle'||mode==='rain');p.damp.visible=p.mesh.visible;p.mud.visible=p.mesh.visible;}for(const o of [...channels,...rivulets]){o.p.mesh.visible=false;o.p.damp.visible=false;o.p.mud.visible=false;}")
+          replace_once("const growthLagoon=smooth(t/4.4);lagoon.mat.uniforms.uGrow.value=growthLagoon;\n for(const [i,p] of puddles.entries()){p.mat.uniforms.uGrow.value=state.mode==='rain'?smooth((t-i*.3)/1.8):smooth((t-i*.4)/3);p.mat.uniforms.uTime.value=t;p.mat.uniforms.uWave.value=.52;p.mat.uniforms.uReflect.value=1.3;p.mat.uniforms.uShore.value=.60;}\n lagoon.mat.uniforms.uTime.value=t;lagoon.mat.uniforms.uWave.value=1.25;lagoon.mat.uniforms.uReflect.value=.82;lagoon.mat.uniforms.uShore.value=1.15;\n const cfg=levelSpec(); const n=countDrops();rain.count=n;",
+          """const growthLagoon=smooth(t/4.4);lagoon.mat.uniforms.uGrow.value=growthLagoon;
+          const cfg=levelSpec();
+          const targetRain=cfg.drizzle;
+          const blend=1-Math.exp(-dt*1.35);
+          if(!state.paused){
+            state.rainNow=THREE.MathUtils.lerp(state.rainNow,targetRain,blend);
+            const targetWet=state.rainNow>0.02?Math.min(1,state.wetness+dt*(.014+.047*state.rainNow)):Math.max(0,state.wetness-dt*.009);
+            state.wetness=targetWet;
+            state.waterLevel=Math.min(1,Math.max(0,state.waterLevel+dt*(state.rainNow*.069-.009)));
+          }
+          const rainFactor=state.rainNow;
+          const n=Math.round(THREE.MathUtils.lerp(0,cfg.drops,smooth(rainFactor/Math.max(.01,cfg.drizzle))));
+          rain.count=n;
+          for(const [i,p] of puddles.entries()){
+            // Depressions fill in staggered order, avoiding instant growth.
+            const depressionBias=[.035,.105,.20,.29][i];
+            const localWet=Math.max(0,state.waterLevel-depressionBias);
+            const fill=smooth(localWet*(i===0?1.85:1.62));
+            p.mat.uniforms.uGrow.value=fill;
+            p.mat.uniforms.uTime.value=t;
+            p.mat.uniforms.uWave.value=.26+.55*rainFactor;
+            p.mat.uniforms.uReflect.value=1.20;
+            p.mat.uniforms.uShore.value=.38;
+            p.damp.visible=p.mesh.visible && fill>.004;
+            p.damp.material.opacity=.1+fill*.51;
+            p.damp.scale.set(.64+fill*.42,1,.64+fill*.36);
+            p.mud.visible=p.mesh.visible && fill>.002;
+            p.mud.material.opacity=.17+fill*.60;
+            p.mud.scale.set(.80+fill*.36,1,.80+fill*.30);
+            const mudTone=.78-.48*state.wetness;
+            p.mud.material.color.setRGB(mudTone,mudTone*.91,mudTone*.78);
+          }
+          const connect=smooth((state.waterLevel-.50)/.36)*smooth((rainFactor-.68)/.30);
+          for(const o of channels){
+            const p=o.p, f=smooth((connect-o.begin)*1.9);
+            p.mesh.visible=(state.mode==='rain'||state.mode==='puddle')&&f>.003;
+            p.mat.uniforms.uGrow.value=f;p.mat.uniforms.uTime.value=t;p.mat.uniforms.uWave.value=.20+.55*rainFactor;
+            p.damp.visible=p.mud.visible=p.mesh.visible;
+            p.mud.material.opacity=.12+.44*f;p.damp.material.opacity=.08+.23*f;
+            p.mud.material.color.setRGB(.56-state.wetness*.20,.42-state.wetness*.13,.28-state.wetness*.08);
+          }
+          const runoff=smooth((state.waterLevel-.09)/.35)*smooth((rainFactor-.34)/.5);
+          for(const o of rivulets){
+            const p=o.p,f=smooth((runoff-o.begin)*1.8);
+            p.mesh.visible=(state.mode==='rain'||state.mode==='puddle')&&f>.005;
+            p.mat.uniforms.uGrow.value=.15+f*.85;p.mat.uniforms.uTime.value=t;
+            p.mat.uniforms.uWave.value=.17+.46*rainFactor;
+            p.mesh.scale.x=.22+.78*f;
+            p.mud.visible=p.damp.visible=p.mesh.visible;
+            p.mud.material.opacity=.07+.30*f;p.damp.material.opacity=.03+.17*f;
+            p.mud.material.color.setRGB(.54-state.wetness*.19,.42-state.wetness*.12,.30-state.wetness*.09);
+          }
+          lagoon.mat.uniforms.uTime.value=t;lagoon.mat.uniforms.uWave.value=.8+.6*rainFactor;lagoon.mat.uniforms.uReflect.value=.82;lagoon.mat.uniforms.uShore.value=1.15;""")
+          replace_once("const waveExtra=cfg.wave;\n for(const p of puddles) p.mat.uniforms.uWave.value=.32 + .38*waveExtra;\n lagoon.mat.uniforms.uWave.value=.72 + .72*waveExtra;\n const targetGround = 1-.17*cfg.drizzle;\n floor.material.color.setRGB(targetGround,targetGround,targetGround);",
+          """const waveExtra=cfg.wave;
+          for(const p of puddles) p.mat.uniforms.uWave.value=.24 + .55*waveExtra;
+          lagoon.mat.uniforms.uWave.value=.68 + .72*waveExtra;
+          const groundBrightness=1-.35*state.wetness;
+          floor.material.color.setRGB(groundBrightness,groundBrightness*.98,groundBrightness*.95);
+          floor.material.roughness=.94-.21*state.wetness;
+          if(soilMaps.dry&&soilMaps.wet){
+            const chosen=state.wetness>.42?soilMaps.wet:soilMaps.dry;
+            if(floor.material.map!==chosen){floor.material.map=chosen;floor.material.needsUpdate=true;}
+          }""")
+          replace_once("const p=puddles[Math.floor(rnd()*4)],a=rnd()*Math.PI*2,r=Math.sqrt(rnd())*.38*p.mat.uniforms.uGrow.value;\n    splash(p.x+Math.cos(a)*p.w*r,p.z+Math.sin(a)*p.h*r,true);",
+          """const p=puddles[Math.floor(rnd()*4)],a=rnd()*Math.PI*2;
+            const grown=p.mat.uniforms.uGrow.value;
+            const r=(rnd()<.58?.90:.55)*grown;
+            if(grown>.02) splash(p.x+Math.cos(a)*p.w*.5*r,p.z+Math.sin(a)*p.h*.5*r,true);""")
+          replace_once("const names={rain:'Chuva · gotas translúcidas e respingos',puddle:'Poças · água refletiva crescendo',lagoon:'Lagoa · reflexos, espuma e ondas',storm:'Temporal · chuva sobre lagoa 3D'};",
+          "const names={rain:'Chuva · solo que absorve água e poças nas depressões',puddle:'Poças · bordas grossas de lama e filetes',lagoon:'Lagoa · reflexos e ondulações nas margens',storm:'Temporal · solo encharcado e chuva intensa'};")
+          p.write_text(s)
+          html=Path('atelie-arcano-agua-v124/source/index.html')
+          h=html.read_text().replace('V12.1','V12.4').replace('Chuva anime · poças refletivas · lagoas com espuma','Solo anime CC0 · poças que enchem · lama escura · filetes');
+          html.write_text(h)
+          readme=Path('atelie-arcano-agua-v124/source/README.md')
+          readme.write_text('# Ateliê Arcano Água V12.4\n\nSeis níveis de chuva, poças crescendo lentamente em depressões, lama úmida, filetes, conexões quando a chuva fica forte e reflexos anime.\n\nArquivos de solo: Poly Haven CC0 (Dirt e Mud Forest), processados para textura anime 512x512. Ver TEXTURAS-CC0.md.\nCódigo Three.js separado da V8 e do Rollshade.\n')
+          print('Source patches validated:',len(s),'characters')
+          PY
+      - name: Compilar V12.4 para Android e atualizar hub
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd atelie-arcano-agua-v124/source
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run build
+          test -s dist/index.html
+          test -s dist/terrain/soil_dry_anime.jpg
+          test -s dist/terrain/mud_wet_anime.jpg
+          test -n "$(find dist/assets -name '*.js' -print -quit)"
+          cd ..
+          mkdir -p preview
+          cp -a source/dist/. preview/
+          cp source/TEXTURAS-CC0.md preview/TEXTURAS-CC0.md
+          cp source/node_modules/three/LICENSE preview/THREE_LICENSE_MIT.txt
+          cd ..
+          python3 - <<'PY'
+          from pathlib import Path
+          hub=Path('atelie-arcano-laboratorio')
+          html=Path('atelie-arcano-agua-v124/preview/index.html').read_text()
+          assert '<head>' in html
+          html=html.replace('<head>','<head><base href="../atelie-arcano-agua-v124/preview/">',1)
+          html=html.replace('href="index.html" id="back"','href="../../atelie-arcano-laboratorio/index.html" id="back"',1)
+          (hub/'agua.html').write_text(html)
+          assert 'V12.4' in html
+          assert 'terrain/soil_dry_anime.jpg' in Path('atelie-arcano-agua-v124/source/src/main.js').read_text()
+          for p in ['index.html','rollshade.html','lightning.html','agua.html']:
+              assert (hub/p).exists(),p
+          print('V12.4 hub page and 201 base spells preserved')
+          PY
+      - name: Publicar e verificar ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add atelie-arcano-agua-v124/ atelie-arcano-laboratorio/agua.html
+          git diff --cached --quiet || (git commit -m "Publish Arcano Water V12.4 with CC0 anime terrain and gradual muddy connected puddles" && git push origin HEAD:atelie-arcano-public-demo)
+          zip -qr -6 /tmp/atelie_arcano_v12_4_completo_android.zip atelie-arcano-laboratorio atelie-arcano-anime-v8 atelie-arcano-rollshade-v2 atelie-arcano-lightning-vfx atelie-arcano-agua-v124 -x '*/node_modules/*' -x '*/.git/*'
+          unzip -t /tmp/atelie_arcano_v12_4_completo_android.zip | tail -1
+          ls -lh /tmp/atelie_arcano_v12_4_completo_android.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arcano-v124-completo-anime-mud-cc0
+          path: /tmp/atelie_arcano_v12_4_completo_android.zip
+          retention-days: 7
+          compression-level: 0
