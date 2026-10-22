@@ -32,6 +32,18 @@ jobs:
           if(!e || !f || !g) throw new Error('Rollshade effects not created');
           console.log('Rollshade effect smoke test successful');
           EOF
+          node --input-type=module <<'EOF'
+          import {readFileSync} from 'node:fs';
+          import {effect} from 'rollshade';
+          const src=readFileSync('src/main.js','utf8');
+          const extra=JSON.parse(src.match(/const NEW_SPELLS=(\[[^;]+\]);/s)[1]);
+          if(extra.length!==80)throw new Error('Expected 80 new effects, got '+extra.length);
+          for(const [school,name,element,recipe] of extra) {
+            try{const result=effect(recipe,element,{seed:'verified'});if(!result)throw Error('empty effect');}
+            catch(e){throw new Error(name+': '+e.message)}
+          }
+          console.log('Validated all 80 new recipes. Original 20 remain in source.');
+          EOF
           cd ..
           rm -rf preview
           mkdir -p preview
@@ -44,6 +56,17 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add atelie-arcano-rollshade-v2/preview
           git diff --cached --quiet || (git commit -m "Publish 100 animated Rollshade spells for isolated Android viewer" && git push origin HEAD:atelie-arcano-public-demo)
+      - name: Pack source without modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd atelie-arcano-rollshade-v2/source
+          tar -czf ../rollshade-100-source.tar.gz --exclude=node_modules --exclude=dist .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rollshade100-sources
+          path: atelie-arcano-rollshade-v2/rollshade-100-source.tar.gz
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: rollshade100-compiled-preview
