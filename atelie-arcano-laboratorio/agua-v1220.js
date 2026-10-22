@@ -84,10 +84,11 @@ const CLIMATE={
  overcast:{name:'Nublado',top:'#8d9fab',horizon:'#c2ccd0',cloud:'#b3bec7',
   bg:'#aebcbf',sun:'#ecf1f3',ambient:'#d9e4ed',ground:'#727d7a',
   coverage:.82,wind:.48,sunPower:1.05,ambientPower:1.8,sunVisible:.15,reflection:.72,waterTint:'#849aa9'},
- storm:{name:'Tempestade',top:'#576c7b',horizon:'#98a4ae',cloud:'#728490',
-  bg:'#8797a0',sun:'#d2dce6',ambient:'#b2c3d3',ground:'#596a69',
-  coverage:.98,wind:.94,sunPower:.46,ambientPower:1.32,sunVisible:.01,reflection:.58,waterTint:'#697b86'}
+ storm:{name:'Tempestade',top:'#394e60',horizon:'#7d8895',cloud:'#87909b',
+  bg:'#778590',sun:'#c6d6e0',ambient:'#a6bbcb',ground:'#586568',
+  coverage:.99,wind:1.25,sunPower:.30,ambientPower:1.08,sunVisible:.005,reflection:.51,waterTint:'#617280'}
 };
+function stormActive(){return level===5||(mode==='storm'&&level>0);}
 function automaticClimate(level){
  if(level===0)return 'sunny';
  if(level>=5)return 'storm';
@@ -105,6 +106,8 @@ function applyClimate(next){
  skyM.uniforms.uWind.value=c.wind;
  skyM.uniforms.uSunVisible.value=c.sunVisible;
  scene.background.set(c.bg);scene.fog.color.set(c.bg);
+ scene.fog.near=climate==='storm'?13.5:climate==='overcast'?17.5:20;
+ scene.fog.far=climate==='storm'?31:climate==='overcast'?35:39;
  ambientSky.color.set(c.ambient);ambientSky.groundColor.set(c.ground);
  ambientSky.intensity=c.ambientPower;
  light.color.set(c.sun);light.intensity=c.sunPower;
@@ -172,9 +175,11 @@ function initAtmosphere(){
   atmHumidity[k]=clamp(.76+.10*wave+.08*other,.44,.94);
   atmPressure[k]=1012.5+3.1*Math.sin(x*.28+z*.35);
   atmCloud[k]=clamp(.40+.19*Math.sin(x*.56+z*.41)+.16*Math.cos(z*.65-x*.19),.02,.83);
-  if(mode==='storm'){
-   atmHumidity[k]=Math.max(.87,atmHumidity[k]);
-   atmCloud[k]=Math.max(.66,atmCloud[k]);
+  if(stormActive()){
+   // Frente úmida e nuvens profundas no início da tempestade.
+   atmHumidity[k]=Math.max(.96,atmHumidity[k]);
+   atmCloud[k]=Math.max(.89,atmCloud[k]);
+   atmPressure[k]-=4.5;
   }
   atmRain[k]=0;atmWindX[k]=.32;atmWindZ[k]=.15;
  }
@@ -183,6 +188,7 @@ function initAtmosphere(){
  if(physicalWeather&&climateChoice==='auto')applyClimate('partlyCloudy');
 }
 function atmCloudPreset(){
+ if(stormActive()&&(atmCloudMean>.52||atmRainMean>.0003))return 'storm';
  if(atmRainPeak>.006||atmRainMean>.0021)return 'storm';
  if(atmCloudMean>.69)return 'overcast';
  if(atmCloudMean<.29)return 'sunny';
@@ -231,19 +237,21 @@ function atmosphereStep(dt){
   // Umidade disponível cai ao aquecer e sobe com o resfriamento/evaporação.
   const cooling=Math.max(0,21-atmTemp[k])*.00016;
   let hum=atmNextHum[k]+(forest*.00024+recycled/ATM_N+cooling-
-                          daySun*.000085-rainSink/ATM_N)*dt;
+                          daySun*.000085-rainSink/ATM_N+
+                          (stormActive()?.0042:0))*dt;
   hum=clamp(hum,.22,.985);
+  const severe=stormActive();
   const saturated=clamp((hum-.70)*3.15+(23-atmTemp[k])*.018+
-      uplift*.24+front*.22+(mode==='storm'?.22:0),0,1);
+      uplift*.24+front*.22+(severe?.41:0),0,1);
   let cloud=clamp(atmNextCloud[k]+(saturated*.032-
                   (1-saturated)*(.007+.009*daySun))*dt,0,1);
   const precipitation=clamp((cloud-.47)*2.7,0,1)*
              clamp((hum-.59)*3.4,0,1)*
              (.72+.45*uplift+.30*front);
   // Condensado reduz nuvem e umidade quando precipita; recarga por evaporação.
-  const rainRate=clamp(precipitation*.0036,0,.0082);
-  cloud=clamp(cloud-rainRate*dt*4.5,0,1);
-  hum=clamp(hum-rainRate*dt*.75,0,1);
+  const rainRate=clamp(precipitation*(severe?.0104:.0036),0,severe?.019:.0082);
+  cloud=clamp(cloud-rainRate*dt*(severe?1.25:4.5),0,1);
+  hum=clamp(hum-rainRate*dt*(severe?.28:.75),0,1);
   atmHumidity[k]=hum;atmCloud[k]=cloud;atmRain[k]=rainRate;
   tSum+=atmTemp[k];hSum+=hum;cSum+=cloud;pSum+=atmPressure[k];
   windSum+=Math.hypot(atmWindX[k],atmWindZ[k]);
@@ -291,10 +299,10 @@ function updateAtmosphere(dt){
   waterM.uniforms.uSunPower.value=(weatherCfg?weatherCfg.sunVisible:1)*dayLight;
  }
  if(climateChoice==='auto'&&physicalWeather){
-  skyM.uniforms.uCoverage.value=atmCloudMean;
+  skyM.uniforms.uCoverage.value=stormActive()?Math.max(atmCloudMean,.92):atmCloudMean;
   skyM.uniforms.uWind.value=clamp(atmWindMean*.8,0,1.2);
   if(typeof waterM!=='undefined'){
-   waterM.uniforms.uCloudiness.value=atmCloudMean;
+   waterM.uniforms.uCloudiness.value=stormActive()?Math.max(atmCloudMean,.92):atmCloudMean;
    waterM.uniforms.uWind.value=clamp(atmWindMean*.8,0,1.2);
   }
  }
@@ -685,7 +693,7 @@ function seed(m){
 // A chuva é alimentada por um campo uniforme; gotas animadas representam a mesma chuva,
 // sem depositar um segundo volume ao colidir (evita contagem dupla).
 function hydrologyStep(dt){
- const manualRain=rainMeters[level]*dt*(mode==='storm'?1.28:mode==='lagoon'?1.36:1);
+ const manualRain=rainMeters[level]*dt*(stormActive()?2.1:mode==='lagoon'?1.36:1);
  const interp=process==='retention'?1.75:process==='infiltration'?.95:1;
  const infiltrate=process==='runoff'?.11:process==='infiltration'?3.0:process==='retention'?.8:1;
  const sunIntensity=Math.max(0,solarAt(dayClock));
@@ -695,8 +703,9 @@ function hydrologyStep(dt){
  for(let k=0;k<size;k++){
   // Precipitação regional derivada de nuvens, umidade e transporte pelo vento.
   const rain=physicalWeather
-    ?(level===0?0:Math.min(rainField[k],rainMeters[level]*1.50)*
-      (mode==='storm'?1.24:mode==='lagoon'?1.10:1))*dt
+    ?(level===0?0:Math.min(rainField[k]*(stormActive()?1.17:1),
+      rainMeters[level]*(stormActive()?2.55:1.50))*
+      (stormActive()?1.12:mode==='lagoon'?1.10:1))*dt
     :manualRain;
   if(rain>0){
    const canopyCap=.007+cover[k]*.037;
@@ -990,7 +999,7 @@ function setMode(next){
  $('hint').textContent={rain:'Chuva cai sobre a terra e se divide em infiltração, escoamento e evapotranspiração.',
  puddle:'A terra absorve a maior parte da chuva; pequenas poças surgem lentamente nas depressões.',
  lagoon:'A lagoa cresce aos poucos nas bacias; as partes mais altas permanecem apenas úmidas.',
- storm:'Temporal: a terra satura e aumenta o escoamento entre as pedras 3D.'}[mode];
+ storm:'Temporal intenso: chuva muito forte e inclinada, vento, nuvens escuras e escoamento nas rochas 3D.'}[mode];
 }
 $('replay').addEventListener('click',()=>seed(mode));
 $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'▶ Continuar':'⏸ Pausar';updateInfo(true);});
