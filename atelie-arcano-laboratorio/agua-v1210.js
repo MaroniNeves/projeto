@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.9 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.10 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.9]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.10]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -96,44 +96,34 @@ for(let k=0;k<grass.count;k++){
  ob.position.set(x,y+.09,z);ob.scale.set(s,s,s);ob.rotation.y=random()*6.28;ob.updateMatrix();grass.setMatrixAt(gcount++,ob.matrix);
 }grass.count=gcount;grass.castShadow=true;scene.add(grass);
 // Uma única superfície: a água é armazenada em volumes por vértice, não em poças/planos sobrepostos.
+// O renderizador da V12.9 dependia de um shader transparente em todas as faces,
+// inclusive nas áreas secas. Alguns WebGL móveis não apresentavam as poças.
+// Aqui desenhamos APENAS triângulos molhados: cor opaca, malha rastreável e sem "água invisível".
+const SURFACE_VISIBLE=.006, SURFACE_RIPPLE=.012, SURFACE_POND=.018;
 const waterG=grid(),wet=new Float32Array(size),flow=new Float32Array(size*2);
-waterG.setAttribute('wet',new T.BufferAttribute(wet,1));waterG.setAttribute('flow',new T.BufferAttribute(flow,2));
-waterG.setAttribute('turbidity',new T.BufferAttribute(turbidity,1));
-// Poça azulada, definida e com opacidade quase total fora da margem.
-const waterM=new T.ShaderMaterial({side:T.DoubleSide,transparent:true,depthWrite:false,
- uniforms:{uTime:{value:0}},
- vertexShader:`
- attribute float wet;attribute vec2 flow;attribute float turbidity;uniform float uTime;
- varying float vWet;varying vec2 vFlow;varying vec3 vPos;varying float vTurbidity;
- void main(){
-  vec3 p=position;vWet=wet;vFlow=flow;vTurbidity=turbidity;
-  p.y+=.0038*min(wet,1.)*(sin(p.x*9.0+uTime*2.1)+sin(p.z*7.0-uTime*1.6));
-  vPos=p;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);
- }`,
- fragmentShader:`
- precision mediump float;uniform float uTime;varying float vTurbidity;
- varying float vWet;varying vec2 vFlow;varying vec3 vPos;
- void main(){
-  float mask=smoothstep(.035,.20,vWet);
-  if(mask<.015)discard;
-  float alpha=mask*(.95+.035*smoothstep(.12,.9,vWet));
-  vec2 dir=normalize(vFlow+vec2(.20,.36));
-  float motion=dot(vPos.xz,dir)*11.-uTime*(1.1+min(length(vFlow),1.8));
-  float wave=.5+.5*sin(motion+sin(vPos.x*4.1+vPos.z*3.4));
-  float irregular=.5+.5*sin(vPos.x*3.-vPos.z*4.+uTime*1.4);
-  vec3 deep=vec3(.045,.235,.34);
-  vec3 blue=vec3(.115,.42,.54);
-  vec3 crest=vec3(.51,.77,.83);
-  vec3 col=mix(deep,blue,.36+.27*irregular);
-  // Sedimentos em suspensão tornam a água gradualmente castanho-esverdeada.
-  vec3 mud=vec3(.29,.195,.105);
-  float muddy=clamp(vTurbidity,0.,1.)*.88;
-  col=mix(col,mud,muddy);
-  col=mix(col,crest,pow(wave,19.)*(.19-.08*muddy));
-  gl_FragColor=vec4(col,alpha);
- }`
+const waterColors=new Float32Array(size*3),waterIndices=waterG.index.array;
+const waterClear=new T.Color('#347f99'),waterBright=new T.Color('#4894a8');
+const waterMud=new T.Color('#876043');
+const waterClearRGB=waterClear.toArray(),waterBrightRGB=waterBright.toArray(),waterMudRGB=waterMud.toArray();
+waterG.setAttribute('wet',new T.BufferAttribute(wet,1).setUsage(T.DynamicDrawUsage));
+waterG.setAttribute('flow',new T.BufferAttribute(flow,2).setUsage(T.DynamicDrawUsage));
+waterG.setAttribute('turbidity',new T.BufferAttribute(turbidity,1).setUsage(T.DynamicDrawUsage));
+waterG.setAttribute('color',new T.BufferAttribute(waterColors,3).setUsage(T.DynamicDrawUsage));
+waterG.setDrawRange(0,0);
+const waterM=new T.MeshBasicMaterial({
+ vertexColors:true,side:T.DoubleSide,transparent:false,depthWrite:true,toneMapped:false,fog:true
 });
-const water=new T.Mesh(waterG,waterM);water.renderOrder=3;water.name='Superfície compartilhada de água';scene.add(water);
+const water=new T.Mesh(waterG,waterM);
+water.frustumCulled=false;water.renderOrder=3;water.name='Poças e lagoas visíveis V12.10';
+scene.add(water);
+function impactHeightAt(x,z){
+ const h=sample(soil,x,z),d=sample(depth,x,z);
+ return d>=SURFACE_RIPPLE?h+d:h;
+}
+function displayWaterHeightAt(x,z){
+ const h=sample(soil,x,z),d=sample(depth,x,z);
+ return h+(d>=SURFACE_VISIBLE?d+.015:.010);
+}
 // Gotas físicas visuais: cilindro alongado, brilho em pixels e halos suaves.
 const MAX_DROPS=mobile?230:420,MAX_SPLASH=mobile?160:260,MAX_RIPPLES=mobile?32:54;
 const drops=[],splashes=[],ripples=[],dropPos=new Float32Array(MAX_DROPS*3);
@@ -203,24 +193,24 @@ function updateRipples(dt){
   if(r.age>=r.life){r.mesh.visible=false;ripples.splice(i,1);continue;}
   const mesh=r.mesh,g=mesh.geometry,p=g.attributes.position.array,fade=g.attributes.strength.array,mud=g.attributes.mud.array;
   const phase=r.age/r.life,liquid=r.kind==='water';
-  const outer=liquid?(.045+phase*.94):(.012+phase*.19);
+  const outer=liquid?(.045+phase*.94):(.005+phase*.06);
   const inner=liquid?(.025+Math.max(0,phase-.15)*.82):0;
-  const outerFade=(1-phase)*(liquid?.92:.40);
+  const outerFade=(1-phase)*(liquid?.92:.24);
   const innerFade=liquid?(1-phase)*.65*clamp((phase-.14)*6,0,1):0;
   let visible=0;
   for(let n=0;n<=RIPPLE_SEG;n++){
    const angle=n/RIPPLE_SEG*Math.PI*2,c=Math.cos(angle),sn=Math.sin(angle);
    for(let band=0;band<2;band++){
     const rad=band===0?outer:inner,strength=band===0?outerFade:innerFade;
-    const halfWidth=liquid?.035+rad*.018:.010+rad*.005;
+    const halfWidth=liquid?.026+rad*.010:.004+rad*.003;
     for(let e=0;e<3;e++){
      const rr=Math.max(.003,rad+(e-1)*halfWidth),x=r.x+c*rr,z=r.z+sn*rr,k=n*6+band*3+e;
      const edge=x>W*.5-.08||x<-W*.5+.08||z>L*.5-.08||z<-L*.5+.08;
      const waterHere=sample(depth,x,z);
      // Amostra topografia em todos os vértices, sem anel em plano horizontal.
-     const y=liquid?waterHeight(x,z):sample(soil,x,z);
-     p[k*3]=x;p[k*3+1]=y+(liquid?.026:.011);p[k*3+2]=z;
-     const allowed=!edge&&!rockAt(x,z)&&(!liquid||waterHere>.014)&&(!(!liquid&&waterHere>.015));
+     const y=liquid?displayWaterHeightAt(x,z):sample(soil,x,z);
+     p[k*3]=x;p[k*3+1]=y+(liquid?.008:.004);p[k*3+2]=z;
+     const allowed=!edge&&!rockAt(x,z)&&(!liquid||waterHere>=SURFACE_RIPPLE)&&!( !liquid&&waterHere>=SURFACE_RIPPLE);
      fade[k]=(allowed&&e===1&&strength>.01)?strength:0;
      mud[k]=liquid?sample(turbidity,x,z):0;
      visible+=fade[k];
@@ -320,22 +310,49 @@ function flowStep(dt,multiplier){
 }
 function rebuild(){
  const p=waterG.attributes.position.array,w=waterG.attributes.wet.array,f=waterG.attributes.flow.array;
- let count=0;
+ const vc=waterG.attributes.color.array;
+ let count=0,faceIndex=0;
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
-  const k=idx(i,j),v=depth[k],t=clamp((v-.009)/.022,0,1);
-  w[k]=t;p[3*k+1]=soil[k]+(t>.02?v+.018:-.028);
-  if(v>.022)count++;
+  const k=idx(i,j),v=depth[k];
+  const show=v>=SURFACE_VISIBLE;
+  w[k]=clamp((v-.002)/.013,0,1);
+  p[k*3+1]=soil[k]+(show?v+.015:.010);
+  if(show)count++;
   const left=idx(Math.max(0,i-1),j),right=idx(Math.min(NX-1,i+1),j);
   const up=idx(i,Math.max(0,j-1)),down=idx(i,Math.min(NZ-1,j+1));
   f[k*2]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
   f[k*2+1]=(soil[up]+depth[up]-soil[down]-depth[down])*.6;
-  // Terra batida: umidade escurece o solo; encharcamento deixa barro.
-  const sat=showWet?clamp(soilMoisture[k]/soilCapacity[k]*.95+t*.35,0,.94):0;
+  // Mistura gradual azul -> barro, e contraste sutil para mostrar movimento.
+  const muddiness=clamp(turbidity[k]*.89,0,.89);
+  const wave=.5+.5*Math.sin(nx(i)*11.0+nz(j)*8.0-visualTime*2.7);
+  const highlight=.09+wave*.09;
+  for(let m=0;m<3;m++){
+   const clear=waterClearRGB[m]*(1-highlight)+waterBrightRGB[m]*highlight;
+   vc[k*3+m]=clear*(1-muddiness)+waterMudRGB[m]*muddiness;
+  }
+  const sat=showWet?clamp(soilMoisture[k]/Math.max(soilCapacity[k],.001)*.95+w[k]*.35,0,.94):0;
   for(let m=0;m<3;m++)colors[3*k+m]=dry[3*k+m]*(1-sat)+mudRGB[m]*sat;
  }
+ // Escolhemos triângulos molhados, em vez de um plano transparente sobre todo o relevo.
+ for(let j=0;j<NZ-1;j++)for(let i=0;i<NX-1;i++){
+  const a=idx(i,j),b=a+1,c=a+NX,d=c+1;
+  if(Math.max(depth[a],depth[b],depth[c])>=SURFACE_VISIBLE&&
+    depth[a]+depth[b]+depth[c]>=SURFACE_VISIBLE*1.2){
+   waterIndices[faceIndex++]=a;waterIndices[faceIndex++]=c;waterIndices[faceIndex++]=b;
+  }
+  if(Math.max(depth[b],depth[c],depth[d])>=SURFACE_VISIBLE&&
+    depth[b]+depth[c]+depth[d]>=SURFACE_VISIBLE*1.2){
+   waterIndices[faceIndex++]=b;waterIndices[faceIndex++]=c;waterIndices[faceIndex++]=d;
+  }
+ }
+ waterG.setDrawRange(0,faceIndex);
  wetted=count*area;
- waterG.attributes.position.needsUpdate=true;waterG.attributes.wet.needsUpdate=true;waterG.attributes.flow.needsUpdate=true;waterG.attributes.turbidity.needsUpdate=true;
- landG.attributes.color.needsUpdate=true;waterG.computeVertexNormals();
+ waterG.index.needsUpdate=true;
+ waterG.attributes.position.needsUpdate=true;
+ waterG.attributes.color.needsUpdate=true;
+ waterG.attributes.wet.needsUpdate=true;waterG.attributes.flow.needsUpdate=true;
+ waterG.attributes.turbidity.needsUpdate=true;landG.attributes.color.needsUpdate=true;
+ waterG.computeVertexNormals();
 }
 // O solo define a cor, a altura e o número das partículas expelidas.
 function spawnSplash(x,z,h){
@@ -344,7 +361,7 @@ function spawnSplash(x,z,h){
  const k=idx(i,j);if(blocked[k])return;
  totalImpacts++;
  const saturation=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
- const inWater=depth[k]>.015;
+ const inWater=sample(depth,x,z)>=SURFACE_RIPPLE;
  const muddy=turbidity[k];
  // Um impacto em poça mobiliza pequenas partículas; água barrenta expele gotículas castanhas.
  if(inWater)turbidity[k]=clamp(turbidity[k]+.0018*(soilErosion[soilType]||.37),0,1);
@@ -355,7 +372,7 @@ function spawnSplash(x,z,h){
  const count=inWater?7+Math.floor(random()*5):
    saturation>.58?4+Math.floor(random()*3):1+Math.floor(random()*3);
  const tint=inWater?waterTint:dirtTint;
- const power=inWater?.45:saturation>.58?.28:.17;
+ const power=inWater?.45:saturation>.58?.24:.14;
  for(let j=0;j<count&&splashes.length<MAX_SPLASH;j++){
   const a=random()*Math.PI*2,v=power*(.52+random()*.8);
   // Partículas minúsculas, sem faíscas de luz: pequenos fragmentos de água ou lama.
@@ -375,7 +392,7 @@ function spawnSplash(x,z,h){
     mesh.material=inWater?rippleMaterial:groundRippleMaterial;
     mesh.visible=true;
     ripples.push({mesh,x,z,kind:inWater?'water':'ground',age:0,
-     life:inWater?.55+random()*.40:.16+random()*.15});
+     life:inWater?.55+random()*.40:.10+random()*.10});
    }
   }
  }
@@ -392,7 +409,7 @@ function dropStep(dt){
  let displayedImpacts=0;
  for(let i=drops.length-1;i>=0;i--){
   const d=drops[i];d.y-=d.speed*dt*factor;
-  const gh=waterHeight(d.x,d.z);
+  const gh=impactHeightAt(d.x,d.z);
   if(d.y<=gh){
    if(displayedImpacts<5){spawnSplash(d.x,d.z,gh);displayedImpacts++;}
    drops[i]=drops[drops.length-1];drops.pop();
@@ -412,7 +429,7 @@ function dropStep(dt){
  streak.count=drops.length;streak.instanceMatrix.needsUpdate=true;
  for(let i=splashes.length-1;i>=0;i--){
   const p=splashes[i];p.age+=dt;p.vy-=4.8*dt;p.x+=p.vx*dt;p.z+=p.vz*dt;p.y+=p.vy*dt;
-  if(p.age>=p.life||p.y<waterHeight(p.x,p.z)){
+  if(p.age>=p.life||p.y<impactHeightAt(p.x,p.z)){
    splashes[i]=splashes[splashes.length-1];splashes.pop();
   }
  }
@@ -480,8 +497,8 @@ function updateInfo(force){
   saturated+=clamp(soilMoisture[k]/soilCapacity[k],0,1);participating++;
   const i=k%NX,j=Math.floor(k/NX),x=nx(i),z=nz(j),b=basins[1];
   const q=((x-b.x)/b.sx)**2+((z-b.z)/b.sz)**2;
-  if(q<.72){lagoonCells++;if(depth[k]>.022)lagoonWet++;lagoonMax=Math.max(lagoonMax,depth[k]);}
-  if(depth[k]>.022&&q>.72)otherPuddles++;
+  if(q<.72){lagoonCells++;if(depth[k]>=SURFACE_VISIBLE)lagoonWet++;lagoonMax=Math.max(lagoonMax,depth[k]);}
+  if(depth[k]>=SURFACE_VISIBLE&&q>.72)otherPuddles++;
  }
  surface*=area;stored*=area;ground*=area;leaf*=area;
  $('rainDetail').textContent='Chuva '+name+' • '+timeScale+'× • '+drops.length+' gotas 3D';
@@ -505,13 +522,13 @@ let last=performance.now();function loop(now){
   let steps=0;while(acc>=step&&steps<12){hydrologyStep(step);acc-=step;steps++;}
   if(acc>step*14)acc=step*14;
   if(++frame%2===0)rebuild();
-  waterM.uniforms.uTime.value=visualTime;updateInfo(false);
+  updateInfo(false);
  }
  setView();renderer.render(scene,camera);
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v129'))fail(e.error||e.message);});
-window.arcanoWaterV129={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1210'))fail(e.error||e.message);});
+window.arcanoWaterV1210={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('rain');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
