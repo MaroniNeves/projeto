@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.23 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.24 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.23]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.24]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -240,8 +240,9 @@ function applyClimate(next){
  skyM.uniforms.uWind.value=c.wind;
  skyM.uniforms.uSunVisible.value=c.sunVisible;
  scene.background.set(c.bg);scene.fog.color.set(c.bg);
- scene.fog.near=climate==='storm'?13.5:climate==='overcast'?17.5:20;
- scene.fog.far=climate==='storm'?31:climate==='overcast'?35:39;
+ // Escurecimento vem da iluminação/nuvens, não de uma neblina artificial.
+ // A visibilidade meteorológica é gerida por updateGroundFog() separadamente.
+ scene.fog.near=36;scene.fog.far=74;
  ambientSky.color.set(c.ambient);ambientSky.groundColor.set(c.ground);
  ambientSky.intensity=c.ambientPower;
  light.color.set(c.sun);light.intensity=c.sunPower;
@@ -443,6 +444,115 @@ function updateAtmosphere(dt){
   }
  }
 }
+// V12.24 — Neblina de radiação pós-chuva: solo molhado + orvalho + vento
+// fraco + resfriamento noturno/amanhecer. TEMPORAL NUNCA DISPARA NEBLINA.
+// A chuva frontal pode gerar neblina na natureza, mas foi excluída por direção de arte.
+let fogEnabled=true,fogStrength=0,fogTarget=0,fogRainMemory=0,fogRainAge=1e6;
+let fogLastRain=0,fogClock=0,fogWetness=0,fogDewGap=10,fogCause='solo seco';
+const mistGroup=new T.Group();mistGroup.name='Névoa baixa física de vale pós-chuva';
+scene.add(mistGroup);
+const mistTexture=(()=>{
+ const c=document.createElement('canvas');c.width=128;c.height=128;
+ const g=c.getContext('2d'),grad=g.createRadialGradient(64,68,4,64,64,62);
+ grad.addColorStop(0,'rgba(233,244,238,.40)');
+ grad.addColorStop(.40,'rgba(223,240,235,.24)');
+ grad.addColorStop(.76,'rgba(207,232,230,.095)');
+ grad.addColorStop(1,'rgba(207,232,230,0)');
+ g.fillStyle=grad;g.fillRect(0,0,128,128);
+ const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;
+ return t;
+})();
+const fogPatches=[];
+for(const [i,b] of basins.entries()){
+ for(let n=0;n<(mobile?2:3);n++){
+  const mat=new T.SpriteMaterial({map:mistTexture,color:'#e0ebe6',
+   transparent:true,opacity:0,depthWrite:false,depthTest:true,fog:false});
+  const mesh=new T.Sprite(mat);mesh.name='Neblina baixa '+i+'/'+n;
+  const px=clamp(b.x+(n-1)*1.7,-W*.44,W*.44),
+        pz=clamp(b.z+((i+n)%2?1:-1)*.8,-L*.44,L*.44);
+  mesh.position.set(px,elevation(px,pz)+.30,pz);
+  mesh.scale.set(5.0+n*1.3,1.3+.25*n,1);
+  mesh.visible=false;mistGroup.add(mesh);
+  fogPatches.push({mesh,x:px,z:pz,phase:i*2+n});
+ }
+}
+function dewPointCelsius(temp,rh){
+ const a=17.62,b=243.12;
+ const relative=clamp(rh,.01,.999);
+ const gamma=Math.log(relative)+(a*temp)/(b+temp);
+ return b*gamma/(a-gamma);
+}
+function updateGroundFog(dt){
+ const rainIncrease=Math.max(0,stats.rain-fogLastRain);
+ fogLastRain=stats.rain;
+ // A memória de chuva guarda até cinco minutos REAIS, não do time-lapse.
+ const rainNow=level>0&&(physicalWeather?appliedRainMean>.000015:true);
+ if(rainIncrease>.00003){
+  fogRainMemory=clamp(fogRainMemory+rainIncrease/(W*L)*1.1,0,1);
+  fogRainAge=0;
+ }else{
+  fogRainAge+=dt;
+ }
+ fogRainMemory=Math.max(0,fogRainMemory-dt/380);
+ fogClock+=dt;
+ if(fogClock>=.55){
+  fogClock=0;
+  let wet=0,samples=0;
+  for(let j=4;j<NZ-4;j+=6)for(let i=4;i<NX-4;i+=6){
+   const k=idx(i,j);
+   wet+=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
+   wet+=Math.min(1,depth[k]/.09)*.28;
+   samples++;
+  }
+  fogWetness=wet/Math.max(1,samples);
+  const daySun=Math.max(0,solarAt(dayClock));
+  const nightCooling=clamp((.35-solarAt(dayClock))*2.0,0,1);
+  const cloudCover=climateChoice==='auto'?atmCloudMean:
+    (weatherCfg?weatherCfg.coverage:atmCloudMean);
+  const clearing=clamp((.90-cloudCover)/.55,0,1);
+  const nearGroundRH=clamp(atmHumMean+fogWetness*.14+fogRainMemory*.08,.10,.998);
+  const surfaceTemperature=atmTempMean-(nightCooling*3.4*clearing)-
+    (fogWetness>.6?.30:0);
+  fogDewGap=Math.max(0,surfaceTemperature-dewPointCelsius(atmTempMean,nearGroundRH));
+  const saturation=clamp((2.5-fogDewGap)/2.5,0,1);
+  const recentWet=clamp(fogRainMemory*.85+Math.max(0,fogWetness-.45)*1.3,0,1);
+  const windCalm=clamp((1.18-atmWindMean)/.80,0,1);
+  const nearDawn=clamp(nightCooling*.83+(1-daySun)*.17,0,1);
+  // Nuvens devem ter aberto parcialmente para permitir resfriamento radiativo.
+  const conditions=saturation*recentWet*windCalm*clearing*nearDawn;
+  fogTarget=clamp(conditions*1.65,0,.88);
+  if(!fogEnabled)fogCause='desligada';
+  else if(stormActive()||climate==='storm')fogCause='temporal: sem neblina';
+  else if(rainNow)fogCause='chovendo: sem neblina';
+  else if(fogRainMemory<.06&&fogWetness<.60)fogCause='aguardando solo úmido';
+  else if(atmWindMean>1.05)fogCause='vento dispersou a neblina';
+  else if(fogDewGap>2.5)fogCause='ar acima do ponto de orvalho';
+  else if(daySun>.45)fogCause='sol aquece o solo';
+  else if(clearing<.2)fogCause='céu fechado reduz resfriamento';
+  else fogCause='condensação baixa nos vales';
+  if(!fogEnabled||stormActive()||climate==='storm'||rainNow)fogTarget=0;
+ }
+ // Temporal elimina imediatamente a névoa anterior em vez de escurecer com fog.
+ if(stormActive()||climate==='storm'||rainNow||!fogEnabled)fogStrength=0;
+ else fogStrength+=(fogTarget-fogStrength)*clamp(dt*(fogTarget>fogStrength?.55:.78),0,1);
+ const strength=clamp(fogStrength,0,1);
+ scene.fog.near=36-27*strength;
+ scene.fog.far=74-51*strength;
+ const base=weatherCfg?weatherCfg.bg:'#b6c6bc';
+ scene.fog.color.set(base).lerp(new T.Color('#d9e7df'),strength*.65);
+ for(const patch of fogPatches){
+  patch.mesh.visible=strength>.04;
+  patch.mesh.material.opacity=strength*(.18+.07*Math.sin(visualTime*.30+patch.phase));
+  patch.mesh.position.x=patch.x+Math.cos(atmWindHeading)*.08*Math.sin(visualTime*.19+patch.phase);
+  patch.mesh.position.z=patch.z+Math.sin(atmWindHeading)*.08*Math.sin(visualTime*.19+patch.phase);
+ }
+}
+function resetGroundFog(){
+ fogStrength=fogTarget=fogRainMemory=0;
+ fogRainAge=1e6;fogLastRain=stats.rain;fogClock=0;fogCause='aguardando chuva';
+ updateGroundFog(0);
+}
+
 function atmosphereRainAt(x,z){
  return fieldAt(atmRain,x,z);
 }
@@ -1124,7 +1234,7 @@ function seed(m){
  configureSoilCells(false);
  for(let k=0;k<size;k++){soilMoisture[k]=soilCapacity[k]*.22;soilHealth[k]=minNutrientAt(k);}
  updatePlantVisuals();updateSprouts();updateForestHealth();soilEcologySeconds=0;plantVisualSeconds=0;
- initAtmosphere();updateAtmosphere(0);
+ initAtmosphere();updateAtmosphere(0);resetGroundFog();
  rebuild();updateInfo(true);
 }
 // A chuva é alimentada por um campo uniforme; gotas animadas representam a mesma chuva,
@@ -1557,6 +1667,7 @@ let last=performance.now();function loop(now){
    updatePlantVisuals();updateSprouts();updateForestHealth();plantVisualSeconds=0;
   }
   if(acc>step*14)acc=step*14;
+  updateGroundFog(dt);
   if(++frame%2===0)rebuild();
   waterM.uniforms.uTime.value=visualTime;
   animateClimate(dt);
@@ -1568,7 +1679,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1223'))fail(e.error||e.message);});
-window.arcanoWaterV1223={scene,renderer,forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1224'))fail(e.error||e.message);});
+window.arcanoWaterV1224={scene,renderer,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
