@@ -229,8 +229,8 @@ function atmosphereStep(dt){
    up=atmPressure[atmId(i,Math.max(0,j-1))],
    down=atmPressure[atmId(i,Math.min(ATM_NZ-1,j+1))];
   // Ar acelera dos centros de maior pressão em direção aos de menor pressão.
-  atmWindX[k]=clamp(.29+(left-right)*.12+front*.35,-1.5,1.5);
-  atmWindZ[k]=clamp(.13+(up-down)*.12+.22*Math.sin(clock*6.28+z*.19),-1.5,1.5);
+  atmWindX[k]=clamp(.29+(left-right)*.12+front*.35+(stormActive()?.75:0),-2.3,2.3);
+  atmWindZ[k]=clamp(.13+(up-down)*.12+(stormActive()?.48:.22)*Math.sin(clock*6.28+z*.19),-2.0,2.0);
   const slopeX=(elevation(x+.32,z)-elevation(x-.32,z))/.64;
   const slopeZ=(elevation(x,z+.32)-elevation(x,z-.32))/.64;
   const uplift=Math.max(0,atmWindX[k]*slopeX+atmWindZ[k]*slopeZ);
