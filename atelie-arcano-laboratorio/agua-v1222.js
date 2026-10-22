@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.21 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.22 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.21]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.22]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -18,8 +18,129 @@ const turbidity=new Float32Array(size);
 const basinHold=new Float32Array(size),shoreField=new Float32Array(size);
 let foamCount=0;
 const soilErosion={loam:.37,loose:1.0,clay:.73,compacted:.13};
-let soilType='loam',totalImpacts=0;
+let soilType='mosaico',totalImpacts=0;
 const baseCapacity=new Float32Array(size),basePermeability=new Float32Array(size);
+// V12.22 — Textura é areia/silte/argila; húmus, calcário, várzea e salinidade
+// são propriedades do perfil, não categorias granulométricas equivalentes.
+// Coeficientes normalizados e pedagógicos, sem alegação de kg/ha calibrados.
+const SOIL_PROFILES={
+ franco:{name:'Franco equilibrado',capacity:1,drain:1.45,organic:.50,n:.64,p:.55,k:.59,ca:.59,ph:6.5,salt:.04,fix:.08,erosion:.33,col:'#8f7357'},
+ arenoso:{name:'Arenoso',capacity:.58,drain:2.70,organic:.18,n:.22,p:.25,k:.27,ca:.32,ph:6.0,salt:.04,fix:.02,erosion:.86,col:'#c3aa79'},
+ argiloso:{name:'Argiloso',capacity:1.34,drain:.45,organic:.44,n:.49,p:.34,k:.63,ca:.58,ph:6.2,salt:.05,fix:.25,erosion:.43,col:'#a67256'},
+ siltoso:{name:'Siltoso',capacity:1.18,drain:.98,organic:.43,n:.53,p:.48,k:.51,ca:.51,ph:6.5,salt:.05,fix:.12,erosion:.92,col:'#a9a08c'},
+ humoso:{name:'Humoso / orgânico',capacity:1.52,drain:1.12,organic:.91,n:.79,p:.69,k:.67,ca:.55,ph:6.2,salt:.02,fix:.03,erosion:.18,col:'#423329'},
+ calcario:{name:'Calcário (alcalino)',capacity:.92,drain:1.36,organic:.35,n:.44,p:.32,k:.52,ca:.92,ph:7.9,salt:.09,fix:.23,erosion:.35,col:'#c4b8a0'},
+ aluvial:{name:'Aluvial / várzea',capacity:1.48,drain:.58,organic:.77,n:.73,p:.65,k:.72,ca:.65,ph:6.8,salt:.04,fix:.12,erosion:.40,col:'#665044'},
+ lateritico:{name:'Laterítico / canga',capacity:.89,drain:.87,organic:.23,n:.32,p:.12,k:.37,ca:.29,ph:5.1,salt:.03,fix:.67,erosion:.58,col:'#a34f38'},
+ pedregoso:{name:'Pedregoso',capacity:.48,drain:2.25,organic:.18,n:.29,p:.31,k:.38,ca:.54,ph:6.8,salt:.03,fix:.05,erosion:.56,col:'#8d857b'},
+ salino:{name:'Salino',capacity:.84,drain:.77,organic:.22,n:.42,p:.39,k:.44,ca:.56,ph:7.9,salt:.83,fix:.17,erosion:.64,col:'#b6b09c'},
+ compactado:{name:'Compactado',capacity:.75,drain:.19,organic:.30,n:.40,p:.38,k:.47,ca:.48,ph:6.3,salt:.05,fix:.12,erosion:.21,col:'#837264'}
+};
+const SOIL_KEYS=Object.keys(SOIL_PROFILES);
+const soilKeyIndex=new Uint8Array(size);
+const soilOrganic=new Float32Array(size),soilLitter=new Float32Array(size),soilN=new Float32Array(size),
+ soilP=new Float32Array(size),soilK=new Float32Array(size),soilCa=new Float32Array(size),
+ soilPH=new Float32Array(size),soilSalinity=new Float32Array(size),soilBiota=new Float32Array(size),
+ soilPlant=new Float32Array(size),soilHealth=new Float32Array(size),soilLimiting=new Uint8Array(size);
+const SOIL_LIMITS=['água','nitrogênio','fósforo','potássio','pH','salinidade','oxigênio'];
+const plantNeeds={moisture:.50,n:.58,p:.50,k:.48};
+let soilEcologySeconds=0,plantVisualSeconds=0,soilUpdates=0;
+function chooseMosaicSoil(x,z,h,k){
+ const stream=Math.abs(x-center(z));
+ const wet=h<-.25||stream<.75;
+ if(wet)return 'aluvial';
+ const n=.5+.24*Math.sin(x*.57+z*.48)+.25*Math.cos(x*.36-z*.59);
+ if(h>.67&&n>.66)return 'pedregoso';
+ if(n<.25)return 'arenoso';
+ if(n>.82)return 'humoso';
+ if(x>3.6&&z>1.2)return 'calcario';
+ if(x< -3.0&&z>0)return 'lateritico';
+ if(n>.62)return 'argiloso';
+ if(h<.03)return 'siltoso';
+ return 'franco';
+}
+function soilProfileIndex(key){return Math.max(0,SOIL_KEYS.indexOf(key));}
+function configureSoilCells(preserve=true){
+ for(let k=0;k<size;k++){
+  const i=k%NX,j=Math.floor(k/NX),x=nx(i),z=nz(j);
+  const key=soilType==='mosaico'?chooseMosaicSoil(x,z,soil[k],k):soilType;
+  const p=SOIL_PROFILES[key]||SOIL_PROFILES.franco;
+  soilKeyIndex[k]=soilProfileIndex(key);
+  const cap=baseCapacity[k]*p.capacity,perm=basePermeability[k]*p.drain;
+  soilCapacity[k]=cap;permeability[k]=perm;
+  if(soilMoisture[k]>cap){depth[k]+=soilMoisture[k]-cap;soilMoisture[k]=cap;}
+  soilOrganic[k]=preserve?clamp(soilOrganic[k]*.38+p.organic*.62,.02,1.2):p.organic;
+  soilLitter[k]=preserve?soilLitter[k]:p.organic*.17;
+  soilN[k]=preserve?clamp(soilN[k]*.35+p.n*.65,0,1.2):p.n;
+  soilP[k]=preserve?clamp(soilP[k]*.35+p.p*.65,0,1.2):p.p;
+  soilK[k]=preserve?clamp(soilK[k]*.35+p.k*.65,0,1.2):p.k;
+  soilCa[k]=p.ca;soilPH[k]=p.ph;soilSalinity[k]=p.salt;
+  soilBiota[k]=clamp(soilOrganic[k]*(1-p.salt)*.85,.02,1);
+  soilPlant[k]=preserve?clamp(soilPlant[k],.08,1):clamp(.38+.30*cover[k],.1,1);
+  const c=new T.Color(p.col),shade=.89+.12*Math.sin(x*.82+z*1.14);
+  for(let m=0;m<3;m++)dry[k*3+m]=c.toArray()[m]*shade;
+ }
+ land.material.color.set('#ffffff');
+ landG.attributes.color.needsUpdate=true;
+}
+function minNutrientAt(k){
+ const p=SOIL_PROFILES[SOIL_KEYS[soilKeyIndex[k]]];
+ const saturation=soilMoisture[k]/Math.max(.001,soilCapacity[k]);
+ const waterFactor=clamp((saturation-.09)/.42,0,1);
+ const oxygen=clamp((1.07-saturation)/.40,0,1);
+ const n=clamp(soilN[k]/plantNeeds.n,0,1),phos=clamp(soilP[k]/plantNeeds.p,0,1),
+  pot=clamp(soilK[k]/plantNeeds.k,0,1);
+ const acidity=clamp(1-Math.abs(soilPH[k]-6.5)/2.5,0,1);
+ const salinity=clamp(1-soilSalinity[k]*1.20,0,1);
+ const factors=[waterFactor,n,phos,pot,acidity,salinity,oxygen];
+ let minimum=factors[0],limiter=0;
+ for(let m=1;m<factors.length;m++)if(factors[m]<minimum){minimum=factors[m];limiter=m;}
+ soilLimiting[k]=limiter;
+ return clamp(minimum,0,1);
+}
+// Ciclo biológico em tempo REAL de dia do jogo: 1440 s = 1 dia; ao contrário
+// da física de chuva, o time-lapse não acelera arbitrariamente a idade das plantas.
+function ecologyStep(dt){
+ const days=Math.min(dt,10)/DAY_SECONDS;
+ const lightFactor=clamp(Math.max(0,solarAt(dayClock))*.90+.20,.10,1);
+ for(let k=0;k<size;k++){
+  const p=SOIL_PROFILES[SOIL_KEYS[soilKeyIndex[k]]],sat=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1.3);
+  const flooded=sat>.94||depth[k]>.035;
+  const oxygen=clamp(1-Math.max(0,sat-.80)*2.1,0,1);
+  // Solos de várzea sem oxigênio decompõem MUITO mais devagar.
+  const decayRate=(flooded?.025:.27)*(p===SOIL_PROFILES.humoso?.68:1)*
+    (.40+.60*lightFactor)*(.35+.65*oxygen);
+  const decomposed=Math.min(soilLitter[k],soilLitter[k]*decayRate*days);
+  soilLitter[k]-=decomposed;soilOrganic[k]=clamp(soilOrganic[k]+decomposed*.72,0,1.3);
+  const mineralized=Math.min(soilOrganic[k],soilOrganic[k]*(flooded?.003:.014)*
+       (.3+.7*soilBiota[k])*days);
+  soilOrganic[k]-=mineralized;
+  soilN[k]=clamp(soilN[k]+mineralized*.37,0,1.2);
+  soilP[k]=clamp(soilP[k]+mineralized*.19*(1-p.fix),0,1.2);
+  soilK[k]=clamp(soilK[k]+mineralized*.22,0,1.2);
+  // Solo arenoso perde N/K mais depressa ao drenar; P fixa-se mais na canga.
+  const drain=Math.max(0,(sat-.32))*p.drain;
+  const leach=days*.024*drain;
+  soilN[k]=Math.max(0,soilN[k]*(1-leach*.9));
+  soilK[k]=Math.max(0,soilK[k]*(1-leach*.6));
+  const phAdsorb=days*.013*p.fix;
+  soilP[k]=Math.max(0,soilP[k]*(1-phAdsorb));
+  const limit=minNutrientAt(k);
+  const growth=limit*lightFactor*(1-.4*(depth[k]>.04?1:0));
+  soilHealth[k]=limit;
+  const uptake=days*growth*.055*soilPlant[k];
+  soilPlant[k]=clamp(soilPlant[k]+days*(growth*.23-.045*(1-growth)),.04,1.25);
+  soilN[k]=Math.max(0,soilN[k]-uptake*.75);
+  soilP[k]=Math.max(0,soilP[k]-uptake*.42);
+  soilK[k]=Math.max(0,soilK[k]-uptake*.57);
+  // A serrapilheira nunca desaparece sem reposição nas áreas vegetadas.
+  soilLitter[k]=clamp(soilLitter[k]+days*soilPlant[k]*.024,0,1.3);
+  // Biota como índice funcional, não minhocas 3D (fase futura).
+  soilBiota[k]=clamp(soilBiota[k]+days*(soilOrganic[k]*oxygen*.06-.025*soilBiota[k]),.01,1);
+ }
+ soilUpdates++;
+}
+
 const nx=i=>-W*.5+i*dx,nz=j=>-L*.5+j*dz, idx=(i,j)=>j*NX+i;
 const smooth=(t)=>t*t*(3-2*t);
 function rand(seed){return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};}
@@ -351,6 +472,7 @@ for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
 }
 baseCapacity.set(soilCapacity);basePermeability.set(permeability);
 for(let k=0;k<size;k++)permeability[k]=basePermeability[k]*1.45;
+// A paleta inicial é substituída pelo mosaico de solos depois que o terreno existe.
 landG.setAttribute('color',new T.BufferAttribute(colors,3));landG.computeVertexNormals();
 const land=new T.Mesh(landG,new T.MeshStandardMaterial({map:groundTexture(),vertexColors:true,roughness:1,side:T.DoubleSide}));
 land.receiveShadow=true;land.name='Terra absorvente e barro V12.12';scene.add(land);
@@ -1136,7 +1258,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1221'))fail(e.error||e.message);});
-window.arcanoWaterV1221={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1222'))fail(e.error||e.message);});
+window.arcanoWaterV1222={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
