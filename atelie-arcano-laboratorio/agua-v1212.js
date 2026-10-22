@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.11 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.12 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.11]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.12]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -15,6 +15,8 @@ const canopy=new Float32Array(size),cover=new Float32Array(size),permeability=ne
 const area=dx*dz,stats={rain:0,infiltrated:0,evaporated:0,transpired:0,outflow:0};
 const mudRGB=[.18,.11,.075];
 const turbidity=new Float32Array(size);
+const basinHold=new Float32Array(size),shoreField=new Float32Array(size);
+let foamCount=0;
 const soilErosion={loam:.37,loose:1.0,clay:.73,compacted:.13};
 let soilType='loam',totalImpacts=0;
 const baseCapacity=new Float32Array(size),basePermeability=new Float32Array(size);
@@ -72,13 +74,21 @@ for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
  cover[k]=clamp(.05+.60*moss+.24*Math.sin(z*.55+x*1.33),0,.82);
  soilCapacity[k]=.060+.085*cover[k]+.023*(.5+.5*Math.cos(x*1.7-z*.8));
  permeability[k]=.003+.002*cover[k]+.0007*(.5+.5*Math.sin(x*.9+z*1.4));
+  let basinFactor=0;
+  for(const b of basins){
+    const q=((x-b.x)/b.sx)**2+((z-b.z)/b.sz)**2;
+    basinFactor=Math.max(basinFactor,Math.exp(-2.1*q));
+  }
+  // Parte baixa de textura mais fina; encostas preservam alta permeabilidade.
+  basinHold[k]=clamp(basinFactor*(.90-.18*cover[k]),0,.87);
  const a=new T.Color(h<-.10?'#a47e62':'#b99b7d'),b=new T.Color((h>.52&&moss>.78)?'#777960':'#8d6952');
  a.lerp(b,clamp(.32+v*.45,0,1));for(let m=0;m<3;m++)dry[k*3+m]=colors[k*3+m]=a.toArray()[m];
 }
 baseCapacity.set(soilCapacity);basePermeability.set(permeability);
+for(let k=0;k<size;k++)permeability[k]=basePermeability[k]*1.45;
 landG.setAttribute('color',new T.BufferAttribute(colors,3));landG.computeVertexNormals();
 const land=new T.Mesh(landG,new T.MeshStandardMaterial({map:groundTexture(),vertexColors:true,roughness:1,side:T.DoubleSide}));
-land.receiveShadow=true;land.name='Terra batida e barro dinâmico V12.10';scene.add(land);
+land.receiveShadow=true;land.name='Terra absorvente e barro V12.12';scene.add(land);
 const slab=new T.Mesh(new T.BoxGeometry(W,.52,L),new T.MeshStandardMaterial({color:'#614832',roughness:1}));
 slab.position.y=Math.min(...soil)-.55;slab.receiveShadow=true;scene.add(slab);
 const stones=new T.Group();scene.add(stones);
@@ -114,7 +124,7 @@ const waterM=new T.MeshBasicMaterial({
  vertexColors:true,side:T.DoubleSide,transparent:false,depthWrite:true,toneMapped:false,fog:true
 });
 const water=new T.Mesh(waterG,waterM);
-water.frustumCulled=false;water.renderOrder=3;water.name='Poças e lagoas visíveis V12.10';
+water.frustumCulled=false;water.renderOrder=3;water.name='Poças e lagoas orgânicas V12.12';
 scene.add(water);
 function impactHeightAt(x,z){
  const h=sample(soil,x,z),d=sample(depth,x,z);
@@ -176,7 +186,7 @@ function sample(a,x,z){
 function waterHeight(x,z){return sample(soil,x,z)+sample(depth,x,z);}
 function setSoilType(next){
  soilType=next;
- const cfg={loam:[1,1],loose:[1.18,1.85],clay:[1.35,.24],compacted:[.66,.12]}[next]||[1,1];
+ const cfg={loam:[1,1.45],loose:[1.12,2.30],clay:[1.24,.34],compacted:[.64,.16]}[next]||[1,1.45];
  for(let k=0;k<size;k++){
   soilCapacity[k]=baseCapacity[k]*cfg[0];permeability[k]=basePermeability[k]*cfg[1];
   if(soilMoisture[k]>soilCapacity[k]){depth[k]+=soilMoisture[k]-soilCapacity[k];soilMoisture[k]=soilCapacity[k];}
@@ -227,7 +237,8 @@ let rainStyle='enhanced',time=0,visualTime=0,acc=0,spawnAcc=0,lastUI=0,wetted=0,
 const rainLevels=[0,.32,.63,1,1.57,2.4],rainNames=['Sem chuva','Garoa','Chuva fraca','Chuva moderada','Chuva forte','Temporal intenso'];
 // Chuva ampliada para visualizar a formação no time-lapse, sem criar lagos artificialmente.
 // Chuva moderada: parte infiltra, parte escoa às depressões; temporal ainda pode inundar.
-const rainMeters=[0,.0004,.0012,.0035,.007,.013];
+// Chuva normal menor, poças crescem em depressões e não sobre todo o solo.
+const rainMeters=[0,.00018,.00055,.00170,.0040,.0088];
 function add(x,z,vol){
  const i=Math.round((x+W/2)/dx),j=Math.round((z+L/2)/dz);
  if(i<1||j<1||i>=NX-1||j>=NZ-1)return;
@@ -262,7 +273,7 @@ function hydrologyStep(dt){
   if(enableInfiltration&&depth[k]>.000001){
    const remaining=soilCapacity[k]-soilMoisture[k];
    const intake=Math.min(depth[k],Math.max(0,remaining),
-     permeability[k]*infiltrate*(.08+1.15*(1-sat)**1.4)*dt);
+     permeability[k]*infiltrate*(.13+1.37*(1-sat)**1.4)*(1.65-1.20*basinHold[k])*dt);
    depth[k]-=intake;soilMoisture[k]+=intake;stats.infiltrated+=intake*area;
   }
   // Parte da água sai dos poros superficiais e alimenta a camada subterrânea.
@@ -540,7 +551,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1211'))fail(e.error||e.message);});
-window.arcanoWaterV1211={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1212'))fail(e.error||e.message);});
+window.arcanoWaterV1212={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
