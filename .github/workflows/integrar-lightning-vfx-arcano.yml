@@ -113,13 +113,11 @@ jobs:
               s=s.replace('Ateliê Arcano • 200 magias 3D','Ateliê Arcano • 201 magias 3D')
               p.write_text(s)
           p=hub/'catalogo.html'; s=p.read_text()
-          old='<button onclick="location.href=\'rollshade.html\'">Rollshade</button>'
-          assert old in s
-          s=s.replace(old,old+'<button onclick="location.href=\'lightning.html\'">⚡ Raio 3D</button>',1)
-          old='</section><p class="pill">'
-          addition='''</section><section class="pack"><h3>⚡ Lightning VFX — Three.js · Integrado</h3><p>Raio 3D animado com ramificações, rachaduras, faíscas e impacto. Código original de Sahil K, licença MIT. <b>Incluído no laboratório</b>.</p><a href="lightning.html">Abrir raio 3D ↗</a> · <a href="https://github.com/SahilK-027/Lightning-VFX" target="_blank" rel="noopener">Fonte e licença</a></section><section class="pack"><h3>Binbun — Electric FX e Beam VFX</h3><p>Pacotes Godot 4 com amostras gratuitas sob CC0. Ainda <b>não convertidos para Three.js</b>; efeitos completos possuem versões pagas.</p><a href="https://binbun3d.itch.io/electric-fx" target="_blank" rel="noopener">Electric FX</a> · <a href="https://binbun3d.itch.io/beam-vfx" target="_blank" rel="noopener">Beam VFX</a></section><section class="pack"><h3>REEBOO — Godot 4</h3><p>3 efeitos gratuitos; licença permite uso em jogos, mas proíbe redistribuição do pack. <b>Não incluídos</b>.</p><a href="https://reeboolabs.itch.io/stylized-vfx-godot-free" target="_blank" rel="noopener">Página oficial</a></section><p class="pill">'''
-          assert old in s
-          s=s.replace(old,addition,1)
+          s=s.replace('<a href="rollshade.html">Rollshade · 100</a>','<a href="rollshade.html">Rollshade · 100</a><a href="lightning.html">⚡ Raio 3D</a>',1)
+          extra='''<section class="pack"><h3>⚡ Lightning VFX — integrado</h3><p>Raio animado com ramificações, rachaduras, faíscas e impacto. Three.js; código original Sahil K sob licença MIT.</p><a href="lightning.html">Abrir o efeito 3D ↗</a> · <a href="https://github.com/SahilK-027/Lightning-VFX" target="_blank" rel="noopener">Fonte/licença</a></section><section class="pack"><h3>Binbun — Electric FX e Beam VFX</h3><p>Pacotes nativos Godot 4, com amostras gratuitas sob CC0. Não convertidos nem incluídos nesta versão Three.js.</p><a href="https://binbun3d.itch.io/electric-fx">Electric FX</a> · <a href="https://binbun3d.itch.io/beam-vfx">Beam VFX</a></section><section class="pack"><h3>REEBOO — amostra Godot 4</h3><p>3 efeitos gratuitos para uso em jogos, sem permissão para redistribuir o pack. Não integrados.</p><a href="https://reeboolabs.itch.io/stylized-vfx-godot-free">Ver página oficial</a></section>'''
+          assert '</body>' in s
+          s=s.replace('</body>',extra+'</body>',1)
+          s=s.replace('Os 200 efeitos internos do laboratório','Os 201 efeitos internos do laboratório')
           p.write_text(s)
           readme=Path('atelie-arcano-lightning-vfx/LEIA-ME.md')
           readme.write_text('''# Lightning VFX — integração legal no Ateliê Arcano
