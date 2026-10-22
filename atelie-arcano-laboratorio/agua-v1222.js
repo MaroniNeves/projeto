@@ -17,7 +17,7 @@ const mudRGB=[.18,.11,.075];
 const turbidity=new Float32Array(size);
 const basinHold=new Float32Array(size),shoreField=new Float32Array(size);
 let foamCount=0;
-const soilErosion={loam:.37,loose:1.0,clay:.73,compacted:.13};
+// Erosão agora depende de cada perfil de solo, não de uma chave global obsoleta.
 let soilType='mosaico',totalImpacts=0;
 const baseCapacity=new Float32Array(size),basePermeability=new Float32Array(size);
 // V12.22 — Textura é areia/silte/argila; húmus, calcário, várzea e salinidade
@@ -814,7 +814,7 @@ function waterHeight(x,z){return sample(soil,x,z)+sample(depth,x,z);}
 function setSoilType(next){
  soilType=next==='mosaico'||SOIL_PROFILES[next]?next:'mosaico';
  configureSoilCells(true);
- for(let k=0;k<size;k++)minNutrientAt(k);
+ for(let k=0;k<size;k++)soilHealth[k]=minNutrientAt(k);
  updatePlantVisuals();updateSprouts();
  rebuild();updateInfo(true);
 }
@@ -830,7 +830,7 @@ function addSoilNutrients(){
   soilN[k]=clamp(soilN[k]+.17,0,1.3);
   soilP[k]=clamp(soilP[k]+.17,0,1.3);
   soilK[k]=clamp(soilK[k]+.17,0,1.3);
-  minNutrientAt(k);
+  soilHealth[k]=minNutrientAt(k);
  }
  updatePlantVisuals();updateSprouts();updateInfo(true);
 }
@@ -918,7 +918,7 @@ function seed(m){
  time=0;visualTime=0;acc=0;spawnAcc=0;lastUI=0;
  // Reiniciar no seco, sem poças pré-fabricadas: observar as poças se formando.
  configureSoilCells(false);
- for(let k=0;k<size;k++){soilMoisture[k]=soilCapacity[k]*.22;minNutrientAt(k);}
+ for(let k=0;k<size;k++){soilMoisture[k]=soilCapacity[k]*.22;soilHealth[k]=minNutrientAt(k);}
  updatePlantVisuals();updateSprouts();soilEcologySeconds=0;plantVisualSeconds=0;
  initAtmosphere();updateAtmosphere(0);
  rebuild();updateInfo(true);
@@ -961,14 +961,15 @@ function hydrologyStep(dt){
   depth[k]-=es;stats.evaporated+=es*area;
   const soilEvap=Math.min(soilMoisture[k],.000065*evaporate*dt);
   soilMoisture[k]-=soilEvap;stats.evaporated+=soilEvap*area;
-  const roots=Math.min(soilMoisture[k],cover[k]*.00013*evaporate*dt);
+  const roots=Math.min(soilMoisture[k],cover[k]*(.58+.67*soilPlant[k])*.00013*evaporate*dt);
   soilMoisture[k]-=roots;stats.transpired+=roots*area;
   // Formação progressiva de lama: partículas soltas sob chuva/turbulência.
-  const erosion=soilErosion[soilType]||.37;
+  const profile=SOIL_PROFILES[SOIL_KEYS[soilKeyIndex[k]]];
+  const erosion=profile.erosion*(.85+.15*(1-soilPlant[k]));
   const stirred=depth[k]>.002 ? rain*erosion*(7.0-4.5*cover[k]) : 0;
   const runoffStir=depth[k]>.002 ? erosion*depth[k]*.006*dt : 0;
   const settle=.0026*dt*(1.0+Math.max(0,1.0-erosion));
-  turbidity[k]=clamp(turbidity[k]+stirred+runoffStir-settle,0,({loam:.32,loose:1,clay:.78,compacted:.14}[soilType]||.32));
+  turbidity[k]=clamp(turbidity[k]+stirred+runoffStir-settle,0,clamp(profile.erosion*.90+.12,.16,1));
  }
  flowStep(dt,speed);
 }
@@ -1077,10 +1078,9 @@ function spawnSplash(x,z,h){
  const inWater=sample(depth,x,z)>=SURFACE_RIPPLE;
  const muddy=turbidity[k];
  // Um impacto em poça mobiliza pequenas partículas; água barrenta expele gotículas castanhas.
- if(inWater)turbidity[k]=clamp(turbidity[k]+.0018*(soilErosion[soilType]||.37),0,1);
+ if(inWater)turbidity[k]=clamp(turbidity[k]+.0018*SOIL_PROFILES[SOIL_KEYS[soilKeyIndex[k]]].erosion,0,1);
  const waterTint=new T.Color('#a8c8d6').lerp(new T.Color('#907058'),muddy*.91);
- const dirtTint=new T.Color(soilType==='clay'?'#795743':soilType==='loose'?'#82634c':
-   soilType==='compacted'?'#8e847b':'#90745b');
+ const dirtTint=new T.Color(SOIL_PROFILES[SOIL_KEYS[soilKeyIndex[k]]].col);
  dirtTint.lerp(new T.Color('#584436'),saturation*.45);
  const count=inWater?7+Math.floor(random()*5):
    saturation>.58?4+Math.floor(random()*3):1+Math.floor(random()*3);
@@ -1289,7 +1289,7 @@ function updateInfo(force){
  }
  const asPct=x=>Math.round(clamp(x/size,0,1)*100);
  const mainLimit=limited.indexOf(Math.max(...limited));
- $('fertilityStats').textContent=(soilType==='mosaico'?'Mosaico de '+SOIL_KEYS.length+' perfis':SOIL_PROFILES[soilType].name)+
+ $('fertilityStats').textContent=(soilType==='mosaico'?'Mosaico ecológico ('+SOIL_KEYS.length+' perfis disponíveis)':SOIL_PROFILES[soilType].name)+
   ' · N '+asPct(nAvg)+'% · P '+asPct(pAvg)+'% · K '+asPct(kAvg)+'% · húmus '+asPct(omAvg)+'%';
  $('plantStats').textContent='🌱 Biomassa '+asPct(growthAvg)+'% · condição de crescimento '+asPct(healthAvg)+
   '% · principal limitante: '+SOIL_LIMITS[mainLimit]+' · solo vivo: '+soilUpdates+' atualizações';
@@ -1302,7 +1302,7 @@ function updateInfo(force){
  $('climateStats').textContent='Céu: '+(weatherCfg?weatherCfg.name:'preparando')+
   (climateChoice==='auto'?' (automático)':'')+
   ' · '+Math.round((weatherCfg?weatherCfg.coverage:0)*100)+'% nuvens · sol e reflexos climáticos';
-  $('mudStats').textContent='Sedimentos suspensos: '+Math.round(mudTotal/Math.max(.0001,mudWeight)*100)+'% · '+({loam:'terra comum',loose:'terra solta',clay:'barro argiloso',compacted:'terra compactada'}[soilType]||soilType);
+  $('mudStats').textContent='Sedimentos suspensos: '+Math.round(mudTotal/Math.max(.0001,mudWeight)*100)+'% · '+(soilType==='mosaico'?'mosaico de solos':SOIL_PROFILES[soilType].name);
  // Conta apenas rochas que realmente encontram a lâmina, não rochas sobre terra seca.
  let touchedRocks=0,coveredRocks=0;
  for(const rock of rockSolids){
