@@ -155,20 +155,21 @@ const splashMesh=new T.InstancedMesh(new T.IcosahedronGeometry(.055,0),
 splashMesh.frustumCulled=false;splashMesh.renderOrder=6;splashMesh.count=0;scene.add(splashMesh);
 // Cada gota em uma poça cria duas cristas sucessivas sem planos flutuantes.
 const rippleMaterial=new T.ShaderMaterial({side:T.DoubleSide,transparent:true,depthWrite:false,depthTest:true,
- vertexShader:'attribute float strength; varying float vStrength; void main(){vStrength=strength;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
- fragmentShader:'precision mediump float; varying float vStrength; void main(){if(vStrength<.012)discard;vec3 col=mix(vec3(.42,.68,.74),vec3(.76,.90,.92),min(vStrength,1.));gl_FragColor=vec4(col,clamp(vStrength,0.,.84));}'
+ vertexShader:'attribute float strength; attribute float mud; varying float vStrength; varying float vMud; void main(){vStrength=strength;vMud=mud;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+ fragmentShader:'precision mediump float; varying float vStrength; varying float vMud; void main(){if(vStrength<.012)discard;vec3 col=mix(vec3(.42,.68,.74),vec3(.76,.90,.92),min(vStrength,1.));col=mix(col,vec3(.66,.49,.32),clamp(vMud,0.,1.)*.87);gl_FragColor=vec4(col,clamp(vStrength,0.,.84));}'
 });
 const RIPPLE_SEG=32,ripplePool=[];
 function ringGeometry(){
  // Dois anéis, três vértices em cada seção: borda - crista - borda.
  const g=new T.BufferGeometry(),p=new Float32Array((RIPPLE_SEG+1)*6*3);
- const strengths=new Float32Array((RIPPLE_SEG+1)*6),tri=[];
+ const strengths=new Float32Array((RIPPLE_SEG+1)*6),muds=new Float32Array((RIPPLE_SEG+1)*6),tri=[];
  for(let n=0;n<RIPPLE_SEG;n++)for(let band=0;band<2;band++){
   const k=n*6+band*3,j=(n+1)*6+band*3;
   for(let e=0;e<2;e++)tri.push(k+e,j+e,k+e+1,k+e+1,j+e,j+e+1);
  }
  g.setAttribute('position',new T.BufferAttribute(p,3).setUsage(T.DynamicDrawUsage));
  g.setAttribute('strength',new T.BufferAttribute(strengths,1).setUsage(T.DynamicDrawUsage));
+ g.setAttribute('mud',new T.BufferAttribute(muds,1).setUsage(T.DynamicDrawUsage));
  g.setIndex(tri);return g;
 }
 for(let i=0;i<MAX_RIPPLES;i++){
@@ -195,12 +196,12 @@ function setSoilType(next){
 }
 // Ondas no solo são marcas baixas e curtas; em poças há dois anéis que se espalham.
 const groundRippleMaterial=rippleMaterial.clone();
-groundRippleMaterial.fragmentShader='precision mediump float; varying float vStrength; void main(){if(vStrength<.018)discard;gl_FragColor=vec4(.35,.25,.17,clamp(vStrength*.65,0.,.37));}';
+groundRippleMaterial.fragmentShader='precision mediump float; varying float vStrength; void main(){if(vStrength<.018)discard;gl_FragColor=vec4(.53,.37,.24,clamp(vStrength*.72,0.,.43));}';
 function updateRipples(dt){
  for(let i=ripples.length-1;i>=0;i--){
   const r=ripples[i];r.age+=dt;
   if(r.age>=r.life){r.mesh.visible=false;ripples.splice(i,1);continue;}
-  const mesh=r.mesh,g=mesh.geometry,p=g.attributes.position.array,fade=g.attributes.strength.array;
+  const mesh=r.mesh,g=mesh.geometry,p=g.attributes.position.array,fade=g.attributes.strength.array,mud=g.attributes.mud.array;
   const phase=r.age/r.life,liquid=r.kind==='water';
   const outer=liquid?(.045+phase*.94):(.012+phase*.19);
   const inner=liquid?(.025+Math.max(0,phase-.15)*.82):0;
@@ -221,12 +222,13 @@ function updateRipples(dt){
      p[k*3]=x;p[k*3+1]=y+(liquid?.026:.011);p[k*3+2]=z;
      const allowed=!edge&&!rockAt(x,z)&&(!liquid||waterHere>.014)&&(!(!liquid&&waterHere>.015));
      fade[k]=(allowed&&e===1&&strength>.01)?strength:0;
+     mud[k]=liquid?sample(turbidity,x,z):0;
      visible+=fade[k];
     }
    }
   }
   mesh.visible=visible>.02;
-  g.attributes.position.needsUpdate=true;g.attributes.strength.needsUpdate=true;
+  g.attributes.position.needsUpdate=true;g.attributes.strength.needsUpdate=true;g.attributes.mud.needsUpdate=true;
  }
 }
 const dropObj=new T.Object3D(),splashObj=new T.Object3D();
