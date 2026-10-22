@@ -1068,9 +1068,14 @@ async function loadUltimatePack(){
   if(!ultimaEnabled){ultimaState='desligado neste dispositivo';return;}
   const {FBXLoader}=await import('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/FBXLoader.js');
   const loader=new FBXLoader();
-  const maxCount=mobile?3:8;
+  const maxCount=mobile?4:8;
+  const priority=['BirchTrees.fbx','Normal Trees.fbx','MapleTrees.fbx','PineTrees.fbx',
+   'FlowerBushes.fbx','Flowers.fbx','Grass.fbx','Rocks.fbx','Bushes.fbx',
+   'DeadTrees.fbx','MoreDeadTrees.fbx','PalmTrees.fbx'];
+  const sortedAssets=manifest.assets.slice().sort((a,b)=>
+    priority.indexOf(a.file)-priority.indexOf(b.file));
   let attempts=0;
-  for(const entry of manifest.assets){
+  for(const entry of sortedAssets){
    if(attempts>=maxCount)break;
    if(!entry||!entry.file||!entry.kind)continue;
    // Carrega menos árvores compostas e mais grupos de folhagem/rochas.
@@ -1098,8 +1103,15 @@ async function loadUltimatePack(){
       for(const mat of mats){
        if(!mat)continue;
        mat.side=T.DoubleSide;
-       if(mat.color&&mat.color.getHex&&mat.color.getHex()===0xffffff&&
-         !mat.map)mat.color.set(entry.kind==='rock'?'#929388':'#86a778');
+       const name=(mat.name||'').toLowerCase();
+       if(mat.color&&!mat.map){
+        if(/bark|wood|trunk|stem/.test(name))mat.color.set('#89644c');
+        else if(/flower|petal|rose/.test(name))mat.color.set('#df9ba7');
+        else if(/leaf|leaves|foliage|fern|grass|bush/.test(name))mat.color.set('#86b47a');
+        else if(/rock|stone/.test(name)||entry.kind==='rock')mat.color.set('#949588');
+        else if(mat.color.getHex&&mat.color.getHex()===0xffffff)
+         mat.color.set(entry.kind==='flowers'?'#e8aaad':'#82a777');
+       }
        mat.roughness=.97;
       }
       addLeafWind(mesh);
