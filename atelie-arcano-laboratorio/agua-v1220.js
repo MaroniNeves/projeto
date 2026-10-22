@@ -570,7 +570,7 @@ function displayWaterHeightAt(x,z){
  return h+(d>=SURFACE_VISIBLE?d+.015:.010);
 }
 // Gotas físicas visuais: cilindro alongado, brilho em pixels e halos suaves.
-const MAX_DROPS=mobile?230:420,MAX_SPLASH=mobile?160:260,MAX_RIPPLES=mobile?32:54;
+const MAX_DROPS=mobile?490:950,MAX_SPLASH=mobile?205:340,MAX_RIPPLES=mobile?38:64;
 const drops=[],splashes=[],ripples=[],dropPos=new Float32Array(MAX_DROPS*3);
 const dropG=new T.BufferGeometry();dropG.setAttribute('position',new T.BufferAttribute(dropPos,3));
 const dropTexture=(()=>{const c=document.createElement('canvas');c.width=c.height=64;
@@ -882,38 +882,48 @@ function spawnSplash(x,z,h){
  }
 }
 function dropStep(dt){
+ const severe=stormActive();
  const rainfall=physicalWeather
-  ?(level===0?0:clamp(atmRainMean/.0028,0,2.5)*1.45)
-  :rainLevels[level]*(mode==='storm'?1.4:1);
- spawnAcc+=rainfall*(mobile?155:230)*dt;
- const toSpawn=Math.min(55,Math.floor(spawnAcc));spawnAcc-=toSpawn;
+  ?(level===0?0:clamp(atmRainMean/(severe?.004:.0028),0,severe?4.0:2.5)*
+      (severe?2.8:1.45))
+  :rainLevels[level]*(severe?3.5:1);
+ spawnAcc+=rainfall*(mobile?185:265)*dt;
+ const toSpawn=Math.min(severe?(mobile?95:145):65,Math.floor(spawnAcc));
+ spawnAcc-=toSpawn;
+ spawnAcc=Math.min(spawnAcc,MAX_DROPS*1.0);
  for(let k=0;k<toSpawn&&drops.length<MAX_DROPS;k++){
   const x=(random()-.5)*(W-.8),z=(random()-.5)*(L-.8);
   if(physicalWeather&&random()>clamp(atmosphereRainAt(x,z)/Math.max(.00005,atmRainPeak),0,1))continue;
-  drops.push({x,z,y:2.2+random()*4.3,speed:4.4+random()*3.2,stretch:.70+random()*.75});
+  drops.push({x,z,y:2.5+random()*4.8,
+   speed:severe?8.8+random()*4.8:4.4+random()*3.2,
+   stretch:severe?1.35+random()*1.25:.70+random()*.75});
  }
  const factor=1+Math.log2(timeScale)*.12;
  let displayedImpacts=0;
  for(let i=drops.length-1;i>=0;i--){
   const d=drops[i];d.y-=d.speed*dt*factor;
   if(physicalWeather){
-   d.x+=Math.cos(atmWindHeading)*atmWindMean*dt*.25;
-   d.z+=Math.sin(atmWindHeading)*atmWindMean*dt*.25;
+   const gust=severe?(.58+.22*Math.sin(weatherTime*2.1+d.z*.7)):.25;
+   d.x+=Math.cos(atmWindHeading)*atmWindMean*dt*gust;
+   d.z+=Math.sin(atmWindHeading)*atmWindMean*dt*gust;
   }
   const gh=impactHeightAt(d.x,d.z);
   if(d.y<=gh){
-   if(displayedImpacts<5){spawnSplash(d.x,d.z,gh);displayedImpacts++;}
+   if(displayedImpacts<(severe?13:5)){spawnSplash(d.x,d.z,gh);displayedImpacts++;}
    drops[i]=drops[drops.length-1];drops.pop();
   }
  }
  const enhanced=rainStyle==='enhanced';
- streak.material.opacity=enhanced?.67:.46;
- halo.material.size=enhanced?(mobile?10:9):(mobile?7:6);
- halo.material.opacity=enhanced?.49:.31;
+ streak.material.opacity=severe?.71:enhanced?.67:.46;
+ halo.material.size=severe?(mobile?6.8:6.3):enhanced?(mobile?10:9):(mobile?7:6);
+ halo.material.opacity=severe?.36:enhanced?.49:.31;
  for(let i=0;i<drops.length;i++){
   const d=drops[i],o=i*3;dropPos[o]=d.x;dropPos[o+1]=d.y-.1;dropPos[o+2]=d.z;
-  dropObj.position.set(d.x,d.y,d.z);dropObj.rotation.set(0,0,-.095);
-  dropObj.scale.set(enhanced?1.05:.78,enhanced?d.stretch*.90:d.stretch*.7,enhanced?1.05:.78);
+  dropObj.position.set(d.x,d.y,d.z);const windSlant=severe?clamp(atmWindMean*.14,0,.36):.095;
+  dropObj.rotation.set(severe?windSlant*Math.sin(atmWindHeading):0,0,
+    -windSlant*Math.cos(atmWindHeading));
+  dropObj.scale.set(severe?.83:enhanced?1.05:.78,
+    severe?d.stretch*1.12:enhanced?d.stretch*.90:d.stretch*.7,severe?.83:enhanced?1.05:.78);
   dropObj.updateMatrix();streak.setMatrixAt(i,dropObj.matrix);
  }
  dropG.setDrawRange(0,drops.length);dropG.attributes.position.needsUpdate=true;
