@@ -117,6 +117,11 @@ function applyClimate(next){
  }
  // Nuvens e iluminação mudaram: a próxima captura precisa refletir o clima novo.
  if(typeof reflectionAge!=='undefined')reflectionAge=999;
+ // Ao mudar o céu, descarte a segunda captura antiga antes de atualizá-la novamente.
+ if(typeof reflection2Ready!=='undefined'){
+  reflection2Ready=false;reflectionTurn=0;
+  if(typeof waterM!=='undefined')waterM.uniforms.uDualProbes.value=0;
+ }
  if($('climateStats'))$('climateStats').textContent=
   'Céu: '+c.name+' · '+Math.round(c.coverage*100)+'% de nuvens · reflexos ajustados ao clima';
 }
