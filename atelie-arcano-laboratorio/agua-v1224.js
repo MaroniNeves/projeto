@@ -516,15 +516,18 @@ function updateGroundFog(dt){
   fogDewGap=Math.max(0,surfaceTemperature-dewPointCelsius(atmTempMean,nearGroundRH));
   const saturation=clamp((2.5-fogDewGap)/2.5,0,1);
   const recentWet=clamp(fogRainMemory*.85+Math.max(0,fogWetness-.45)*1.3,0,1);
+  const postRain=clamp(fogRainMemory/.16,0,1);
+  const humidityReady=clamp((nearGroundRH-.86)/.11,0,1);
   const windCalm=clamp((1.18-atmWindMean)/.80,0,1);
   const nearDawn=clamp(nightCooling*.83+(1-daySun)*.17,0,1);
   // Nuvens devem ter aberto parcialmente para permitir resfriamento radiativo.
-  const conditions=saturation*recentWet*windCalm*clearing*nearDawn;
+  const conditions=saturation*recentWet*postRain*humidityReady*windCalm*clearing*nearDawn;
   fogTarget=clamp(conditions*1.65,0,.88);
   if(!fogEnabled)fogCause='desligada';
   else if(stormActive()||climate==='storm')fogCause='temporal: sem neblina';
   else if(rainNow)fogCause='chovendo: sem neblina';
-  else if(fogRainMemory<.06&&fogWetness<.60)fogCause='aguardando solo úmido';
+  else if(fogRainMemory<.06)fogCause='aguardando chuva anterior';
+  else if(nearGroundRH<.86)fogCause='umidade perto do chão insuficiente';
   else if(atmWindMean>1.05)fogCause='vento dispersou a neblina';
   else if(fogDewGap>2.5)fogCause='ar acima do ponto de orvalho';
   else if(daySun>.45)fogCause='sol aquece o solo';
