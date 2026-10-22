@@ -108,9 +108,17 @@ jobs:
               p=hub/page; s=p.read_text()
               label='<button type="button" data-hub="catalogo.html">Outros packs</button>'
               assert label in s, f'{page}: cannot locate tab selector'
-              s=s.replace(label,'<button type="button" data-hub="lightning.html">⚡ Raio 3D</button>\n'+label,1)
+              # Current live V10 uses data-mode and brand "Arcano 120".
+              s=s.replace('data-hub="catalogo.html"','data-mode="catalogo.html"',1)
+              s=s.replace('<button type="button" data-mode="catalogo.html">Outros packs</button>','<button type="button" data-mode="lightning.html">⚡ Raio</button><button type="button" data-mode="catalogo.html">Packs</button>',1)
+              s=s.replace('✦ Arcano 120','✦ Arcano 201',1)
               s=s.replace('✦ Arcano <span aria-hidden="true">200</span>','✦ Arcano <span aria-hidden="true">201</span>')
               s=s.replace('Ateliê Arcano • 200 magias 3D','Ateliê Arcano • 201 magias 3D')
+              # Compact four tabs for 360px Android screens.
+              s=s.replace('V8 · 100</button>','V8</button>',1)
+              s=s.replace('Rollshade · 100</button>','Rollshade</button>',1)
+              compact='<style id="arcano-v101-tabs">.arcano-hubnav{gap:4px!important;padding:4px 5px!important}.arcano-hubnav strong{font-size:11px!important;flex:1 1 auto!important;min-width:45px!important}.arcano-hubnav button{font-size:11px!important;padding:5px 6px!important;min-width:0!important}</style>'
+              s=s.replace('</head>',compact+'</head>',1)
               p.write_text(s)
           p=hub/'catalogo.html'; s=p.read_text()
           s=s.replace('<a href="rollshade.html">Rollshade · 100</a>','<a href="rollshade.html">Rollshade · 100</a><a href="lightning.html">⚡ Raio 3D</a>',1)
