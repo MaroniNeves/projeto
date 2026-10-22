@@ -1241,6 +1241,8 @@ $('physicalWeather').addEventListener('change',e=>{
 });
 $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo(true);});
 $('soilType').addEventListener('change',e=>setSoilType(e.target.value));
+$('addOrganic').addEventListener('click',addSoilOrganic);
+$('addNutrients').addEventListener('click',addSoilNutrients);
 for(const btn of document.querySelectorAll('[data-mode]'))btn.addEventListener('click',()=>setMode(btn.dataset.mode));
 function setMode(next){
  mode=next;level=next==='storm'?5:next==='lagoon'?3:next==='puddle'?3:3;
@@ -1279,6 +1281,18 @@ function updateInfo(force){
   :'Escala '+level+'/5 · chuva manual '+name)+
    ' • '+timeScale+'× • '+drops.length+' gotas 3D';
  $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
+ let nAvg=0,pAvg=0,kAvg=0,omAvg=0,growthAvg=0,healthAvg=0;
+ const limited=new Array(SOIL_LIMITS.length).fill(0);
+ for(let k=0;k<size;k++){
+  nAvg+=soilN[k];pAvg+=soilP[k];kAvg+=soilK[k];omAvg+=soilOrganic[k];
+  growthAvg+=soilPlant[k];healthAvg+=soilHealth[k];limited[soilLimiting[k]]++;
+ }
+ const asPct=x=>Math.round(clamp(x/size,0,1)*100);
+ const mainLimit=limited.indexOf(Math.max(...limited));
+ $('fertilityStats').textContent=(soilType==='mosaico'?'Mosaico de '+SOIL_KEYS.length+' perfis':SOIL_PROFILES[soilType].name)+
+  ' · N '+asPct(nAvg)+'% · P '+asPct(pAvg)+'% · K '+asPct(kAvg)+'% · húmus '+asPct(omAvg)+'%';
+ $('plantStats').textContent='🌱 Biomassa '+asPct(growthAvg)+'% · condição de crescimento '+asPct(healthAvg)+
+  '% · principal limitante: '+SOIL_LIMITS[mainLimit]+' · solo vivo: '+soilUpdates+' atualizações';
  $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
  $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
  $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondas · '+foamCount+' manchas de espuma/sujeira';
@@ -1348,6 +1362,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1222'))fail(e.error||e.message);});
-window.arcanoWaterV1222={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.arcanoWaterV1222={scene,renderer,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
