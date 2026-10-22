@@ -1,0 +1,17 @@
+{
+  "name": "atelie-arcano-rollshade-100",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 0.0.0.0"
+  },
+  "dependencies": {
+    "rollshade": "0.6.0",
+    "three": "0.186.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.3"
+  }
+}
