@@ -530,14 +530,48 @@ function rebuild(){
   const up=idx(i,Math.max(0,j-1)),down=idx(i,Math.min(NZ-1,j+1));
   flow[k*2]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
   flow[k*2+1]=(soil[up]+depth[up]-soil[down]-depth[down])*.6;
-  const muddy=clamp(turbidity[k]*.89,0,.89);
-  const wave=.5+.5*Math.sin(x*11+z*8-visualTime*2.7),hi=.10+.09*wave;
+  // A cor da água depende da profundidade REAL, não só do nível de molhado do solo.
+  // Perto da margem: verde-água luminoso. No meio: ciano. Nas bacias: azul profundo.
+  const middle=clamp((d-SURFACE_VISIBLE)/.052,0,1);
+  const deep=clamp((d-.058)/.18,0,1);
+  const abyss=clamp((d-.20)/.26,0,1);
+  const shore=1-clamp((d-SURFACE_VISIBLE)/.018,0,1);
+  const muddiness=clamp(turbidity[k]*.87,0,.87);
+  const glimmer=.50+.50*Math.sin(x*7.1+z*9.3-visualTime*2.0);
   for(let m=0;m<3;m++){
-   const clear=waterClearRGB[m]*(1-hi)+waterBrightRGB[m]*hi;
-   waterVertexColors[k*3+m]=clear*(1-muddy)+waterMudRGB[m]*muddy;
+   let col=waterShallowRGB[m]*(1-middle)+waterMidRGB[m]*middle;
+   col=col*(1-deep)+waterDeepRGB[m]*deep;
+   col=col*(1-abyss*.82)+waterAbyssRGB[m]*abyss*.82;
+   const rimMix=shore*.38*(1-muddiness*.72);
+   col=col*(1-rimMix)+waterRimRGB[m]*rimMix;
+   col=clamp(col*(.95+glimmer*.085),0,1);
+   waterVertexColors[k*3+m]=col*(1-muddiness)+waterMudRGB[m]*muddiness;
   }
-  const moist=showWet?clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k])*.95+wet[k]*.28,0,.94):0;
-  for(let m=0;m<3;m++)colors[k*3+m]=dry[k*3+m]*(1-moist)+mudRGB[m]*moist;
+ }
+ // Solo seco -> úmido -> encharcado. A terra diretamente na beira da poça
+ // recebe uma faixa escura de umidade que diminui gradualmente em 2-3 células.
+ for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
+  const k=idx(i,j);
+  const sat=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
+  const moist=showWet?clamp(sat*.84+wet[k]*.16,0,.95):0;
+  let shoreDamp=0;
+  if(showWet&&depth[k]<SURFACE_VISIBLE){
+   for(let oy=-2;oy<=2;oy++)for(let ox=-2;ox<=2;ox++){
+    const ix=i+ox,iz=j+oy;
+    if(ix<0||iz<0||ix>=NX||iz>=NZ)continue;
+    const other=idx(ix,iz),w=depth[other];
+    if(blocked[other]||w<SURFACE_VISIBLE)continue;
+    const dist=Math.hypot(ox*dx,oy*dz);
+    const proximity=clamp(1-dist/.82,0,1);
+    const extent=clamp(w/.030,0,1);
+    shoreDamp=Math.max(shoreDamp,proximity*extent);
+   }
+  }
+  const dark=clamp(shoreDamp*(.53+.25*sat),0,.72);
+  for(let m=0;m<3;m++){
+   const base=dry[k*3+m]*(1-moist)+mudRGB[m]*moist;
+   colors[k*3+m]=base*(1-dark)+wetShoreRGB[m]*dark;
+  }
  }
  for(let j=0;j<NZ-1;j++)for(let i=0;i<NX-1;i++){
   const a=idx(i,j),b=a+1,c=a+NX,d=c+1;
@@ -545,7 +579,7 @@ function rebuild(){
  }
  waterG.setDrawRange(0,waterVertexCount);
  waterG.attributes.position.needsUpdate=true;
- waterG.attributes.color.needsUpdate=true;landG.attributes.color.needsUpdate=true;
+ waterG.attributes.color.needsUpdate=true;waterG.attributes.uv.needsUpdate=true;landG.attributes.color.needsUpdate=true;
  wetted=count*area;
  // Espuma e folhas sujas somente em faixas localizadas de água rasa e calma.
  if(showFoam)for(let j=1;j<NZ-1&&foamCount<foamLimit;j++)for(let i=1;i<NX-1&&foamCount<foamLimit;i++){
@@ -746,6 +780,7 @@ let last=performance.now();function loop(now){
   let steps=0;while(acc>=step&&steps<12){hydrologyStep(step);acc-=step;steps++;}
   if(acc>step*14)acc=step*14;
   if(++frame%2===0)rebuild();
+  causticTexture.offset.set(visualTime*.0055,visualTime*.0036);
   updateInfo(false);
  }
  setView();renderer.render(scene,camera);
