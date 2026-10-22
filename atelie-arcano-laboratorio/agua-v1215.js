@@ -454,71 +454,58 @@ function flowStep(dt,multiplier){
  }
 }
 function rebuild(){
- let count=0;waterVertexCount=0;foamCount=0;
+ let count=0;foamCount=0;
+ // A grade física só controla profundidade, escoamento e infiltração.
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
   const k=idx(i,j),d=depth[k],x=nx(i),z=nz(j);
-  // Irregularidade de contorno apenas visual: não produz água adicional.
-  const shoreNoise=.0017*Math.sin(x*3.9+z*4.2)+.0011*Math.sin(x*8.7-z*5.1);
-  shoreField[k]=blocked[k]?-.25:d-SURFACE_VISIBLE-shoreNoise;
+  shoreField[k]=blocked[k]?-.25:d-SURFACE_VISIBLE-
+    .0017*Math.sin(x*3.9+z*4.2)-.0011*Math.sin(x*8.7-z*5.1);
   wet[k]=clamp((d-.002)/.014,0,1);
   if(d>=SURFACE_VISIBLE&&!blocked[k])count++;
   const left=idx(Math.max(0,i-1),j),right=idx(Math.min(NX-1,i+1),j);
   const up=idx(i,Math.max(0,j-1)),down=idx(i,Math.min(NZ-1,j+1));
-  flow[k*2]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
-  flow[k*2+1]=(soil[up]+depth[up]-soil[down]-depth[down])*.6;
-  // A cor da água depende da profundidade REAL, não só do nível de molhado do solo.
-  // Perto da margem: verde-água luminoso. No meio: ciano. Nas bacias: azul profundo.
-  const middle=clamp((d-SURFACE_VISIBLE)/.052,0,1);
-  const deep=clamp((d-.058)/.18,0,1);
-  const abyss=clamp((d-.20)/.26,0,1);
-  const shore=1-clamp((d-SURFACE_VISIBLE)/.018,0,1);
-  const muddiness=clamp(turbidity[k]*.87,0,.87);
-  const glimmer=.50+.50*Math.sin(x*7.1+z*9.3-visualTime*2.0);
-  for(let m=0;m<3;m++){
-   let col=waterShallowRGB[m]*(1-middle)+waterMidRGB[m]*middle;
-   col=col*(1-deep)+waterDeepRGB[m]*deep;
-   col=col*(1-abyss*.82)+waterAbyssRGB[m]*abyss*.82;
-   const rimMix=shore*.38*(1-muddiness*.72);
-   col=col*(1-rimMix)+waterRimRGB[m]*rimMix;
-   col=clamp(col*(.95+glimmer*.085),0,1);
-   waterVertexColors[k*3+m]=col*(1-muddiness)+waterMudRGB[m]*muddiness;
-  }
+  flow[k*2]=flowXField[k]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
+  flow[k*2+1]=flowZField[k]=(soil[up]+depth[up]-soil[down]-depth[down])*.6;
  }
- // Solo seco -> úmido -> encharcado. A terra diretamente na beira da poça
- // recebe uma faixa escura de umidade que diminui gradualmente em 2-3 células.
+ // Faixa de margem encharcada, sem adicionar volume de água ao modelo.
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
   const k=idx(i,j);
   const sat=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
-  const moist=showWet?clamp(sat*.84+wet[k]*.16,0,.95):0;
+  const damp=showWet?clamp(sat*.84+wet[k]*.16,0,.95):0;
   let shoreDamp=0;
   if(showWet&&depth[k]<SURFACE_VISIBLE){
    for(let oy=-2;oy<=2;oy++)for(let ox=-2;ox<=2;ox++){
-    const ix=i+ox,iz=j+oy;
-    if(ix<0||iz<0||ix>=NX||iz>=NZ)continue;
-    const other=idx(ix,iz),w=depth[other];
-    if(blocked[other]||w<SURFACE_VISIBLE)continue;
+    const ix=i+ox,iz=j+oy;if(ix<0||iz<0||ix>=NX||iz>=NZ)continue;
+    const other=idx(ix,iz),h=depth[other];
+    if(blocked[other]||h<SURFACE_VISIBLE)continue;
     const dist=Math.hypot(ox*dx,oy*dz);
-    const proximity=clamp(1-dist/.82,0,1);
-    const extent=clamp(w/.030,0,1);
-    shoreDamp=Math.max(shoreDamp,proximity*extent);
+    shoreDamp=Math.max(shoreDamp,clamp(1-dist/.82,0,1)*clamp(h/.030,0,1));
    }
   }
   const dark=clamp(shoreDamp*(.53+.25*sat),0,.72);
   for(let m=0;m<3;m++){
-   const base=dry[k*3+m]*(1-moist)+mudRGB[m]*moist;
-   colors[k*3+m]=base*(1-dark)+wetShoreRGB[m]*dark;
+   const base=dry[k*3+m]*(1-damp)+mudRGB[m]*damp;
+   colors[k*3+m]=base*(1-dark)+[.22,.11,.07][m]*dark;
   }
  }
- for(let j=0;j<NZ-1;j++)for(let i=0;i<NX-1;i++){
-  const a=idx(i,j),b=a+1,c=a+NX,d=c+1;
-  appendCutTriangle(a,c,b);appendCutTriangle(b,c,d);
- }
- waterG.setDrawRange(0,waterVertexCount);
- waterG.attributes.position.needsUpdate=true;
- waterG.attributes.color.needsUpdate=true;waterG.attributes.uv.needsUpdate=true;landG.attributes.color.needsUpdate=true;
+ landG.attributes.color.needsUpdate=true;
  wetted=count*area;
- // Espuma e folhas sujas somente em faixas localizadas de água rasa e calma.
- if(showFoam)for(let j=1;j<NZ-1&&foamCount<foamLimit;j++)for(let i=1;i<NX-1&&foamCount<foamLimit;i++){
+ // A malha visual 2-3× mais densa interpola os dados; não gera quadrados da grade antiga.
+ for(let j=0;j<VIS_NZ;j++)for(let i=0;i<VIS_NX;i++){
+  const k=j*VIS_NX+i,x=wx(i),z=wz(j),d=sample(depth,x,z);
+  waterPositions[k*3+1]=sample(soil,x,z)+d+.010;
+  waterDepths[k]=d;
+  waterMud[k]=sample(turbidity,x,z);
+  waterFlow[k*2]=sample(flowXField,x,z);
+  waterFlow[k*2+1]=sample(flowZField,x,z);
+ }
+ waterG.attributes.position.needsUpdate=true;
+ waterG.attributes.waterDepth.needsUpdate=true;
+ waterG.attributes.mudAmount.needsUpdate=true;
+ waterG.attributes.waterFlow.needsUpdate=true;
+ // Espuma localizada apenas em alguns trechos calmos da margem.
+ if(showFoam)for(let j=1;j<NZ-1&&foamCount<foamLimit;j++)
+ for(let i=1;i<NX-1&&foamCount<foamLimit;i++){
   const k=idx(i,j),v=depth[k];if(blocked[k]||v<SURFACE_VISIBLE+.002||v>.071)continue;
   const edge=Math.min(shoreField[k-1],shoreField[k+1],shoreField[k-NX],shoreField[k+NX]);
   if(edge>.003)continue;
@@ -716,7 +703,8 @@ let last=performance.now();function loop(now){
   let steps=0;while(acc>=step&&steps<12){hydrologyStep(step);acc-=step;steps++;}
   if(acc>step*14)acc=step*14;
   if(++frame%2===0)rebuild();
-  causticTexture.offset.set(visualTime*.0055,visualTime*.0036);
+  waterM.uniforms.uTime.value=visualTime;
+  updateReflections(dt);
   updateInfo(false);
  }
  setView();renderer.render(scene,camera);
