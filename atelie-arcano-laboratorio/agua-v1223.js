@@ -710,6 +710,62 @@ const FOREST_MODELS=[
  {name:'Fern_1',type:'fern',mobile:5,desktop:12,height:.61},
  {name:'Rock_Medium_2',type:'rock',mobile:5,desktop:8,height:.70}
 ];
+// Gramado fino instanciado: 2 lâminas cruzadas por tufo, com degradê de cor.
+function makeMeadowBlade(){
+ const points=[],indices=[],shades=[];
+ for(const a of [0,Math.PI*.53]){
+  const c=Math.cos(a),sn=Math.sin(a),offset=points.length/3;
+  const verts=[[-.071,0,0],[.071,0,0],[-.041,.13,0],[.036,.15,0],
+               [.018,.31,.01]];
+  for(const [x,y,z] of verts){
+   points.push(x*c+z*sn,y,-x*sn+z*c);
+   const t=y/.31;shades.push(.40+.25*t,.55+.27*t,.31+.14*t);
+  }
+  indices.push(offset,offset+1,offset+2,offset+1,offset+3,offset+2,
+   offset+2,offset+3,offset+4);
+ }
+ const g=new T.BufferGeometry();
+ g.setAttribute('position',new T.Float32BufferAttribute(points,3));
+ g.setAttribute('color',new T.Float32BufferAttribute(shades,3));
+ g.setIndex(indices);g.computeVertexNormals();return g;
+}
+const meadowCount=mobile?390:920,meadowObj=new T.Object3D(),meadowAnchors=[];
+const meadowMesh=new T.InstancedMesh(makeMeadowBlade(),
+ new T.MeshLambertMaterial({color:'#ffffff',vertexColors:true,side:T.DoubleSide}),
+ meadowCount);
+const meadowRng=rand(93012);
+meadowMesh.count=0;meadowMesh.name='Gramado painterly denso — instâncias';
+for(let n=0;n<meadowCount*3&&meadowMesh.count<meadowCount;n++){
+ const x=(meadowRng()-.5)*(W-1.0),z=(meadowRng()-.5)*(L-1.0);
+ const y=elevation(x,z);
+ if(y<-.21||rockAt(x,z))continue;
+ const cell=idx(clamp(Math.round((x+W*.5)/dx),0,NX-1),
+  clamp(Math.round((z+L*.5)/dz),0,NZ-1));
+ const density=clamp(.25+cover[cell]*.75,0,1);
+ if(meadowRng()>density)continue;
+ const size=.42+meadowRng()*1.55,rot=meadowRng()*6.283;
+ meadowAnchors.push({x,z,size,rot,k:cell});
+ meadowObj.position.set(x,y+.008,z);
+ meadowObj.scale.set(size,size,size);meadowObj.rotation.set(0,rot,0);
+ meadowObj.updateMatrix();
+ meadowMesh.setMatrixAt(meadowMesh.count,meadowObj.matrix);
+ const color=new T.Color(['#84a762','#6f9c57','#a2b575','#689866'][Math.floor(meadowRng()*4)]);
+ meadowMesh.setColorAt(meadowMesh.count,color);
+ meadowMesh.count++;
+}
+meadowMesh.instanceMatrix.needsUpdate=true;
+if(meadowMesh.instanceColor)meadowMesh.instanceColor.needsUpdate=true;
+meadowMesh.frustumCulled=false;forestGroup.add(meadowMesh);
+function updateMeadowHealth(){
+ const green=new T.Color('#85ab69'),dryColor=new T.Color('#a8a076');
+ for(let i=0;i<meadowAnchors.length;i++){
+  const a=meadowAnchors[i],health=clamp(soilHealth[a.k],0,1);
+  const c=dryColor.clone().lerp(green,health);
+  meadowMesh.setColorAt(i,c);
+ }
+ if(meadowMesh.instanceColor)meadowMesh.instanceColor.needsUpdate=true;
+}
+
 function forestStatus(state){
  floraState=state;
  if($('floraStatus'))$('floraStatus').textContent=
@@ -789,6 +845,7 @@ async function loadPainterlyForest(){
  }
 }
 function updateForestHealth(){
+ updateMeadowHealth();
  for(const a of forestInstances){
   if(a.type==='rock'||a.type==='tree'||a.type==='pine')continue;
   const i=clamp(Math.round((a.x+W*.5)/dx),0,NX-1);
