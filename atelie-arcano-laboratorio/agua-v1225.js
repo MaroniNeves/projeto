@@ -906,6 +906,7 @@ function forestStatus(state){
 }
 function setFloraVisible(v){
  floraWanted=!!v;forestGroup.visible=floraWanted&&floraLoaded>0;
+ ultimateCollection.visible=ultimaEnabled&&ultimaLoaded>0;
  grass.visible=!forestGroup.visible;sproutGroup.visible=!forestGroup.visible;
  if($('floraToggle'))$('floraToggle').checked=floraWanted;
  forestStatus(floraWanted?(floraLoaded?'ativos':'carregando'):'vegetação clássica');
@@ -1041,6 +1042,82 @@ async function loadPainterlyForest(){
   floraWanted=false;forestStatus('fallback: vegetação original');
  }
 }
+// Ultimate Stylized Nature: carrega diretamente os arquivos FBX que o usuário
+// enviou quando existe o pacote local assets/ultimate/manifest.json.
+// Na hospedagem GitHub, na ausência desse diretório, o MegaKit continua ativo.
+let ultimateLoading=false,ultimateAvailable=false;
+async function loadUltimatePack(){
+ if(ultimateLoading||ultimaLoaded>0)return;
+ ultimateLoading=true;
+ try{
+  const response=await fetch('./assets/ultimate/manifest.json',{cache:'no-cache'});
+  if(!response.ok){ultimaState='pacote extra disponível na edição local';return;}
+  const manifest=await response.json();
+  if(!manifest||!Array.isArray(manifest.assets)||manifest.assets.length===0)
+    throw new Error('Manifest Ultimate vazio');
+  ultimateAvailable=true;
+  if(!ultimaEnabled){ultimaState='desligado neste dispositivo';return;}
+  const {FBXLoader}=await import('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/FBXLoader.js');
+  const loader=new FBXLoader();
+  const maxCount=mobile?3:8;
+  let attempts=0;
+  for(const entry of manifest.assets){
+   if(attempts>=maxCount)break;
+   if(!entry||!entry.file||!entry.kind)continue;
+   // Carrega menos árvores compostas e mais grupos de folhagem/rochas.
+   if(mobile&&!['bush','flowers','grass'].includes(entry.kind))continue;
+   attempts++;
+   try{
+    const root=await loader.loadAsync('./assets/ultimate/'+encodeURIComponent(entry.file));
+    const box=new T.Box3().setFromObject(root);
+    const size=new T.Vector3();box.getSize(size);
+    const height=Math.max(.01,size.y),width=Math.max(.01,size.x,size.z);
+    const maxHeight=entry.kind==='tree'?5.0:entry.kind==='rock'?1.1:entry.kind==='bush'?1.0:.65;
+    // Ultimate possui vários submodelos dentro do mesmo FBX: conservar o conjunto.
+    const factor=Math.min(maxHeight/height,(entry.kind==='tree'?5.8:2.0)/width);
+    root.scale.setScalar(factor);
+    const x=entry.kind==='tree'?(ultimaLoaded%2?W*.42:-W*.40):
+      (Math.sin(ultimaLoaded*1.9)*W*.29);
+    const z=entry.kind==='tree'?(ultimaLoaded%3?L*.31:-L*.30):
+      (Math.cos(ultimaLoaded*2.2)*L*.31);
+    const y=elevation(x,z);
+    root.position.set(x-factor*box.min.x,y-factor*box.min.y,z-factor*box.min.z);
+    root.traverse(mesh=>{
+      if(!mesh.isMesh)return;
+      mesh.castShadow=false;mesh.receiveShadow=false;
+      const mats=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+      for(const mat of mats){
+       if(!mat)continue;
+       mat.side=T.DoubleSide;
+       if(mat.color&&mat.color.getHex&&mat.color.getHex()===0xffffff&&
+         !mat.map)mat.color.set(entry.kind==='rock'?'#929388':'#86a778');
+       mat.roughness=.97;
+      }
+      addLeafWind(mesh);
+    });
+    ultimateCollection.add(root);ultimaLoaded++;
+    forestStatus('Ultimate '+ultimaLoaded+'/'+maxCount+' conjuntos');
+   }catch(error){
+    console.warn('[Ateliê] Não foi possível carregar Ultimate',entry.file,error);
+   }
+  }
+  ultimaState=ultimaLoaded?'Ultimate carregado':'FBX indisponíveis; MegaKit mantido';
+  ultimateCollection.visible=ultimaEnabled&&ultimaLoaded>0;
+ }catch(error){
+  ultimaState='Ultimate opcional: '+(error.message||'não instalado');
+  console.warn('[Ateliê] Pacote Ultimate opcional:',error);
+ }finally{
+  ultimateLoading=false;forestStatus(ultimaState);
+ }
+}
+function setUltimateVisible(value){
+ ultimaEnabled=!!value;
+ ultimateCollection.visible=ultimaEnabled&&ultimaLoaded>0;
+ if($('ultimateToggle'))$('ultimateToggle').checked=ultimaEnabled;
+ if(ultimaEnabled&&ultimaLoaded===0)loadUltimatePack();
+ forestStatus(ultimaEnabled?ultimaState:'Ultimate desativado');
+}
+
 function updateForestHealth(){
  updateMeadowHealth();
  for(const a of forestInstances){
@@ -1656,6 +1733,7 @@ $('physicalWeather').addEventListener('change',e=>{
 });
 $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo(true);});
 $('floraToggle').addEventListener('change',e=>setFloraVisible(e.target.checked));
+$('ultimateToggle').addEventListener('change',e=>setUltimateVisible(e.target.checked));
 $('fogToggle').addEventListener('change',e=>{
  fogEnabled=e.target.checked;
  if(!fogEnabled)fogStrength=fogTarget=0;
@@ -1793,6 +1871,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1225'))fail(e.error||e.message);});
-window.arcanoWaterV1225={scene,renderer,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.arcanoWaterV1225={scene,renderer,ultimateCollection,setUltimateVisible,getUltimate:()=>({available:ultimateAvailable,loaded:ultimaLoaded,state:ultimaState}),leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
