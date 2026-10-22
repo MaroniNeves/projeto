@@ -962,7 +962,7 @@ function setSoilType(next){
  soilType=next==='mosaico'||SOIL_PROFILES[next]?next:'mosaico';
  configureSoilCells(true);
  for(let k=0;k<size;k++)soilHealth[k]=minNutrientAt(k);
- updatePlantVisuals();updateSprouts();
+ updatePlantVisuals();updateSprouts();updateForestHealth();
  rebuild();updateInfo(true);
 }
 function addSoilOrganic(){
@@ -1387,6 +1387,7 @@ $('physicalWeather').addEventListener('change',e=>{
  updateInfo(true);
 });
 $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo(true);});
+$('floraToggle').addEventListener('change',e=>setFloraVisible(e.target.checked));
 $('soilType').addEventListener('change',e=>setSoilType(e.target.value));
 $('addOrganic').addEventListener('click',addSoilOrganic);
 $('addNutrients').addEventListener('click',addSoilNutrients);
