@@ -47,7 +47,7 @@ body.ui-hidden #showControls{display:block}
 </style>  <script defer src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script><script defer src="./agua-v127.js"></script>
 </head>
 <body><canvas id="stage" aria-label="Cena tridimensional de chuva, poças e lagoas"></canvas>
-<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Água V12.7 · poças reais</strong><small>Poças que se formam · respingos na terra · ondas no relevo</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
+<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Água V12.7 · poças reais</strong><small>Lagoas que enchem · respingos do barro · ondas no relevo</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
 <nav class="pills" aria-label="Escolher efeito"><button type="button" data-mode="rain">🌧 Chuva</button><button type="button" data-mode="puddle">💧 Poças</button><button type="button" data-mode="lagoon">🌊 Lagoa</button><button type="button" data-mode="storm">⛈ Temporal</button></nav></header>
 <div class="hint" id="hint">Chuva começa no solo seco. Observe a formação das poças. Pode recolher os controles para ver a cena.</div>
 <button type="button" id="showControls" aria-controls="rainControls" aria-expanded="false">☷ Mostrar ajustes</button>
@@ -63,8 +63,8 @@ body.ui-hidden #showControls{display:block}
   </label>
   <label for="timelapse">⏩ Time-lapse
     <select id="timelapse" aria-label="Velocidade da simulação">
-      <option value="1">1×</option><option value="4">4×</option>
-      <option value="16" selected>16×</option><option value="64">64×</option>
+      <option value="1">1×</option><option value="4" selected>4×</option>
+      <option value="16">16×</option><option value="64">64×</option>
     </select>
   </label>
 </div>
