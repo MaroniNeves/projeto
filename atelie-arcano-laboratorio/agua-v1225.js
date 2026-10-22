@@ -1023,13 +1023,22 @@ async function loadPainterlyForest(){
   const api=await import('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js');
   const loader=new api.GLTFLoader();
   let ok=0;
-  for(const item of FOREST_MODELS){
-   try{
-    const doc=await loader.loadAsync('./assets/quaternius/'+item.name+'.gltf');
-    forestModels[item.name]=doc.scene;
-    placeForestModel(item,doc.scene);ok++;floraLoaded=ok;
-    forestStatus('carregando MegaKit '+ok+'/'+FLORA_TOTAL);
-   }catch(err){console.warn('[Arcano] Modelo não carregado',item.name,err);}
+  // Grupos pequenos paralelos evitam 23 pedidos em cascata sem estourar RAM.
+  const batchSize=mobile?3:5;
+  for(let i=0;i<FOREST_MODELS.length;i+=batchSize){
+   const batch=FOREST_MODELS.slice(i,i+batchSize);
+   const loaded=await Promise.all(batch.map(async item=>{
+    try{return{item,doc:await loader.loadAsync('./assets/quaternius/'+item.name+'.gltf')};}
+    catch(error){console.warn('[Arcano] Modelo não carregado',item.name,error);return null;}
+   }));
+   for(const result of loaded){
+    if(!result)continue;
+    try{
+     forestModels[result.item.name]=result.doc.scene;
+     placeForestModel(result.item,result.doc.scene);ok++;floraLoaded=ok;
+    }catch(error){console.warn('[Arcano] Não foi possível posicionar',result.item.name,error);}
+   }
+   forestStatus('carregando MegaKit '+ok+'/'+FLORA_TOTAL);
   }
   if(ok===0)throw new Error('Nenhum modelo glTF carregou');
   setFloraVisible(floraWanted);
