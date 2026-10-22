@@ -1,8 +1,8 @@
-name: Publicar V12 agua anime sprites gotas e lagoa para Android
+name: Publicar V12.1 chuva com 6 niveis para Android
 on:
   push:
     branches: [atelie-arcano-public-demo]
-    paths: ['.github/workflows/build-agua-v12.yml', 'atelie-arcano-agua-v12/source/vite.config.js', 'atelie-arcano-agua-v12/source/scripts/make_textures.py']
+    paths: ['.github/workflows/build-agua-v12.yml', 'atelie-arcano-agua-v12/source/vite.config.js', 'atelie-arcano-agua-v12/source/scripts/make_textures.py', 'atelie-arcano-agua-v12/source/src/main.js', 'atelie-arcano-agua-v12/source/index.html']
 permissions:
   contents: write
 jobs:
@@ -31,7 +31,7 @@ jobs:
           cp -a dist/. ../preview/
           cp node_modules/three/LICENSE ../preview/THREE_LICENSE_MIT.txt
           echo 'Original PNG rain and water sprites created for Atelie Arcano V12.' > ../preview/SPRITES_LICENSE.txt
-          echo "BUILD VERIFIED V12"
+          echo "BUILD VERIFIED V12.1 WITH SIX LEVELS"
       - name: Atualizar pagina de agua no hub sem alterar V8 nem Rollshade
         shell: bash
         run: |
@@ -48,6 +48,8 @@ jobs:
           assert (hub/'rollshade.html').exists()
           assert (hub/'lightning.html').exists()
           assert 'sprites/' in Path('atelie-arcano-agua-v12/source/src/main.js').read_text()
+          assert 'RAIN_LEVELS' in Path('atelie-arcano-agua-v12/source/src/main.js').read_text()
+          assert 'Temporal intenso' in main and 'Sem chuva' in main
           assert 'atelie-arcano-agua-v12/preview/' in main
           print('WATER V12 HUB LINK VERIFIED')
           PY
@@ -59,17 +61,17 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add atelie-arcano-agua-v12/source/{README.md,index.html,package.json,vite.config.js,src,scripts,public}
           git add atelie-arcano-agua-v12/preview atelie-arcano-laboratorio/agua.html
-          git diff --cached --quiet || (git commit -m "Upgrade Arcano water to V12 animated anime shader with 5 new splash and rainfall sprite textures" && git push origin HEAD:atelie-arcano-public-demo)
+          git diff --cached --quiet || (git commit -m "Publish Arcano V12.1 6 rain intensities and Android control" && git push origin HEAD:atelie-arcano-public-demo)
       - name: Empacotar laboratorios 201 magias mais aqua v12
         shell: bash
         run: |
           set -euo pipefail
-          zip -qr -9 /tmp/atelie_arcano_v12_201_magias_agua_anime.zip atelie-arcano-laboratorio atelie-arcano-anime-v8 atelie-arcano-rollshade-v2 atelie-arcano-lightning-vfx atelie-arcano-agua-v12 -x '*/node_modules/*' -x '*/.git/*'
-          unzip -t /tmp/atelie_arcano_v12_201_magias_agua_anime.zip | tail -1
-          ls -lh /tmp/atelie_arcano_v12_201_magias_agua_anime.zip
+          zip -qr -9 /tmp/atelie_arcano_v12_1_201_magias_6_niveis_de_chuva.zip atelie-arcano-laboratorio atelie-arcano-anime-v8 atelie-arcano-rollshade-v2 atelie-arcano-lightning-vfx atelie-arcano-agua-v12 -x '*/node_modules/*' -x '*/.git/*'
+          unzip -t /tmp/atelie_arcano_v12_1_201_magias_6_niveis_de_chuva.zip | tail -1
+          ls -lh /tmp/atelie_arcano_v12_1_201_magias_6_niveis_de_chuva.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: arcano-v12-agua-anime-sprites-201-magias
-          path: /tmp/atelie_arcano_v12_201_magias_agua_anime.zip
+          name: arcano-v12-1-agua-6-niveis-201-magias
+          path: /tmp/atelie_arcano_v12_1_201_magias_6_niveis_de_chuva.zip
           retention-days: 7
           compression-level: 0
