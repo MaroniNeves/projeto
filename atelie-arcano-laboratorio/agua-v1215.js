@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.14 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.15 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.14]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.15]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -203,124 +203,60 @@ for(let k=0;k<grass.count;k++){
  if(rockAt(x,z)||y<-.15)continue;const s=.45+random()*1.2;
  ob.position.set(x,y+.09,z);ob.scale.set(s,s,s);ob.rotation.y=random()*6.28;ob.updateMatrix();grass.setMatrixAt(gcount++,ob.matrix);
 }grass.count=gcount;grass.castShadow=true;scene.add(grass);
-// Uma única superfície: a água é armazenada em volumes por vértice, não em poças/planos sobrepostos.
-// O renderizador da V12.9 dependia de um shader transparente em todas as faces,
-// inclusive nas áreas secas. Alguns WebGL móveis não apresentavam as poças.
-// Aqui desenhamos APENAS triângulos molhados: cor opaca, malha rastreável e sem "água invisível".
-const SURFACE_VISIBLE=.006, SURFACE_RIPPLE=.012, SURFACE_POND=.018;
-// Margem recortada por isovalor e interpolada nas arestas (marching triangles).
-// Ao contrário dos triângulos inteiros, o polígono termina entre os vértices.
+// A física permanece na malha original, o material 3D usa amostras mais densas.
+const SURFACE_VISIBLE=.006,SURFACE_RIPPLE=.012,SURFACE_POND=.018;
 const wet=new Float32Array(size),flow=new Float32Array(size*2);
-const maxWaterVertices=(NX-1)*(NZ-1)*12;
-const waterPositions=new Float32Array(maxWaterVertices*3),waterUVs=new Float32Array(maxWaterVertices*2);
-const waterColors=new Float32Array(maxWaterVertices*3),waterVertexColors=new Float32Array(size*3);
-const waterG=new T.BufferGeometry();
+const flowXField=new Float32Array(size),flowZField=new Float32Array(size);
+const VIS_NX=mobile?118:166,VIS_NZ=mobile?96:134,VIS_SIZE=VIS_NX*VIS_NZ;
+const waterPositions=new Float32Array(VIS_SIZE*3),waterDepths=new Float32Array(VIS_SIZE);
+const waterMud=new Float32Array(VIS_SIZE),waterFlow=new Float32Array(VIS_SIZE*2);
+const waterG=new T.BufferGeometry(),triangles=[];
+const wx=i=>-W*.5+i*W/(VIS_NX-1),wz=j=>-L*.5+j*L/(VIS_NZ-1);
+for(let j=0;j<VIS_NZ;j++)for(let i=0;i<VIS_NX;i++){
+ const k=j*VIS_NX+i;waterPositions[k*3]=wx(i);waterPositions[k*3+2]=wz(j);
+ if(j<VIS_NZ-1&&i<VIS_NX-1){const a=k,b=k+1,c=k+VIS_NX,d=c+1;triangles.push(a,c,b,b,c,d);}
+}
 waterG.setAttribute('position',new T.BufferAttribute(waterPositions,3).setUsage(T.DynamicDrawUsage));
-waterG.setAttribute('color',new T.BufferAttribute(waterColors,3).setUsage(T.DynamicDrawUsage));
-waterG.setAttribute('uv',new T.BufferAttribute(waterUVs,2).setUsage(T.DynamicDrawUsage));
-waterG.setDrawRange(0,0);
-// Azul-turquesa, turquesa, azul profundo e sombra nos pontos mais fundos.
-const waterShallowRGB=new T.Color('#6deee2').toArray();
-const waterMidRGB=new T.Color('#25c4d1').toArray();
-const waterDeepRGB=new T.Color('#0873a2').toArray();
-const waterAbyssRGB=new T.Color('#073e70').toArray();
-const waterRimRGB=new T.Color('#d1fff3').toArray();
-const waterMudRGB=new T.Color('#876043').toArray();
-const wetShoreRGB=new T.Color('#4b3025').toArray();
-const waterM=new T.MeshBasicMaterial({vertexColors:true,side:T.DoubleSide,transparent:false,depthWrite:true,toneMapped:false,fog:true});
-const water=new T.Mesh(waterG,waterM);
-water.frustumCulled=false;water.renderOrder=3;
-water.name='Água turquesa em profundidades diferentes V12.14';scene.add(water);
-const causticTexture=(()=>{
- const resolution=mobile?192:256,c=document.createElement('canvas');
- c.width=c.height=resolution;const ctx=c.getContext('2d');
- const data=ctx.createImageData(resolution,resolution),pixels=data.data;
- // Diagrama de Voronoi periódico: veios orgânicos e delicados de luz.
- const cells=7,spots=new Float32Array(cells*cells*2);
- const rng=rand(274198);
- for(let i=0;i<spots.length;i+=2){
-  const n=i/2,x=n%cells,y=Math.floor(n/cells);
-  spots[i]=x+.19+rng()*.62;spots[i+1]=y+.19+rng()*.62;
- }
- for(let py=0;py<resolution;py++){
-  const y=py/resolution*cells,cy=Math.floor(y);
-  for(let px=0;px<resolution;px++){
-   const x=px/resolution*cells,cx=Math.floor(x);
-   let closest=100,second=100;
-   for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){
-    const ix=cx+i,iy=cy+j,sx=((ix%cells)+cells)%cells,sy=((iy%cells)+cells)%cells;
-    const src=(sy*cells+sx)*2;
-    const ox=spots[src]+ix-sx-x,oy=spots[src+1]+iy-sy-y;
-    const dst=ox*ox+oy*oy;
-    if(dst<closest){second=closest;closest=dst;}
-    else if(dst<second)second=dst;
-   }
-   const ridge=Math.sqrt(second)-Math.sqrt(closest);
-   const web=clamp((.19-ridge)/.17,0,1);
-   const irregular=.82+.18*Math.sin(x*4.1-y*3.6+Math.sin(x*1.9+y*2.2));
-   const opacity=Math.pow(web,1.8)*irregular*.63,o=(py*resolution+px)*4;
-   pixels[o]=210;pixels[o+1]=253;pixels[o+2]=247;pixels[o+3]=Math.round(255*opacity);
-  }
- }
- ctx.putImageData(data,0,0);
- const tex=new T.CanvasTexture(c);
- tex.wrapS=tex.wrapT=T.RepeatWrapping;tex.colorSpace=T.SRGBColorSpace;
- tex.anisotropy=mobile?2:4;return tex;
-})();
-const causticM=new T.MeshBasicMaterial({color:'#ffffff',map:causticTexture,
- transparent:true,opacity:.59,depthWrite:false,depthTest:true,side:T.DoubleSide,
- polygonOffset:true,polygonOffsetFactor:-1.5,polygonOffsetUnits:-2,toneMapped:false});
-const caustics=new T.Mesh(waterG,causticM);
-caustics.frustumCulled=false;caustics.renderOrder=4;
-caustics.name='Reflexos caústicos orgânicos animados';scene.add(caustics);
-// Instâncias de detritos/espuma baixa perto de alguns trechos calmos das margens.
+waterG.setAttribute('waterDepth',new T.BufferAttribute(waterDepths,1).setUsage(T.DynamicDrawUsage));
+waterG.setAttribute('mudAmount',new T.BufferAttribute(waterMud,1).setUsage(T.DynamicDrawUsage));
+waterG.setAttribute('waterFlow',new T.BufferAttribute(waterFlow,2).setUsage(T.DynamicDrawUsage));
+waterG.setIndex(triangles);waterG.boundingSphere=new T.Sphere(new T.Vector3(),Math.hypot(W,L)+5);
+const reflectionRT=new T.WebGLCubeRenderTarget(mobile?64:128,{
+ generateMipmaps:false,minFilter:T.LinearFilter,magFilter:T.LinearFilter,format:T.RGBAFormat
+});
+const reflectionCamera=new T.CubeCamera(.15,85,reflectionRT);
+reflectionCamera.position.set(basins[1].x,.65,basins[1].z);scene.add(reflectionCamera);
+const waterM=new T.ShaderMaterial({
+ transparent:true,depthWrite:false,depthTest:true,side:T.DoubleSide,
+ uniforms:{uTime:{value:0},uEnv:{value:reflectionRT.texture},uReflect:{value:0},
+  uSun:{value:new T.Vector3(-8,13,7).normalize()}},
+ vertexShader:"precision highp float;\nattribute float waterDepth;attribute float mudAmount;attribute vec2 waterFlow;uniform float uTime;\nvarying vec3 vWorld;varying float vDepth;varying float vMud;varying vec2 vSlope;varying float vMovement;\nvoid main(){\n vec3 p=position;vDepth=waterDepth;vMud=mudAmount;\n float motion=clamp(length(waterFlow)*3.0,0.0,1.0);vMovement=motion;\n float amp=(.0018+.018*motion)*smoothstep(.006,.065,waterDepth);\n float a=p.x*3.5+p.z*1.4-uTime*(1.2+1.9*motion);\n float b=p.z*5.1-p.x*1.7+uTime*(1.5+1.6*motion);\n p.y+=(sin(a)*.64+cos(b)*.36)*amp;\n vSlope=vec2((cos(a)*3.5*.64+sin(b)*1.7*.36)*amp,(cos(a)*1.4*.64-sin(b)*5.1*.36)*amp);\n vec4 w=modelMatrix*vec4(p,1.0);vWorld=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;\n}",fragmentShader:"precision highp float;\nuniform float uTime;uniform samplerCube uEnv;uniform float uReflect;uniform vec3 uSun;\nvarying vec3 vWorld;varying float vDepth;varying float vMud;varying vec2 vSlope;varying float vMovement;\nvoid main(){\n float irregular=.0018*sin(vWorld.x*4.2+vWorld.z*3.7)+.0011*sin(vWorld.x*10.3-vWorld.z*7.4);\n float alpha=smoothstep(.002,.017,vDepth-.0045+irregular);if(alpha<.025)discard;\n float shallow=clamp((vDepth-.006)/.054,0.,1.),deep=clamp((vDepth-.055)/.175,0.,1.);\n float abyss=clamp((vDepth-.21)/.28,0.,1.);\n vec3 color=mix(vec3(.40,.89,.85),vec3(.12,.73,.80),shallow);\n color=mix(color,vec3(.025,.40,.62),deep);\n color=mix(color,vec3(.012,.17,.35),abyss*.85);\n float dirty=clamp(vMud*.86,0.,.90);\n color=mix(color,vec3(.48,.29,.14),dirty);\n float rim=(1.-smoothstep(.004,.027,vDepth))*(1.-dirty*.85);\n color=mix(color,vec3(.71,.96,.91),rim*.28);\n vec2 tiny=vec2(sin(vWorld.x*6.1+vWorld.z*3.8-uTime*1.7)+cos(vWorld.z*11.2-uTime*2.1),\n cos(vWorld.z*6.8-vWorld.x*3.4+uTime*1.35)+sin(vWorld.x*10.5+uTime*1.8));\n vec3 n=normalize(vec3(-vSlope.x-tiny.x*(.018+.037*vMovement),1.,-vSlope.y-tiny.y*(.018+.037*vMovement)));\n vec3 viewDir=normalize(cameraPosition-vWorld);\n float fresnel=pow(1.-clamp(dot(n,viewDir),0.,1.),2.1);\n vec3 reflected=textureCube(uEnv,reflect(-viewDir,n)).rgb;\n float reflectMix=uReflect*(.09+.40*fresnel)*(1.-dirty*.72);\n color=mix(color,reflected,clamp(reflectMix,0.,.50));\n float sun=pow(max(dot(reflect(-normalize(uSun),n),viewDir),0.),52.);\n float waveA=sin(vWorld.x*13.7+vWorld.z*9.2-uTime*2.6);\n float waveB=sin(vWorld.z*17.3-vWorld.x*6.9+uTime*2.2);\n float crest=pow(max(0.,waveA*.60+waveB*.40),9.);\n float sparkle=(.16*crest+.75*sun)*(.75+.25*shallow)*(1.-dirty*.70);\n color=mix(color,vec3(.81,1.,.97),clamp(sparkle,0.,.69));\n gl_FragColor=vec4(color,alpha*(.83+.14*deep));\n}"
+});
+const water=new T.Mesh(waterG,waterM);water.frustumCulled=false;water.renderOrder=3;
+water.name='Água V12.15, ondulações e reflexos dos objetos';scene.add(water);
 const foamLimit=mobile?120:220,foamObj=new T.Object3D();
 const foamMesh=new T.InstancedMesh(new T.PlaneGeometry(.060,.027),
  new T.MeshBasicMaterial({color:'#e2d5bb',transparent:true,opacity:.60,side:T.DoubleSide,depthWrite:false}),foamLimit);
 foamMesh.count=0;foamMesh.frustumCulled=false;foamMesh.renderOrder=5;scene.add(foamMesh);
 const foamClean=new T.Color('#c6f3e9'),foamDirty=new T.Color('#a48a69');
-const clipX=new Float32Array(5),clipY=new Float32Array(5),clipZ=new Float32Array(5),
- clipR=new Float32Array(5),clipG=new Float32Array(5),clipB=new Float32Array(5);
-let clipN=0,waterVertexCount=0;
-function putVertex(k){
- const n=clipN++;
- clipX[n]=nx(k%NX);clipZ[n]=nz(Math.floor(k/NX));
- clipY[n]=soil[k]+depth[k]+.014;
- clipR[n]=waterVertexColors[3*k];clipG[n]=waterVertexColors[3*k+1];clipB[n]=waterVertexColors[3*k+2];
+let reflectionAge=999,reflectionFrames=0,reflectionsOn=true,reflectionReady=false;
+function updateReflections(dt){
+ if(!reflectionsOn){waterM.uniforms.uReflect.value=0;return;}
+ reflectionAge+=dt;if(reflectionAge<(mobile?5.0:2.0))return;
+ reflectionAge=0;
+ const previous=[water.visible,foamMesh.visible,splashMesh.visible,halo.visible,streak.visible];
+ water.visible=false;foamMesh.visible=false;splashMesh.visible=false;halo.visible=false;streak.visible=false;
+ const ringVisibility=ripplePool.map(mesh=>mesh.visible);
+ ripplePool.forEach(mesh=>mesh.visible=false);
+ const basin=basins[1];
+ reflectionCamera.position.set(basin.x,sample(soil,basin.x,basin.z)+.7,basin.z);
+ try{reflectionCamera.update(renderer,scene);reflectionReady=true;reflectionFrames++;}
+ catch(error){reflectionReady=false;console.warn('[Arcano V12.15] Reflexo indisponível:',error);}
+ [water.visible,foamMesh.visible,splashMesh.visible,halo.visible,streak.visible]=previous;
+ ripplePool.forEach((mesh,i)=>mesh.visible=ringVisibility[i]);
+ waterM.uniforms.uReflect.value=reflectionReady?.78:0;
 }
-function putCross(a,b,da,db){
- const t=clamp(da/(da-db),0,1),n=clipN++;
- const x0=nx(a%NX),z0=nz(Math.floor(a/NX)),x1=nx(b%NX),z1=nz(Math.floor(b/NX));
- clipX[n]=x0+(x1-x0)*t;clipZ[n]=z0+(z1-z0)*t;
- clipY[n]=(soil[a]+depth[a]+.014)*(1-t)+(soil[b]+depth[b]+.014)*t;
- clipR[n]=waterVertexColors[a*3]*(1-t)+waterVertexColors[b*3]*t;
- clipG[n]=waterVertexColors[a*3+1]*(1-t)+waterVertexColors[b*3+1]*t;
- clipB[n]=waterVertexColors[a*3+2]*(1-t)+waterVertexColors[b*3+2]*t;
- // Contorno turquesa-claro na linha de contato entre água e terra.
- const mud=turbidity[a]*(1-t)+turbidity[b]*t;
- const shine=.67*(1-clamp(mud*.72,0,.8));
- clipR[n]+=(waterRimRGB[0]-clipR[n])*shine;
- clipG[n]+=(waterRimRGB[1]-clipG[n])*shine;
- clipB[n]+=(waterRimRGB[2]-clipB[n])*shine;
-}
-function appendCutTriangle(a,b,c){
- if(waterVertexCount+6>maxWaterVertices)return;
- clipN=0;let prior=c,dp=shoreField[c],wasWet=dp>=0;
- for(let n=0;n<3;n++){
-  const k=n===0?a:n===1?b:c,dk=shoreField[k],isWet=dk>=0;
-  if(wasWet!==isWet)putCross(prior,k,dp,dk);
-  if(isWet)putVertex(k);
-  prior=k;dp=dk;wasWet=isWet;
- }
- if(clipN<3)return;
- for(let n=1;n<clipN-1;n++)for(let e=0;e<3;e++){
-  const v=e===0?0:e===1?n:n+1,off=waterVertexCount++*3;
-  waterPositions[off]=clipX[v];waterPositions[off+1]=clipY[v];waterPositions[off+2]=clipZ[v];
-  waterColors[off]=clipR[v];waterColors[off+1]=clipG[v];waterColors[off+2]=clipB[v];
-  const uv=(waterVertexCount-1)*2;
-  waterUVs[uv]=waterPositions[off]*.22;waterUVs[uv+1]=waterPositions[off+2]*.22;
- }
-}
+
 function impactHeightAt(x,z){
  const h=sample(soil,x,z),d=sample(depth,x,z);
  return d>=SURFACE_RIPPLE?h+d:h;
@@ -787,7 +723,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1214'))fail(e.error||e.message);});
-window.arcanoWaterV1214={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1215'))fail(e.error||e.message);});
+window.arcanoWaterV1215={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
