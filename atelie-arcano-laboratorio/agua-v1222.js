@@ -113,6 +113,11 @@ function ecologyStep(dt){
     (.40+.60*lightFactor)*(.35+.65*oxygen);
   const decomposed=Math.min(soilLitter[k],soilLitter[k]*decayRate*days);
   soilLitter[k]-=decomposed;soilOrganic[k]=clamp(soilOrganic[k]+decomposed*.72,0,1.3);
+  // Inundação deposita uma pequena fração dos resíduos orgânicos transportados.
+  // Redução da decomposição anaeróbia + deposição evita que a várzea perca MO depressa.
+  if(p===SOIL_PROFILES.aluvial&&depth[k]>.018){
+   soilLitter[k]=clamp(soilLitter[k]+days*(.010+.028*turbidity[k]),0,1.3);
+  }
   const mineralized=Math.min(soilOrganic[k],soilOrganic[k]*(flooded?.003:.014)*
        (.3+.7*soilBiota[k])*days);
   soilOrganic[k]-=mineralized;
