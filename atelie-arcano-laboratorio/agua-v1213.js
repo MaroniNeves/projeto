@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.12 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.13 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.12]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.13]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -91,13 +91,111 @@ const land=new T.Mesh(landG,new T.MeshStandardMaterial({map:groundTexture(),vert
 land.receiveShadow=true;land.name='Terra absorvente e barro V12.12';scene.add(land);
 const slab=new T.Mesh(new T.BoxGeometry(W,.52,L),new T.MeshStandardMaterial({color:'#614832',roughness:1}));
 slab.position.y=Math.min(...soil)-.55;slab.receiveShadow=true;scene.add(slab);
-const stones=new T.Group();scene.add(stones);
-const stoneGeo=new T.DodecahedronGeometry(1,0),stonePalette=['#858e89','#958575','#6b817c','#a69984','#6b7972'];
-for(let i=0;i<rocks.length;i++){
- const [x,z,r]=rocks[i],g=new T.Mesh(stoneGeo,new T.MeshStandardMaterial({color:stonePalette[i%stonePalette.length],flatShading:true,roughness:1}));
- g.scale.set(r,r*(.75+random()*.25),r*(.85+random()*.3));g.position.set(x,elevation(x,z)+r*.31,z);
- g.rotation.set(random()*.23,random()*6.28,random()*.26);g.castShadow=true;g.receiveShadow=true;stones.add(g);
+// Rochas anime: silhuetas orgânicas sem faces quadradas, paleta envelhecida e musgo discreto.
+// Modelos procedurais locais: sem download externo, acessíveis também em Android/offline.
+const stones=new T.Group();stones.name='Rochas anime, seixos e musgo';scene.add(stones);
+const stonePalette=['#858a86','#8f877d','#757e7b','#998f80','#737b74','#877c6f','#919087'];
+const mossTone=new T.Color('#5d6d55');
+const stoneMaterial=new T.MeshToonMaterial({color:'#ffffff',vertexColors:true});
+const stoneOutlineMaterial=new T.MeshBasicMaterial({
+ color:'#49504b',side:T.BackSide,transparent:true,opacity:.75,depthWrite:false
+});
+// Deformações contínuas: vértices que dividem posições recebem o MESMO deslocamento.
+// Mantém a malha fechada, ao contrário de deslocar vértices de forma aleatória.
+function makeAnimeStone(seed,detail,paletteIndex){
+ const geo=new T.IcosahedronGeometry(1,detail);
+ const position=geo.attributes.position,cols=new Float32Array(position.count*3);
+ const baseColor=new T.Color(stonePalette[paletteIndex%stonePalette.length]);
+ let minY=Infinity,maxY=-Infinity;
+ const rx=.90+.09*Math.sin(seed*.67),rz=.91+.09*Math.cos(seed*.93);
+ const offset=seed*.173;
+ for(let k=0;k<position.count;k++){
+  const vx=position.getX(k),vy=position.getY(k),vz=position.getZ(k);
+  const broad=.105*Math.sin(vx*3.7+vz*2.1+offset)*Math.cos(vy*2.6-offset*.8);
+  const detailNoise=.050*Math.sin(vz*6.9-vy*4.0+offset)*Math.cos(vx*5.1+offset*.4);
+  const asym=.037*Math.sin(vx*8.0+vy*3.5+vz*5.2+offset);
+  const shape=1+broad+detailNoise+asym;
+  let x=vx*rx*shape, y=vy*(.70+.045*Math.sin(seed))*shape,z=vz*rz*shape;
+  // Base de rocha assente no solo e topo irregular sem virar bloco cúbico.
+  if(y<-.20)y=-.20+(y+.20)*.43;
+  if(y>.14)y*=1.02;
+  minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+  position.setXYZ(k,x,y,z);
+  const facet=.78+.09*Math.sin(vx*3.1+vz*2.7+offset)+.06*vy;
+  const shadow=clamp(facet,.61,.97);
+  const c=baseColor.clone().multiplyScalar(shadow);
+  // Manchas de musgo concentradas no topo e em concavidades, não uma cobertura verde geral.
+  const mossSeed=Math.sin(x*8.4+offset)*Math.cos(z*10.1-offset*.4)+
+                 .34*Math.sin(x*14.2+z*4.6+offset*2);
+  const mossPatch=vy>.18&&mossSeed>.34&&paletteIndex%4!==2
+   ?clamp((mossSeed-.34)*.34,0,.30):0;
+  if(mossPatch>0)c.lerp(mossTone,mossPatch);
+  cols[k*3]=c.r;cols[k*3+1]=c.g;cols[k*3+2]=c.b;
+ }
+ position.needsUpdate=true;
+ geo.setAttribute('color',new T.BufferAttribute(cols,3));
+ geo.computeVertexNormals();geo.computeBoundingSphere();
+ geo.userData.lowest=minY;geo.userData.highest=maxY;
+ return geo;
 }
+// Formas reutilizáveis, cada uma com um perfil diferente: baixos, altos e assimétricos.
+const stoneModels=[
+ makeAnimeStone(11,2,0),makeAnimeStone(23,1,1),
+ makeAnimeStone(37,2,2),makeAnimeStone(49,1,3),
+ makeAnimeStone(63,2,4),makeAnimeStone(81,1,5),
+ makeAnimeStone(107,1,6)
+];
+let visibleRocks=0;
+for(let i=0;i<rocks.length;i++){
+ const [x,z,r]=rocks[i];
+ const pieces=1+(random()<.38?1:0);
+ const cluster=new T.Group();cluster.name='Rochas orgânicas '+(i+1);
+ for(let p=0;p<pieces;p++){
+  const geo=stoneModels[(i*3+p*2)%stoneModels.length];
+  const rock=new T.Mesh(geo,stoneMaterial);
+  const side=p===0?1:(.38+random()*.22);
+  const sx=r*side*(.96+random()*.20),sy=r*side*(.78+random()*.27),
+        sz=r*side*(.95+random()*.19);
+  const px=x+(p?(random()-.5)*r*1.0:0);
+  const pz=z+(p?(random()-.5)*r*1.0:0);
+  rock.position.set(px,elevation(px,pz)-geo.userData.lowest*sy-.045*r,pz);
+  rock.scale.set(sx,sy,sz);
+  rock.rotation.set((random()-.5)*.15,random()*Math.PI*2,(random()-.5)*.11);
+  rock.castShadow=true;rock.receiveShadow=true;
+  // Outline discreto de anime, aplicado à silhueta, não uma borda preta larga.
+  const outline=new T.Mesh(geo,stoneOutlineMaterial);
+  outline.scale.set(1.025,1.034,1.025);outline.renderOrder=1;
+  outline.castShadow=false;outline.receiveShadow=false;
+  rock.add(outline);
+  cluster.add(rock);visibleRocks++;
+ }
+ stones.add(cluster);
+}
+// Seixos baixos ao redor das rochas grandes: 1 InstancedMesh em vez de muitas draw calls.
+const pebbleMax=mobile?70:115;
+const pebbleGeometry=makeAnimeStone(131,1,1);
+const pebbles=new T.InstancedMesh(pebbleGeometry,stoneMaterial,pebbleMax);
+pebbles.name='Seixos irregulares do terreno';pebbles.frustumCulled=false;
+pebbles.castShadow=false;pebbles.receiveShadow=true;
+const pebbleTransform=new T.Object3D();let pebbleCount=0;
+for(let i=0;i<rocks.length&&pebbleCount<pebbleMax;i++){
+ const [x,z,r]=rocks[i];
+ const amount=2+Math.floor(random()*4);
+ for(let p=0;p<amount&&pebbleCount<pebbleMax;p++){
+  const angle=random()*Math.PI*2,dist=r*(1.35+random()*1.50);
+  const px=x+Math.cos(angle)*dist,pz=z+Math.sin(angle)*dist;
+  if(px<-W*.5+.4||px>W*.5-.4||pz<-L*.5+.4||pz>L*.5-.4)continue;
+  if(rockAt(px,pz))continue;
+  const a=.075+random()*.083,b=a*(.48+random()*.30),c=a*(.85+random()*.5);
+  pebbleTransform.position.set(px,elevation(px,pz)-pebbleGeometry.userData.lowest*b-.016,pz);
+  pebbleTransform.scale.set(a,b,c);
+  pebbleTransform.rotation.set((random()-.5)*.18,random()*Math.PI*2,(random()-.5)*.16);
+  pebbleTransform.updateMatrix();pebbles.setMatrixAt(pebbleCount++,pebbleTransform.matrix);
+ }
+}
+pebbles.count=pebbleCount;pebbles.instanceMatrix.needsUpdate=true;
+stones.add(pebbles);
+
 const grass=new T.InstancedMesh(new T.ConeGeometry(.092,.42,3),new T.MeshStandardMaterial({color:'#849878',roughness:1,flatShading:true}),mobile?62:138);
 const ob=new T.Object3D();let gcount=0;
 for(let k=0;k<grass.count;k++){
@@ -596,7 +694,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1212'))fail(e.error||e.message);});
-window.arcanoWaterV1212={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1213'))fail(e.error||e.message);});
+window.arcanoWaterV1213={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
