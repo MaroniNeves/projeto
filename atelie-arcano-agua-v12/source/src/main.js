@@ -122,6 +122,14 @@ const dampTex=new THREE.CanvasTexture((()=>{const c=document.createElement('canv
 for(const p of puddles){const damp=new THREE.Mesh(new THREE.PlaneGeometry(p.w*1.25,p.h*1.3),new THREE.MeshBasicMaterial({map:dampTex,transparent:true,depthWrite:false,opacity:.8}));damp.rotation.x=-Math.PI/2;damp.position.set(p.x,-.05,p.z);damp.renderOrder=1;scene.add(damp);p.damp=damp;}
 
 // Visually resolved tapered drops. Camera-facing sprite planes occupy true moving positions in 3D.
+const RAIN_LEVELS = [
+ {name:'Sem chuva',drops:0,speed:0,streak:0,alpha:0,splash:Infinity,wave:0,drizzle:0},
+ {name:'Garoa',drops:38,speed:.67,streak:.48,alpha:.38,splash:.52,wave:.12,drizzle:.3},
+ {name:'Chuva fraca',drops:95,speed:.86,streak:.67,alpha:.50,splash:.29,wave:.25,drizzle:.45},
+ {name:'Chuva moderada',drops:182,speed:1.02,streak:.95,alpha:.64,splash:.15,wave:.48,drizzle:.63},
+ {name:'Chuva forte',drops:286,speed:1.27,streak:1.28,alpha:.77,splash:.092,wave:.78,drizzle:.8},
+ {name:'Temporal intenso',drops:400,speed:1.62,streak:1.60,alpha:.90,splash:.049,wave:1.12,drizzle:1}
+];
 const MAX=400;
 const dropGeom=new THREE.PlaneGeometry(.09,.61);
 const rainMat=new THREE.MeshBasicMaterial({map:textures.rain,color:0xc7eef9,transparent:true,opacity:.88,depthWrite:false,side:THREE.DoubleSide,blending:THREE.NormalBlending});
@@ -137,35 +145,52 @@ for(let i=0;i<28;i++){
 }
 let ringCursor=0;
 function splash(x,z,tiny=false){let v=rings[ringCursor++%rings.length];v.life=0;v.duration=.62+rnd()*.64;v.x=x;v.z=z;v.mesh.position.set(x,.068,z);v.mesh.scale.setScalar(tiny?.16:.30);v.mesh.visible=true;v.tiny=tiny;}
-const state={mode:'rain',time:0,paused:false,intensity:.65,emitAt:0,frames:0,fpsTime:0};
+const modeLevels={rain:3,puddle:2,lagoon:0,storm:5};
+const state={mode:'rain',time:0,paused:false,level:modeLevels.rain,emitAt:0,frames:0,fpsTime:0};
+const levelSpec=()=>RAIN_LEVELS[state.level];
+function updateRainLevel(level){
+ state.level=THREE.MathUtils.clamp(Math.round(Number(level)||0),0,5);
+ modeLevels[state.mode]=state.level;
+ const cfg=levelSpec();
+ $('intensity').value=String(state.level);
+ $('intensityName').textContent=cfg.name;
+ $('rainDetail').textContent=cfg.drops ? cfg.drops+' gotas 3D · '+cfg.name.toLowerCase()+' · respingos e ondas' : 'Céu seco · sem gotas nem respingos';
+ $('rainMeter').style.setProperty('--rain-fill',String(state.level*20)+'%');
+ rainMat.opacity=cfg.alpha;
+ state.emitAt=state.time;
+}
 const names={rain:'Chuva · gotas translúcidas e respingos',puddle:'Poças · água refletiva crescendo',lagoon:'Lagoa · reflexos, espuma e ondas',storm:'Temporal · chuva sobre lagoa 3D'};
 function smooth(x){x=THREE.MathUtils.clamp(x,0,1);return x*x*(3-2*x);}
 function reset(){state.time=0;state.emitAt=0;for(const p of [lagoon,...puddles]){p.mat.uniforms.uGrow.value=0;}for(const r of rings){r.life=99;r.mesh.visible=false;}}
-function setMode(mode){if(!(mode in names))return;state.mode=mode;reset();
+function setMode(mode){if(!(mode in names))return;state.mode=mode;reset();updateRainLevel(modeLevels[mode]);
  $('hint').textContent=names[mode]+'. Toque na água para criar ondas. Arraste para girar.';
  document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
  lagoon.mesh.visible=(mode==='lagoon'||mode==='storm');
  for(const p of puddles){p.mesh.visible=(mode==='puddle'||mode==='rain');p.damp.visible=p.mesh.visible;}
  reed.visible=(mode==='lagoon'||mode==='storm');
- rain.visible=(mode==='rain'||mode==='puddle'||mode==='storm');
+ rain.visible=true; // nível zero = cena seca em todos os modos
  camera.position.set(mode==='puddle'?8:11,mode==='puddle'?7.4:8.8,mode==='puddle'?11.5:14.5);controls.target.set(0,0,0);controls.update();
 }
-function countDrops(){return state.mode==='lagoon'?0:Math.floor((state.mode==='puddle'?165:state.mode==='rain'?290:MAX)*state.intensity);}
+function countDrops(){return levelSpec().drops;}
 const raycaster=new THREE.Raycaster(),point=new THREE.Vector2();let last=performance.now();
 function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-last)*.001,.045);last=now;if(document.hidden)return;
  if(!state.paused)state.time+=dt;const t=state.time;
  const growthLagoon=smooth(t/4.4);lagoon.mat.uniforms.uGrow.value=growthLagoon;
  for(const [i,p] of puddles.entries()){p.mat.uniforms.uGrow.value=state.mode==='rain'?smooth((t-i*.3)/1.8):smooth((t-i*.4)/3);p.mat.uniforms.uTime.value=t;p.mat.uniforms.uWave.value=.52;p.mat.uniforms.uReflect.value=1.3;p.mat.uniforms.uShore.value=.60;}
  lagoon.mat.uniforms.uTime.value=t;lagoon.mat.uniforms.uWave.value=1.25;lagoon.mat.uniforms.uReflect.value=.82;lagoon.mat.uniforms.uShore.value=1.15;
- const n=countDrops();rain.count=n;
+ const cfg=levelSpec();const n=countDrops();rain.count=n;
+ for(const p of puddles)p.mat.uniforms.uWave.value=.32+.38*cfg.wave;
+ lagoon.mat.uniforms.uWave.value=.72+.72*cfg.wave;
+ const wet=1-.17*cfg.drizzle;floor.material.color.setRGB(wet,wet,wet);
  if(!state.paused && n>0){for(let i=0;i<n;i++){
-  const j=i*3;dropPos[j+1]-=dt*speed[i];if(dropPos[j+1]<.04){dropPos[j+1]=10+rnd()*7;dropPos[j]=(rnd()-.5)*26;dropPos[j+2]=(rnd()-.5)*21;}
+  const j=i*3;dropPos[j+1]-=dt*speed[i]*cfg.speed;if(dropPos[j+1]<.04){dropPos[j+1]=10+rnd()*7;dropPos[j]=(rnd()-.5)*26;dropPos[j+2]=(rnd()-.5)*21;}
   dropD.position.set(dropPos[j],dropPos[j+1],dropPos[j+2]);dropD.quaternion.copy(camera.quaternion);
-  dropD.scale.set(.75+rnd()*.02,lengths[i],1);dropD.updateMatrix();rain.setMatrixAt(i,dropD.matrix);
+  dropD.rotateZ(state.level>=4?-.085:state.level===3?-.035:0);
+  dropD.scale.set(.66,lengths[i]*cfg.streak,1);dropD.updateMatrix();rain.setMatrixAt(i,dropD.matrix);
  }rain.instanceMatrix.needsUpdate=true;}
- if(!state.paused && state.mode!=='lagoon' && t>state.emitAt){
-  state.emitAt=t+(state.mode==='storm'?.055:.095)/Math.max(.25,state.intensity);
-  if(state.mode==='storm'){
+ if(!state.paused && n>0 && t>state.emitAt){
+  state.emitAt=t+cfg.splash;
+  if(state.mode==='storm'||state.mode==='lagoon'){
     const a=rnd()*Math.PI*2,r=Math.sqrt(rnd())*.74*growthLagoon;
     const x=Math.cos(a)*8.2*r,z=Math.sin(a)*5.8*r;
     splash(x,z,true);
@@ -176,13 +201,13 @@ function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-last
  }
  if(!state.paused){for(const r of rings){if(r.life>=r.duration){r.mesh.visible=false;continue;}r.life+=dt;const p=r.life/r.duration;r.mesh.scale.setScalar((r.tiny?.2:.35)+p*(r.tiny?.55:1.4));r.mesh.material.opacity=.68*(1-p)**1.7;}}
  controls.update();renderer.render(scene,camera);
- state.frames++;state.fpsTime+=dt;if(state.fpsTime>1.3){$('info').textContent=`${names[state.mode]} · ${Math.round(state.frames/state.fpsTime)} FPS · ${n} gotas · Arraste para girar`;state.fpsTime=0;state.frames=0;}
+ state.frames++;state.fpsTime+=dt;if(state.fpsTime>1.3){$('info').textContent=`${names[state.mode]} · ${cfg.name} · ${Math.round(state.frames/state.fpsTime)} FPS · ${n} gotas`;state.fpsTime=0;state.frames=0;}
 }
 document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
 $('replay').addEventListener('click',reset);
 $('pause').addEventListener('click',()=>{state.paused=!state.paused;$('pause').textContent=state.paused?'▶ Continuar':'⏸ Pausar';});
 $('cam').addEventListener('click',()=>{camera.position.set(11,8.8,14.5);controls.target.set(0,0,0);controls.update();});
-$('intensity').addEventListener('input',e=>state.intensity=Number(e.target.value)/100);
+$('intensity').addEventListener('input',e=>updateRainLevel(e.target.value));
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight,false);});
 canvas.addEventListener('pointerup',e=>{point.set(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);raycaster.setFromCamera(point,camera);
  const targets=state.mode==='lagoon'||state.mode==='storm'?[lagoon.mesh]:puddles.map(p=>p.mesh);
