@@ -128,23 +128,23 @@ const waterM=new T.ShaderMaterial({side:T.DoubleSide,transparent:true,depthWrite
 });
 const water=new T.Mesh(waterG,waterM);water.renderOrder=3;water.name='Superfície compartilhada de água';scene.add(water);
 // Gotas físicas visuais: cilindro alongado, brilho em pixels e halos suaves.
-const MAX_DROPS=mobile?230:420,MAX_SPLASH=mobile?160:260,MAX_RIPPLES=mobile?24:40;
+const MAX_DROPS=mobile?230:420,MAX_SPLASH=mobile?160:260,MAX_RIPPLES=mobile?32:54;
 const drops=[],splashes=[],ripples=[],dropPos=new Float32Array(MAX_DROPS*3);
 const dropG=new T.BufferGeometry();dropG.setAttribute('position',new T.BufferAttribute(dropPos,3));
 const dropTexture=(()=>{const c=document.createElement('canvas');c.width=c.height=64;
  const x=c.getContext('2d'),g=x.createRadialGradient(32,32,1,32,32,30);
- g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.28,'rgba(220,250,255,.96)');
- g.addColorStop(.57,'rgba(136,222,240,.37)');g.addColorStop(1,'rgba(100,180,235,0)');
+ g.addColorStop(0,'rgba(229,245,252,.82)');g.addColorStop(.28,'rgba(175,209,222,.64)');
+ g.addColorStop(.57,'rgba(110,172,194,.20)');g.addColorStop(1,'rgba(110,172,194,0)');
  x.fillStyle=g;x.fillRect(0,0,64,64);return new T.CanvasTexture(c);})();
-const halo=new T.Points(dropG,new T.PointsMaterial({color:'#bcf2ff',map:dropTexture,transparent:true,
- size:mobile?18:15,sizeAttenuation:false,depthWrite:false,opacity:.86}));
+const halo=new T.Points(dropG,new T.PointsMaterial({color:'#bad4df',map:dropTexture,transparent:true,
+ size:mobile?10:9,sizeAttenuation:false,depthWrite:false,opacity:.46}));
 halo.frustumCulled=false;halo.renderOrder=5;scene.add(halo);
-const streak=new T.InstancedMesh(new T.CylinderGeometry(.018,.028,.43,6),
- new T.MeshBasicMaterial({color:'#d4f6ff',transparent:true,opacity:.93,depthWrite:false}),MAX_DROPS);
+const streak=new T.InstancedMesh(new T.CylinderGeometry(.012,.016,.32,6),
+ new T.MeshBasicMaterial({color:'#b0cdd9',transparent:true,opacity:.66,depthWrite:false}),MAX_DROPS);
 streak.frustumCulled=false;streak.renderOrder=5;streak.count=0;scene.add(streak);
 // Sprays: true droplets of soil or water moving in small arcs.
 const splashMesh=new T.InstancedMesh(new T.IcosahedronGeometry(.055,0),
- new T.MeshBasicMaterial({color:'#ffffff',transparent:true,opacity:.91,depthWrite:false}),MAX_SPLASH);
+ new T.MeshBasicMaterial({color:'#e1ebee',transparent:true,opacity:.80,depthWrite:false}),MAX_SPLASH);
 splashMesh.frustumCulled=false;splashMesh.renderOrder=6;splashMesh.count=0;scene.add(splashMesh);
 const rippleMaterial=new T.ShaderMaterial({side:T.DoubleSide,transparent:true,depthWrite:false,depthTest:true,
  vertexShader:'attribute float strength; varying float vStrength; void main(){vStrength=strength;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
@@ -345,13 +345,13 @@ function dropStep(dt){
   }
  }
  const enhanced=rainStyle==='enhanced';
- streak.material.opacity=enhanced?.98:.73;
- halo.material.size=enhanced?(mobile?20:16):(mobile?10:9);
- halo.material.opacity=enhanced?.92:.53;
+ streak.material.opacity=enhanced?.67:.46;
+ halo.material.size=enhanced?(mobile?10:9):(mobile?7:6);
+ halo.material.opacity=enhanced?.49:.31;
  for(let i=0;i<drops.length;i++){
   const d=drops[i],o=i*3;dropPos[o]=d.x;dropPos[o+1]=d.y-.1;dropPos[o+2]=d.z;
   dropObj.position.set(d.x,d.y,d.z);dropObj.rotation.set(0,0,-.095);
-  dropObj.scale.set(enhanced?1.5:1,enhanced?d.stretch*1.55:d.stretch,enhanced?1.5:1);
+  dropObj.scale.set(enhanced?1.05:.78,enhanced?d.stretch*.90:d.stretch*.7,enhanced?1.05:.78);
   dropObj.updateMatrix();streak.setMatrixAt(i,dropObj.matrix);
  }
  dropG.setDrawRange(0,drops.length);dropG.attributes.position.needsUpdate=true;
