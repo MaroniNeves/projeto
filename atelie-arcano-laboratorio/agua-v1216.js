@@ -713,7 +713,15 @@ function updateInfo(force){
  $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondas · '+foamCount+' manchas de espuma/sujeira';
   $('reflectionStats').textContent='Superfície visual '+VIS_NX+'×'+VIS_NZ+' · reflexos do cenário '+(reflectionsOn?(reflectionReady?'ativos':'preparando'):'desligados')+' · '+reflectionFrames+' capturas';
   $('mudStats').textContent='Sedimentos suspensos: '+Math.round(mudTotal/Math.max(.0001,mudWeight)*100)+'% · '+({loam:'terra comum',loose:'terra solta',clay:'barro argiloso',compacted:'terra compactada'}[soilType]||soilType);
- $('lakeStats').textContent='Lagoa: '+Math.round(lagoonWet/Math.max(1,lagoonCells)*100)+'% da bacia coberta · profundidade '+lagoonMax.toFixed(2)+' m · '+otherPuddles+' células de poças';
+ // Conta apenas rochas que realmente encontram a lâmina, não rochas sobre terra seca.
+ let touchedRocks=0,coveredRocks=0;
+ for(const rock of rockSolids){
+  const d=sample(depth,rock.x,rock.z);if(d<SURFACE_VISIBLE)continue;
+  const waterline=sample(soil,rock.x,rock.z)+d;
+  if(waterline>=rock.bottom+.015)touchedRocks++;
+  if(waterline>=rock.top-.012)coveredRocks++;
+ }
+ $('lakeStats').textContent='Lagoa: '+Math.round(lagoonWet/Math.max(1,lagoonCells)*100)+'% da bacia coberta · profundidade '+lagoonMax.toFixed(2)+' m · '+touchedRocks+' rochas molhadas · '+coveredRocks+' encobertas';
  $('cycleStats').textContent='Infiltrou '+stats.infiltrated.toFixed(1)+' m³ · folhas '+leaf.toFixed(1)+' m³ · evapotranspiração '+(stats.evaporated+stats.transpired).toFixed(1)+' m³ · drenou '+stats.outflow.toFixed(1)+' m³';
  $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
  $('info').textContent=level===0?'Chuva cessou: poças infiltram, evaporam e escoam • toque para adicionar água':'Parte da chuva infiltra na terra; as depressões concentram poças • arraste para girar';
@@ -738,6 +746,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1216'))fail(e.error||e.message);});
-window.arcanoWaterV1216={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,setRainLevel,reflectionCamera,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.arcanoWaterV1216={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,reflectionCamera,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
