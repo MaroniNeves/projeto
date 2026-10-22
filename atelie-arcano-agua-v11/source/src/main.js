@@ -19,18 +19,18 @@ const grid=new THREE.GridHelper(50,30,0x526862,0x526862);grid.position.y=-.074;g
 let seed=1273;function rnd(){seed=(1664525*seed+1013904223)>>>0;return seed/4294967296}
 const stone=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(.3,0),new THREE.MeshStandardMaterial({color:0x737e78,roughness:1,flatShading:true}),60),dummy=new THREE.Object3D();
 for(let i=0;i<60;i++){let a=rnd()*Math.PI*2,r=7+rnd()*5;dummy.position.set(r*Math.cos(a),0,r*Math.sin(a));dummy.rotation.y=a;dummy.scale.set(.4+rnd()*1.7,.18+rnd()*.5,.4+rnd()*1.6);dummy.updateMatrix();stone.setMatrixAt(i,dummy.matrix)}stone.instanceMatrix.needsUpdate=true;scene.add(stone);
-const vert=/*glsl*/\`
+const vert=/*glsl*/`
 uniform float time;uniform float wave;varying vec2 uv0;varying vec3 pos0;
 void main(){vec3 p=position;float h=sin(p.x*2.8+time*1.5)*.037+cos(p.z*2.2-time*1.2)*.027+sin((p.x+p.z)*5.0+time*2.3)*.012;p.y+=h*wave;uv0=uv;pos0=p;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);}
-\`;
-const frag=/*glsl*/\`
+`;
+const frag=/*glsl*/`
 uniform float time;uniform float grow;uniform float seed;uniform vec3 deep;uniform vec3 shallow;varying vec2 uv0;varying vec3 pos0;
 void main(){vec2 p=(uv0-.5)*2.0;float a=atan(p.y,p.x);float edge=1.0+.075*sin(a*6.0+seed)+.05*cos(a*11.0-seed*1.7);
 float r=length(p/vec2(.97,.83));float lim=max(.001,grow)*edge;if(r>lim)discard;float v=clamp(r/max(lim,.01),0.0,1.0);
 vec3 col=mix(deep,shallow,smoothstep(.15,.98,v));float w=sin(pos0.x*4.0+time*1.5)*cos(pos0.z*4.2-time*1.1);
 col+=vec3(.06,.15,.16)*(w*.5+.5);float foam=smoothstep(.88,1.0,v)*(.24+.12*sin(a*19.0+time*1.5));col=mix(col,vec3(.7,.88,.86),foam);
 float glitter=pow(max(0.0,sin(p.x*17.0+time*2.1)*cos(p.y*11.0-time*1.6)),14.0);col+=vec3(.12,.18,.15)*glitter;gl_FragColor=vec4(col,.96);}
-\`;
+`;
 function makeWater(x,z,w,h,deep,shallow,offset){const g=new THREE.PlaneGeometry(w,h,48,32);g.rotateX(-Math.PI/2);
 const m=new THREE.ShaderMaterial({vertexShader:vert,fragmentShader:frag,side:THREE.DoubleSide,transparent:true,depthWrite:true,uniforms:{time:{value:0},wave:{value:1},grow:{value:0},seed:{value:offset},deep:{value:new THREE.Color(deep)},shallow:{value:new THREE.Color(shallow)}}});
 const mesh=new THREE.Mesh(g,m);mesh.position.set(x,.025,z);mesh.frustumCulled=false;scene.add(mesh);return {mesh,m,x,z,w,h}}
