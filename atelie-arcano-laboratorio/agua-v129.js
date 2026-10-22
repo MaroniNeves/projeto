@@ -473,9 +473,10 @@ function updateInfo(force){
  const pct=Math.round(level/5*100),name=rainNames[level];
  $('intensityName').textContent=name;$('rainMeter').style.setProperty('--rain-fill',pct+'%');
  let surface=0,stored=0,ground=0,leaf=0,saturated=0,participating=0;
- let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0;
+ let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0,mudTotal=0,mudWeight=0;
  for(let k=0;k<size;k++)if(!blocked[k]){
   surface+=depth[k];stored+=soilMoisture[k];ground+=deepWater[k];leaf+=canopy[k];
+   if(depth[k]>.010){mudTotal+=turbidity[k]*depth[k];mudWeight+=depth[k];}
   saturated+=clamp(soilMoisture[k]/soilCapacity[k],0,1);participating++;
   const i=k%NX,j=Math.floor(k/NX),x=nx(i),z=nz(j),b=basins[1];
   const q=((x-b.x)/b.sx)**2+((z-b.z)/b.sz)**2;
@@ -487,6 +488,7 @@ function updateInfo(force){
  $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
  $('waterStats').textContent='Superfície '+surface.toFixed(1)+' m³ · poças '+wetted.toFixed(1)+' m² · aquífero '+ground.toFixed(1)+' m³';
  $('splashStats').textContent='Impactos visíveis '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondulações no relevo';
+  $('mudStats').textContent='Sedimentos suspensos: '+Math.round(mudTotal/Math.max(.0001,mudWeight)*100)+'% · '+({loam:'terra comum',loose:'terra solta',clay:'barro argiloso',compacted:'terra compactada'}[soilType]||soilType);
  $('lakeStats').textContent='Lagoa: '+Math.round(lagoonWet/Math.max(1,lagoonCells)*100)+'% da bacia coberta · profundidade '+lagoonMax.toFixed(2)+' m · '+otherPuddles+' células de poças';
  $('cycleStats').textContent='Infiltrou '+stats.infiltrated.toFixed(1)+' m³ · folhas '+leaf.toFixed(1)+' m³ · evapotranspiração '+(stats.evaporated+stats.transpired).toFixed(1)+' m³ · drenou '+stats.outflow.toFixed(1)+' m³';
  $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
@@ -510,6 +512,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v129'))fail(e.error||e.message);});
-window.arcanoWaterV129={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,stats,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.arcanoWaterV129={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('rain');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
