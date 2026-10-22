@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.17 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.18 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.17]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.18]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -135,6 +135,163 @@ function animateClimate(dt){
  light.intensity=weatherCfg.sunPower*shade;
  if(typeof waterM!=='undefined')waterM.uniforms.uSunPower.value=weatherCfg.sunVisible*shade;
 }
+// V12.18 — Atmosfera acoplada: UM dia = 24 minutos REAIS (1440 segundos).
+// Inspirada no vídeo analisado: calor solar -> transpiração/evaporação -> umidade,
+// vento e relevo -> condensação -> nuvens -> precipitação -> infiltração.
+// Grade meteorológica separada e barata; escalas ilustrativas, não previsão real.
+const DAY_SECONDS=1440,ATM_NX=mobile?7:9,ATM_NZ=mobile?6:8,ATM_N=ATM_NX*ATM_NZ;
+const atmTemp=new Float32Array(ATM_N),atmHumidity=new Float32Array(ATM_N),
+ atmPressure=new Float32Array(ATM_N),atmCloud=new Float32Array(ATM_N),
+ atmRain=new Float32Array(ATM_N),atmWindX=new Float32Array(ATM_N),
+ atmWindZ=new Float32Array(ATM_N),atmNextHum=new Float32Array(ATM_N),
+ atmNextCloud=new Float32Array(ATM_N),rainField=new Float32Array(size);
+let physicalWeather=true,dayClock=390,atmosAccumulator=0,lastAtmosEvap=0,lastAtmosRain=0;
+let atmRainMean=0,atmRainPeak=0,atmCloudMean=.42,atmHumMean=.70,atmTempMean=23,
+ atmPressureMean=1011,atmWindMean=.4,atmWindHeading=0,atmosDayIndex=0;
+const atmId=(i,j)=>j*ATM_NX+i,atmX=i=>-W*.5+i*W/(ATM_NX-1),
+ atmZ=j=>-L*.5+j*L/(ATM_NZ-1);
+const solarAt=seconds=>Math.sin(2*Math.PI*(seconds/DAY_SECONDS-.25));
+function fieldAt(field,x,z){
+ const fx=clamp((x/W+.5)*(ATM_NX-1),0,ATM_NX-1-.000001);
+ const fz=clamp((z/L+.5)*(ATM_NZ-1),0,ATM_NZ-1-.000001);
+ const i=Math.floor(fx),j=Math.floor(fz),u=fx-i,v=fz-j;
+ const a=atmId(i,j),b=a+1,c=a+ATM_NX,d=c+1;
+ return ((field[a]*(1-u)+field[b]*u)*(1-v)+
+         (field[c]*(1-u)+field[d]*u)*v);
+}
+function initAtmosphere(){
+ dayClock=390;atmosDayIndex=0;atmosAccumulator=0;
+ lastAtmosEvap=stats.evaporated+stats.transpired;
+ lastAtmosRain=stats.rain;
+ for(let j=0;j<ATM_NZ;j++)for(let i=0;i<ATM_NX;i++){
+  const k=atmId(i,j),x=atmX(i),z=atmZ(j);
+  const wave=Math.sin(x*.48-z*.31),other=Math.cos(x*.32+z*.57);
+  atmTemp[k]=21.6+2.6*wave+1.2*other;
+  atmHumidity[k]=clamp(.76+.10*wave+.08*other,.44,.94);
+  atmPressure[k]=1012.5+3.1*Math.sin(x*.28+z*.35);
+  atmCloud[k]=clamp(.40+.19*Math.sin(x*.56+z*.41)+.16*Math.cos(z*.65-x*.19),.02,.83);
+  atmRain[k]=0;atmWindX[k]=.32;atmWindZ[k]=.15;
+ }
+ rainField.fill(0);atmRainMean=atmRainPeak=0;
+ atmCloudMean=.48;atmHumMean=.74;atmTempMean=23;atmPressureMean=1012;
+ if(physicalWeather&&climateChoice==='auto')applyClimate('partlyCloudy');
+}
+function atmCloudPreset(){
+ if(atmRainPeak>.006||atmRainMean>.0021)return 'storm';
+ if(atmCloudMean>.69)return 'overcast';
+ if(atmCloudMean<.29)return 'sunny';
+ return 'partlyCloudy';
+}
+function atmosphereStep(dt){
+ const daySun=Math.max(0,solarAt(dayClock)),night=1-daySun;
+ const clock=dayClock/DAY_SECONDS;
+ // Passageira frente fria móvel atravessa a paisagem a cada dois dias.
+ const frontX=-W*.60+((clock+atmosDayIndex*.53)%1)*W*1.35;
+ const evaporation=Math.max(0,stats.evaporated+stats.transpired-lastAtmosEvap);
+ const rainfall=Math.max(0,stats.rain-lastAtmosRain);
+ lastAtmosEvap=stats.evaporated+stats.transpired;lastAtmosRain=stats.rain;
+ const recycled=clamp(evaporation/(W*L)*1.4,0,.025);
+ const rainSink=clamp(rainfall/(W*L)*.24,0,.014);
+ let tSum=0,hSum=0,cSum=0,pSum=0,windSum=0,rainSum=0,peak=0,wxSum=0,wzSum=0;
+ // 1. Advecção do vapor e das nuvens pelo vento (amostragem a montante).
+ for(let j=0;j<ATM_NZ;j++)for(let i=0;i<ATM_NX;i++){
+  const k=atmId(i,j),x=atmX(i),z=atmZ(j);
+  const backX=x-atmWindX[k]*dt*.16,backZ=z-atmWindZ[k]*dt*.16;
+  atmNextHum[k]=fieldAt(atmHumidity,backX,backZ);
+  atmNextCloud[k]=fieldAt(atmCloud,backX,backZ);
+ }
+ // 2. Energia solar, pressão, frente fria, evapotranspiração e condensação.
+ for(let j=0;j<ATM_NZ;j++)for(let i=0;i<ATM_NX;i++){
+  const k=atmId(i,j),x=atmX(i),z=atmZ(j),terrain=elevation(x,z);
+  const front=Math.exp(-Math.pow((x-frontX)/2.0,2));
+  const forest=clamp(.31+.26*Math.sin(x*.7-z*.51),.05,.85);
+  const airTempTarget=15.7+15.2*daySun-2.4*forest-1.8*terrain-7.4*front;
+  atmTemp[k]+= (airTempTarget-atmTemp[k])*clamp(dt*.0075,0,.15);
+  const pressureTarget=1013.8+2.1*Math.cos(2*Math.PI*clock)
+        -7.4*front+2.0*Math.sin(z*.39+clock*5.1);
+  atmPressure[k]+=(pressureTarget-atmPressure[k])*clamp(dt*.009,0,.15);
+  const left=atmPressure[atmId(Math.max(0,i-1),j)],
+   right=atmPressure[atmId(Math.min(ATM_NX-1,i+1),j)],
+   up=atmPressure[atmId(i,Math.max(0,j-1))],
+   down=atmPressure[atmId(i,Math.min(ATM_NZ-1,j+1))];
+  // Ar acelera dos centros de maior pressão em direção aos de menor pressão.
+  atmWindX[k]=clamp(.29+(left-right)*.12+front*.35,-1.5,1.5);
+  atmWindZ[k]=clamp(.13+(up-down)*.12+.22*Math.sin(clock*6.28+z*.19),-1.5,1.5);
+  const slopeX=(elevation(x+.32,z)-elevation(x-.32,z))/.64;
+  const slopeZ=(elevation(x,z+.32)-elevation(x,z-.32))/.64;
+  const uplift=Math.max(0,atmWindX[k]*slopeX+atmWindZ[k]*slopeZ);
+  // Umidade disponível cai ao aquecer e sobe com o resfriamento/evaporação.
+  const cooling=Math.max(0,21-atmTemp[k])*.00016;
+  let hum=atmNextHum[k]+(forest*.00024+recycled/ATM_N+cooling-
+                          daySun*.000085-rainSink/ATM_N)*dt;
+  hum=clamp(hum,.22,.985);
+  const saturated=clamp((hum-.70)*3.15+(23-atmTemp[k])*.018+uplift*.24+front*.22,0,1);
+  let cloud=clamp(atmNextCloud[k]+(saturated*.032-
+                  (1-saturated)*(.007+.009*daySun))*dt,0,1);
+  const precipitation=clamp((cloud-.47)*2.7,0,1)*
+             clamp((hum-.59)*3.4,0,1)*
+             (.72+.45*uplift+.30*front);
+  // Condensado reduz nuvem e umidade quando precipita; recarga por evaporação.
+  const rainRate=clamp(precipitation*.0036,0,.0082);
+  cloud=clamp(cloud-rainRate*dt*2.0,0,1);
+  hum=clamp(hum-rainRate*dt*.75,0,1);
+  atmHumidity[k]=hum;atmCloud[k]=cloud;atmRain[k]=rainRate;
+  tSum+=atmTemp[k];hSum+=hum;cSum+=cloud;pSum+=atmPressure[k];
+  windSum+=Math.hypot(atmWindX[k],atmWindZ[k]);
+  wxSum+=atmWindX[k];wzSum+=atmWindZ[k];rainSum+=rainRate;peak=Math.max(peak,rainRate);
+ }
+ atmTempMean=tSum/ATM_N;atmHumMean=hSum/ATM_N;atmCloudMean=cSum/ATM_N;
+ atmPressureMean=pSum/ATM_N;atmWindMean=windSum/ATM_N;
+ atmWindHeading=Math.atan2(wzSum,wxSum);
+ atmRainMean=rainSum/ATM_N;atmRainPeak=peak;
+ // Chuva regional em grade física; cada célula recebe a precipitação da sua zona.
+ for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
+  const k=idx(i,j);rainField[k]=fieldAt(atmRain,nx(i),nz(j));
+ }
+ if(physicalWeather&&climateChoice==='auto'){
+  const next=atmCloudPreset();
+  if(next!==climate)applyClimate(next);
+ }
+}
+function updateAtmosphere(dt){
+ // O relógio solar corre em tempo real: 1440 s = 24 h do jogo.
+ const wasDay=dayClock;
+ dayClock=(dayClock+dt)%DAY_SECONDS;
+ if(dayClock<wasDay)atmosDayIndex++;
+ atmosAccumulator+=dt;
+ if(atmosAccumulator>=.55){
+  const amount=Math.min(2.0,atmosAccumulator);
+  atmosAccumulator=0;atmosphereStep(amount);
+ }
+ // Trajetória contínua do sol: leste ao amanhecer, alto no meio-dia, oeste ao entardecer.
+ const phase=dayClock/DAY_SECONDS,angle=2*Math.PI*(phase-.25);
+ const solar=solarAt(dayClock),dayLight=clamp((solar+.06)*2.7,0,1);
+ const sunX=Math.cos(angle)*.87,sunY=solar,sunZ=.45*Math.sin(angle+.33);
+ const r=Math.hypot(sunX,sunY,sunZ)||1;
+ skySunDir.set(sunX/r,sunY/r,sunZ/r);
+ skyM.uniforms.uNight.value=1-dayLight;
+ skyM.uniforms.uSunDir.value.copy(skySunDir);
+ skyM.uniforms.uSunVisible.value=weatherCfg?weatherCfg.sunVisible*dayLight:dayLight;
+ light.position.set(sunX*22,Math.max(.08,sunY)*22,sunZ*22);
+ light.intensity=(weatherCfg?weatherCfg.sunPower:2.0)*dayLight;
+ ambientSky.intensity=(weatherCfg?weatherCfg.ambientPower:2.1)*(.17+.83*dayLight);
+ if(typeof waterM!=='undefined'){
+  waterM.uniforms.uSun.value.copy(skySunDir);
+  waterM.uniforms.uSunPower.value=(weatherCfg?weatherCfg.sunVisible:1)*dayLight;
+ }
+ if(climateChoice==='auto'&&physicalWeather){
+  skyM.uniforms.uCoverage.value=atmCloudMean;
+  skyM.uniforms.uWind.value=clamp(atmWindMean*.8,0,1.2);
+  if(typeof waterM!=='undefined'){
+   waterM.uniforms.uCloudiness.value=atmCloudMean;
+   waterM.uniforms.uWind.value=clamp(atmWindMean*.8,0,1.2);
+  }
+ }
+}
+function atmosphereRainAt(x,z){
+ return fieldAt(atmRain,x,z);
+}
+
 function grid(){
  const g=new T.BufferGeometry(),p=new Float32Array(size*3),uv=new Float32Array(size*2),tri=[];
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
@@ -870,7 +1027,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1217'))fail(e.error||e.message);});
-window.arcanoWaterV1217={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1218'))fail(e.error||e.message);});
+window.arcanoWaterV1218={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
