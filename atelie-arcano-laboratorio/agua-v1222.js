@@ -42,8 +42,8 @@ const soilOrganic=new Float32Array(size),soilLitter=new Float32Array(size),soilN
  soilP=new Float32Array(size),soilK=new Float32Array(size),soilCa=new Float32Array(size),
  soilPH=new Float32Array(size),soilSalinity=new Float32Array(size),soilBiota=new Float32Array(size),
  soilPlant=new Float32Array(size),soilHealth=new Float32Array(size),soilLimiting=new Uint8Array(size);
-const SOIL_LIMITS=['água','nitrogênio','fósforo','potássio','pH','salinidade','oxigênio'];
-const plantNeeds={moisture:.50,n:.58,p:.50,k:.48};
+const SOIL_LIMITS=['água','nitrogênio','fósforo','potássio','cálcio','pH','salinidade','oxigênio'];
+const plantNeeds={moisture:.50,n:.58,p:.50,k:.48,ca:.45};
 let soilEcologySeconds=0,plantVisualSeconds=0,soilUpdates=0;
 function chooseMosaicSoil(x,z,h,k){
  const stream=Math.abs(x-center(z));
@@ -92,7 +92,8 @@ function minNutrientAt(k){
   pot=clamp(soilK[k]/plantNeeds.k,0,1);
  const acidity=clamp(1-Math.abs(soilPH[k]-6.5)/2.5,0,1);
  const salinity=clamp(1-soilSalinity[k]*1.20,0,1);
- const factors=[waterFactor,n,phos,pot,acidity,salinity,oxygen];
+ const calcium=clamp(soilCa[k]/plantNeeds.ca,0,1);
+ const factors=[waterFactor,n,phos,pot,calcium,acidity,salinity,oxygen];
  let minimum=factors[0],limiter=0;
  for(let m=1;m<factors.length;m++)if(factors[m]<minimum){minimum=factors[m];limiter=m;}
  soilLimiting[k]=limiter;
@@ -133,6 +134,7 @@ function ecologyStep(dt){
   soilN[k]=Math.max(0,soilN[k]-uptake*.75);
   soilP[k]=Math.max(0,soilP[k]-uptake*.42);
   soilK[k]=Math.max(0,soilK[k]-uptake*.57);
+  soilCa[k]=Math.max(0,soilCa[k]-uptake*.23);
   // A serrapilheira nunca desaparece sem reposição nas áreas vegetadas.
   soilLitter[k]=clamp(soilLitter[k]+days*soilPlant[k]*.024,0,1.3);
   // Biota como índice funcional, não minhocas 3D (fase futura).
@@ -1362,6 +1364,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1222'))fail(e.error||e.message);});
-window.arcanoWaterV1222={scene,renderer,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.arcanoWaterV1222={scene,renderer,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
