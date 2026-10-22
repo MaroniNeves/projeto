@@ -296,7 +296,7 @@ function seed(m){
 // A chuva é alimentada por um campo uniforme; gotas animadas representam a mesma chuva,
 // sem depositar um segundo volume ao colidir (evita contagem dupla).
 function hydrologyStep(dt){
- const rain=rainMeters[level]*dt*(mode==='storm'?1.28:mode==='lagoon'?1.23:1);
+ const rain=rainMeters[level]*dt*(mode==='storm'?1.28:mode==='lagoon'?1.36:1);
  const interp=process==='retention'?1.75:process==='infiltration'?.95:1;
  const infiltrate=process==='runoff'?.11:process==='infiltration'?3.0:process==='retention'?.8:1;
  const evaporate=process==='retention'?3.1:process==='runoff'?.65:1;
@@ -539,12 +539,12 @@ $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo
 $('soilType').addEventListener('change',e=>setSoilType(e.target.value));
 for(const btn of document.querySelectorAll('[data-mode]'))btn.addEventListener('click',()=>setMode(btn.dataset.mode));
 function setMode(next){
- mode=next;level=next==='storm'?5:next==='lagoon'?4:next==='puddle'?3:3;
+ mode=next;level=next==='storm'?5:next==='lagoon'?3:next==='puddle'?3:3;
  setRainLevel(level);seed(mode);
  document.querySelectorAll('[data-mode]').forEach(el=>el.classList.toggle('active',el.dataset.mode===mode));
  $('hint').textContent={rain:'Chuva cai sobre a terra e se divide em infiltração, escoamento e evapotranspiração.',
- puddle:'Relevo seco no começo: observe as poças surgirem e se unirem nas depressões.',
- lagoon:'Acompanhe a lagoa se formando, enchendo e extravasando pelo terreno.',
+ puddle:'A terra absorve a maior parte da chuva; pequenas poças surgem lentamente nas depressões.',
+ lagoon:'A lagoa cresce aos poucos nas bacias; as partes mais altas permanecem apenas úmidas.',
  storm:'Temporal: a terra satura e aumenta o escoamento entre as pedras 3D.'}[mode];
 }
 $('replay').addEventListener('click',()=>seed(mode));
