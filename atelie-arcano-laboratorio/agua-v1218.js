@@ -1001,7 +1001,9 @@ function updateInfo(force){
   if(depth[k]>=SURFACE_VISIBLE&&q>.72)otherPuddles++;
  }
  surface*=area;stored*=area;ground*=area;leaf*=area;
- $('rainDetail').textContent='Chuva '+name+' • '+timeScale+'× • '+drops.length+' gotas 3D';
+ $('rainDetail').textContent=(physicalWeather
+  ?'Chuva por regiões · média '+(atmRainMean*1000).toFixed(2)+' un/s · máxima '+(atmRainPeak*1000).toFixed(2)
+  :'Chuva manual · '+name)+' • '+timeScale+'× • '+drops.length+' gotas 3D';
  $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
  $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
  $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
@@ -1023,8 +1025,24 @@ function updateInfo(force){
  }
  $('lakeStats').textContent='Lagoa: '+Math.round(lagoonWet/Math.max(1,lagoonCells)*100)+'% da bacia coberta · profundidade '+lagoonMax.toFixed(2)+' m · '+touchedRocks+' rochas molhadas · '+coveredRocks+' encobertas';
  $('cycleStats').textContent='Infiltrou '+stats.infiltrated.toFixed(1)+' m³ · folhas '+leaf.toFixed(1)+' m³ · evapotranspiração '+(stats.evaporated+stats.transpired).toFixed(1)+' m³ · drenou '+stats.outflow.toFixed(1)+' m³';
+ const hour=Math.floor(dayClock/60),minute=Math.floor(dayClock%60);
+ const hh=String(hour).padStart(2,'0'),mm=String(minute).padStart(2,'0');
+ const sunAltitude=solarAt(dayClock);
+ const phaseName=sunAltitude<-.035?'Noite':sunAltitude<.10?'Crepúsculo':
+  dayClock<DAY_SECONDS*.50?'Manhã':'Tarde';
+ $('dayCycleStats').textContent=(sunAltitude<-.035?'☾ ':'☀ ')+
+  'Dia '+(atmosDayIndex+1)+' · '+hh+':'+mm+' · '+phaseName+' · 1 dia = 24 min reais';
+ $('dayCycleBar').style.width=(dayClock/DAY_SECONDS*100).toFixed(2)+'%';
+ $('atmosStats').textContent=(physicalWeather?'Atmosfera física':'Clima manual')+
+  ' · '+atmTempMean.toFixed(1)+' °C · umidade '+Math.round(atmHumMean*100)+
+  '% · '+atmPressureMean.toFixed(0)+' hPa · vento '+atmWindMean.toFixed(1)+
+  ' · nuvens '+Math.round(atmCloudMean*100)+'% · chuva local '+(atmRainMean*1000).toFixed(2);
  $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
- $('info').textContent=level===0?'Chuva cessou: poças infiltram, evaporam e escoam • toque para adicionar água':'Parte da chuva infiltra na terra; as depressões concentram poças • arraste para girar';
+ $('info').textContent=level===0
+ ?'Chuva suspensa: poças infiltram e evaporam; o ciclo solar continua'
+ :physicalWeather
+ ?'A chuva depende das nuvens, vento e umidade locais • toque para adicionar água'
+ :'Chuva manual: as depressões concentram poças • arraste para girar';
 }
 
 let last=performance.now();function loop(now){
@@ -1048,6 +1066,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1218'))fail(e.error||e.message);});
-window.arcanoWaterV1218={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.arcanoWaterV1218={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
