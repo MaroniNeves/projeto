@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.20 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.21 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.20]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.21]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -88,7 +88,8 @@ const CLIMATE={
   bg:'#778590',sun:'#c6d6e0',ambient:'#a6bbcb',ground:'#586568',
   coverage:.99,wind:1.25,sunPower:.30,ambientPower:1.08,sunVisible:.005,reflection:.51,waterTint:'#617280'}
 };
-function stormActive(){return level===5||(mode==='storm'&&level>0);}
+// O nível escolhido controla o temporal mesmo depois de entrar no modo Temporal.
+function stormActive(){return level===5;}
 function automaticClimate(level){
  if(level===0)return 'sunny';
  if(level>=5)return 'storm';
@@ -184,6 +185,7 @@ function initAtmosphere(){
   atmRain[k]=0;atmWindX[k]=.32;atmWindZ[k]=.15;
  }
  rainField.fill(0);atmRainMean=atmRainPeak=0;
+ appliedRainMean=appliedRainPeak=activeRainRegions=0;
  atmCloudMean=.48;atmHumMean=.74;atmTempMean=23;atmPressureMean=1012;
  if(physicalWeather&&climateChoice==='auto')applyClimate('partlyCloudy');
 }
@@ -262,6 +264,7 @@ function atmosphereStep(dt){
  atmWindHeading=Math.atan2(wzSum,wxSum);
  atmRainMean=rainSum/ATM_N;atmRainPeak=peak;
  // Chuva regional em grade física; cada célula recebe a precipitação da sua zona.
+ refreshRainDiagnostics();
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
   const k=idx(i,j);rainField[k]=fieldAt(atmRain,nx(i),nz(j));
  }
@@ -669,11 +672,37 @@ function updateRipples(dt){
 const dropObj=new T.Object3D(),splashObj=new T.Object3D();
 let mode='rain',process='combined',level=3,lastRainLevel=3,timeScale=4,paused=false,showWet=true,showFoam=true,enableInfiltration=true;
 let rainStyle='enhanced',time=0,visualTime=0,acc=0,spawnAcc=0,lastUI=0,wetted=0,frame=0;
-const rainLevels=[0,.32,.63,1,1.57,2.4],rainNames=['Sem chuva','Garoa','Chuva fraca','Chuva moderada','Chuva forte','Temporal intenso'];
-// Chuva ampliada para visualizar a formação no time-lapse, sem criar lagos artificialmente.
-// Chuva moderada: parte infiltra, parte escoa às depressões; temporal ainda pode inundar.
-// Chuva normal menor, poças crescem em depressões e não sobre todo o solo.
-const rainMeters=[0,.00018,.00055,.0028,.0040,.0088];
+// Escala V12.21: fonte única para deposição, visual, vento e movimento superficial.
+// Valores em unidades internas por segundo SIMULADO; não equivalem a mm/h calibrados.
+const rainNames=['Sem chuva','Garoa','Chuva fraca','Chuva moderada','Chuva forte','Temporal intenso'];
+const RAIN_SCALE=[
+ {rate:0,       dropsM:0,   dropsD:0,   speed:0,   speedVar:0, length:0,    thick:0},
+ {rate:.00013,  dropsM:27,  dropsD:42,  speed:3.2, speedVar:1.4,length:.37,  thick:.58},
+ {rate:.00042,  dropsM:64,  dropsD:100, speed:4.2, speedVar:2.0,length:.53,  thick:.68},
+ {rate:.00140,  dropsM:130, dropsD:210, speed:5.5, speedVar:2.5,length:.75,  thick:.82},
+ {rate:.00330,  dropsM:235, dropsD:380, speed:7.5, speedVar:3.3,length:1.05, thick:.91},
+ {rate:.00730,  dropsM:440, dropsD:690, speed:9.5, speedVar:4.6,length:1.75, thick:.94}
+];
+const rainLevels=[0,.18,.38,.66,.87,1];
+const rainMeters=RAIN_SCALE.map(p=>p.rate);
+// A atmosfera decide ONDE chove; a escala decide QUANTO cai naquele local.
+function rainRateFromAtmos(source,selected=level){
+ if(selected===0||source<=.0000001)return 0;
+ const available=clamp(source/.00090,0,1);
+ return RAIN_SCALE[selected].rate*Math.pow(available,.72);
+}
+let appliedRainMean=0,appliedRainPeak=0,activeRainRegions=0;
+function refreshRainDiagnostics(){
+ let total=0,peak=0,regions=0;
+ for(let k=0;k<ATM_N;k++){
+  const rate=rainRateFromAtmos(atmRain[k]);
+  total+=rate;peak=Math.max(peak,rate);
+  if(rate>.000003)regions++;
+ }
+ appliedRainMean=total/ATM_N;
+ appliedRainPeak=peak;
+ activeRainRegions=regions;
+}
 function add(x,z,vol){
  const i=Math.round((x+W/2)/dx),j=Math.round((z+L/2)/dz);
  if(i<1||j<1||i>=NX-1||j>=NZ-1)return;
@@ -693,7 +722,7 @@ function seed(m){
 // A chuva é alimentada por um campo uniforme; gotas animadas representam a mesma chuva,
 // sem depositar um segundo volume ao colidir (evita contagem dupla).
 function hydrologyStep(dt){
- const manualRain=rainMeters[level]*dt*(stormActive()?1.65:mode==='lagoon'?1.36:1);
+ const manualRain=rainMeters[level]*dt;
  const interp=process==='retention'?1.75:process==='infiltration'?.95:1;
  const infiltrate=process==='runoff'?.11:process==='infiltration'?3.0:process==='retention'?.8:1;
  const sunIntensity=Math.max(0,solarAt(dayClock));
@@ -702,11 +731,7 @@ function hydrologyStep(dt){
  const speed=process==='runoff'?1.65:1;
  for(let k=0;k<size;k++){
   // Precipitação regional derivada de nuvens, umidade e transporte pelo vento.
-  const rain=physicalWeather
-    ?(level===0?0:Math.min(rainField[k]*(stormActive()?1:1),
-      rainMeters[level]*(stormActive()?1.95:1.50))*
-      (stormActive()?.94:mode==='lagoon'?1.10:1))*dt
-    :manualRain;
+  const rain=physicalWeather?rainRateFromAtmos(rainField[k])*dt:manualRain;
   if(rain>0){
    const canopyCap=.007+cover[k]*.037;
    const retained=Math.min(rain*cover[k]*.55*interp,Math.max(0,canopyCap-canopy[k]));
@@ -969,6 +994,7 @@ stage.addEventListener('touchend',()=>pinch=0,{passive:true});
 function setRainLevel(value){
  level=clamp(value,0,5);
  if(level>0)lastRainLevel=level;
+ refreshRainDiagnostics();
  $('intensity').value=String(level);
  if(climateChoice==='auto')applyClimate(physicalWeather?atmCloudPreset():automaticClimate(level));
  $('stopRain').textContent=level===0?'🌧 Retomar chuva':'☀ Parar chuva';
@@ -1097,7 +1123,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1220'))fail(e.error||e.message);});
-window.arcanoWaterV1220={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1221'))fail(e.error||e.message);});
+window.arcanoWaterV1221={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
