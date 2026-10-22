@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Floresta Painterly V12.23 · modelos 3D e solo vivo</title>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Clima V12.24 · neblina pós-chuva e vento nas folhas</title>
 <style>
 :root{color-scheme:dark;--bg:#101d29;--edge:#45606b;--font:#eaf1ed;--muted:#aabfc7;--accent:#80c0bf}*{box-sizing:border-box}
 body{margin:0;background:#0b131b;color:var(--font);font:14px/1.35 system-ui,Segoe UI,sans-serif;overflow:hidden}
@@ -55,10 +55,10 @@ body.ui-hidden #showControls{display:block}
 .day-timeline{height:7px;margin:5px 0 7px;border-radius:7px;overflow:hidden;border:1px solid #55737a;background:linear-gradient(90deg,#233451 0%,#f3ac65 24%,#c8ecb6 43%,#e4bd76 73%,#273451 90%)}
 #dayCycleBar{height:100%;width:0%;border-right:3px solid white;box-shadow:0 0 5px white;transition:width .25s linear}
 </style>  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js"}}</script>
-  <script defer src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script><script defer src="./agua-v1223.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script><script defer src="./agua-v1224.js"></script>
 </head>
 <body><canvas id="stage" aria-label="Cena tridimensional de chuva, poças e lagoas"></canvas>
-<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Floresta V12.23 · arte hand-painted</strong><small>Árvores, pedras e flores Quaternius CC0 · solo pictórico · ciclo de 24 min</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
+<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Floresta V12.24 · vento e neblina física</strong><small>Folhas balançam com vento e rajadas · neblina só em condições favoráveis · 24 min/dia</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
 <nav class="pills" aria-label="Escolher efeito"><button type="button" data-mode="rain">🌧 Chuva</button><button type="button" data-mode="puddle">💧 Poças</button><button type="button" data-mode="lagoon">🌊 Lagoa</button><button type="button" data-mode="storm">⛈ Temporal</button></nav></header>
 <div class="hint" id="hint">Chuva começa no solo seco. Observe a formação das poças. Pode recolher os controles para ver a cena.</div>
 <button type="button" id="showControls" aria-controls="rainControls" aria-expanded="false">☷ Mostrar ajustes</button>
@@ -80,7 +80,7 @@ body.ui-hidden #showControls{display:block}
   </label>
 </div>
 <details class="hydro-options" id="hydroOptions">
- <summary>⚙️ Floresta hand-painted, solos, chuva e reflexos</summary>
+ <summary>⚙️ Neblina pós-chuva, vento, floresta e solos</summary>
   <div class="hydro-flags">
     <label for="physicalWeather"><input id="physicalWeather" type="checkbox" checked> Chuva gerada por temperatura, umidade, pressão e vento (por regiões)</label>
   </div>
@@ -100,6 +100,7 @@ body.ui-hidden #showControls{display:block}
    <label for="foamToggle"><input id="foamToggle" type="checkbox" checked> Espuma e detritos nas margens</label>
     <label for="reflectionToggle"><input id="reflectionToggle" type="checkbox" checked> Refletir céu, nuvens, pedras e vegetação (mais pesado)</label>
     <label for="floraToggle"><input id="floraToggle" type="checkbox" checked> Floresta 3D Quaternius CC0 (desmarcar: vegetação anterior)</label>
+    <label for="fogToggle"><input id="fogToggle" type="checkbox" checked> Neblina física apenas sob condições de formação (não nas tempestades)</label>
  </div>
  <label for="soilType" class="rain-appearance">🌱 Solo das plantas
   <select id="soilType" aria-label="Perfil de solo para as plantas">
@@ -135,6 +136,8 @@ body.ui-hidden #showControls{display:block}
   <div id="fertilityStats">Fertilidade: calculando matéria orgânica e nutrientes…</div>
   <div id="plantStats">🌱 Plantas: preparando crescimento, água e fator limitante…</div>
   <div id="floraStatus">🌳 Modelos Quaternius: preparando carregamento…</div>
+  <div id="windStatus">🍃 Vento: folhas e copas acompanhando as rajadas…</div>
+  <div id="fogStatus">🌫 Neblina: aguardando condições após a chuva…</div>
   <div id="waterStats">Poças: começando a se formar</div>
   <div id="wetGroundStats">Terra molhada sem poça: aguardando a chuva</div>
   <div id="cycleStats">Infiltração · escoamento · evapotranspiração</div>
