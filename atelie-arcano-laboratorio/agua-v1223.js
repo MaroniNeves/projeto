@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.22 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.23 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.22]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.23]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -77,7 +77,12 @@ function configureSoilCells(preserve=true){
   soilCa[k]=p.ca;soilPH[k]=p.ph;soilSalinity[k]=p.salt;
   soilBiota[k]=clamp(soilOrganic[k]*(1-p.salt)*.85,.02,1);
   soilPlant[k]=preserve?clamp(soilPlant[k],.08,1):clamp(.38+.30*cover[k],.1,1);
-  const c=new T.Color(p.col),shade=.89+.12*Math.sin(x*.82+z*1.14);
+  const c=new T.Color(p.col),shade=.91+.09*Math.sin(x*.82+z*1.14);
+  // Solo visível continua distinguindo os perfis, mas recebe musgo suave nas
+  // áreas com cobertura vegetal e não nas margens de solo saturado.
+  const mossFactor=clamp((cover[k]-.28)*.58,0,.34)*
+   clamp((soil[k]+.2)*2.0,0,1);
+  c.lerp(new T.Color('#77966c'),mossFactor);
   for(let m=0;m<3;m++)dry[k*3+m]=c.toArray()[m]*shade;
  }
  land.material.color.set('#ffffff');
@@ -450,14 +455,34 @@ function grid(){
  }
  g.setAttribute('position',new T.BufferAttribute(p,3));g.setAttribute('uv',new T.BufferAttribute(uv,2));g.setIndex(tri);return g;
 }
+// Pintura procedural original: pinceladas translúcidas e variação macro orgânica.
+// Inspirada em aquarela artesanal. NÃO usa o pack externo de Voxel Core Lab.
 function groundTexture(){
- const c=document.createElement('canvas');c.width=c.height=256;const ctx=c.getContext('2d'),r=rand(2233);
- ctx.fillStyle='#927258';ctx.fillRect(0,0,256,256);
- for(let i=0;i<220;i++){ctx.fillStyle=['#6d513c','#7c5945','#b08b6b','#654b3a','#a38160'][Math.floor(r()*5)];
- ctx.beginPath();ctx.ellipse(r()*256,r()*256,2+r()*15,1+r()*5,r()*6.28,0,6.28);ctx.fill();}
- for(let i=0;i<1600;i++){ctx.fillStyle=r()>.5?'#24160f3d':'#d7ba8b35';ctx.fillRect(r()*256,r()*256,.5+r()*2,.5+r()*2);}
- const tex=new T.CanvasTexture(c);tex.wrapS=tex.wrapT=T.RepeatWrapping;tex.repeat.set(5,4);
- tex.colorSpace=T.SRGBColorSpace;tex.anisotropy=4;return tex;
+ const canvas=document.createElement('canvas');canvas.width=canvas.height=512;
+ const ctx=canvas.getContext('2d'),r=rand(2233);
+ ctx.fillStyle='#e8dfcb';ctx.fillRect(0,0,512,512);
+ // Camadas de lavagem aquarelada (wash) e bordas com textura orgânica.
+ for(let layer=0;layer<5;layer++){
+  for(let i=0;i<75;i++){
+   const x=r()*512,y=r()*512,rx=12+r()*45,ry=7+r()*21;
+   ctx.fillStyle=['#8b9d73','#a6a77f','#c9aa87','#e1cba5','#a3bba0'][Math.floor(r()*5)];
+   ctx.globalAlpha=.022+.019*r();ctx.beginPath();
+   ctx.ellipse(x,y,rx,ry,r()*6.283,0,6.283);ctx.fill();
+  }
+ }
+ // Pigmentos finos: manchas conectadas em vez de quadriculação ou ruído por pixel.
+ for(let i=0;i<900;i++){
+  const x=r()*512,y=r()*512;
+  ctx.globalAlpha=.035+.065*r();
+  ctx.strokeStyle=['#7b895f','#bcab82','#a9b883','#8b765f','#e6d7b4'][Math.floor(r()*5)];
+  ctx.lineWidth=.65+r()*2.5;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(x,y);
+  ctx.quadraticCurveTo(x+2+r()*4,y-3-r()*3,x+5+r()*13,y+1+r()*4);
+  ctx.stroke();
+ }
+ ctx.globalAlpha=1;
+ const t=new T.CanvasTexture(canvas);t.wrapS=t.wrapT=T.RepeatWrapping;
+ t.repeat.set(4.2,3.35);t.colorSpace=T.SRGBColorSpace;t.anisotropy=mobile?2:6;return t;
 }
 const landG=grid(),landP=landG.attributes.position.array,colors=new Float32Array(size*3),dry=new Float32Array(size*3);
 for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
@@ -669,6 +694,121 @@ function updateSprouts(){
  }
 }
 updateSprouts();
+
+// Floresta V12.23: oito malhas REAIS do Stylized Nature MegaKit Standard (CC0)
+// copiadas e hospedadas no próprio repositório. A textura de chão é original.
+// Falhas de GPU, WebGL, rede ou GLTFLoader mantêm as mudas antigas como fallback.
+const forestGroup=new T.Group();forestGroup.name='Floresta Quaternius CC0 — painterly';scene.add(forestGroup);
+const forestInstances=[],forestModels={};let floraWanted=true,floraLoaded=0,floraState='Preparando';
+const FOREST_MODELS=[
+ {name:'CommonTree_1',type:'tree',mobile:5,desktop:9,height:4.4},
+ {name:'CommonTree_2',type:'tree',mobile:3,desktop:7,height:4.0},
+ {name:'Pine_2',type:'pine',mobile:2,desktop:4,height:4.7},
+ {name:'Bush_Common_Flowers',type:'bush',mobile:8,desktop:17,height:.95},
+ {name:'Flower_3_Group',type:'flower',mobile:13,desktop:33,height:.47},
+ {name:'Grass_Common_Short',type:'grass',mobile:14,desktop:35,height:.29},
+ {name:'Fern_1',type:'fern',mobile:5,desktop:12,height:.61},
+ {name:'Rock_Medium_2',type:'rock',mobile:5,desktop:8,height:.70}
+];
+function forestStatus(state){
+ floraState=state;
+ if($('floraStatus'))$('floraStatus').textContent=
+  '🌳 Modelos Quaternius: '+floraLoaded+'/8 · '+state+
+  ' · solo aquarelado procedural';
+}
+function setFloraVisible(v){
+ floraWanted=!!v;forestGroup.visible=floraWanted&&floraLoaded>0;
+ grass.visible=!forestGroup.visible;sproutGroup.visible=!forestGroup.visible;
+ if($('floraToggle'))$('floraToggle').checked=floraWanted;
+ forestStatus(floraWanted?(floraLoaded?'ativos':'carregando'):'vegetação clássica');
+}
+function placeForestModel(item,root){
+ const randomForest=rand(9157+item.name.split('').reduce((a,c)=>a+c.charCodeAt(0),0));
+ root.updateMatrixWorld(true);
+ const bbox=new T.Box3().setFromObject(root);
+ const h=Math.max(.001,bbox.max.y-bbox.min.y);
+ const count=mobile?item.mobile:item.desktop;
+ let created=0;
+ for(let attempt=0;attempt<count*26&&created<count;attempt++){
+  const x=(randomForest()-.5)*(W-1.3),z=(randomForest()-.5)*(L-1.3);
+  const edge=Math.max(Math.abs(x)/(W*.5),Math.abs(z)/(L*.5));
+  if(item.type==='tree'||item.type==='pine'){
+   if(edge<.48&&randomForest()<.85)continue;
+  }
+  if(rockAt(x,z))continue;
+  let basinBlocked=false;
+  for(const b of basins){
+   const q=Math.pow((x-b.x)/(b.sx+.2),2)+Math.pow((z-b.z)/(b.sz+.2),2);
+   if(q<(item.type==='tree'||item.type==='pine'?.94:.58)){
+    basinBlocked=true;break;
+   }
+  }
+  if(basinBlocked)continue;
+  const y=elevation(x,z);
+  if(y<-.13)continue;
+  const obj=root.clone(true),factor=.78+randomForest()*.52;
+  const desired=item.height*factor;
+  const scale=desired/h;
+  obj.scale.setScalar(scale);obj.position.set(x,y-bbox.min.y*scale-.015,z);
+  const rot=randomForest()*Math.PI*2;obj.rotation.y=rot;
+  obj.traverse(o=>{
+   if(!o.isMesh)return;
+   o.castShadow=!mobile&&(item.type==='tree'||item.type==='pine')&&created<4;
+   o.receiveShadow=false;
+   const mat=o.material;
+   if(mat){mat.side=T.DoubleSide;mat.roughness=.92;mat.metalness=0;}
+  });
+  forestGroup.add(obj);
+  forestInstances.push({obj,x,z,y,rotation:rot,baseScale:scale,type:item.type,
+   phase:randomForest()*Math.PI*2});
+  created++;
+ }
+}
+async function loadPainterlyForest(){
+ if($('floraToggle'))$('floraToggle').checked=true;
+ try{
+  const api=await import('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js');
+  const loader=new api.GLTFLoader();
+  let ok=0;
+  for(const item of FOREST_MODELS){
+   try{
+    const doc=await loader.loadAsync('./assets/quaternius/'+item.name+'.gltf');
+    forestModels[item.name]=doc.scene;
+    placeForestModel(item,doc.scene);ok++;floraLoaded=ok;
+    forestStatus('carregando flora '+ok+'/8');
+   }catch(err){console.warn('[Arcano] Modelo não carregado',item.name,err);}
+  }
+  if(ok===0)throw new Error('Nenhum modelo glTF carregou');
+  setFloraVisible(floraWanted);
+  updateForestHealth();
+  forestStatus('floresta 3D carregada');
+ }catch(err){
+  console.warn('[Arcano] Mantendo vegetação original; importação glTF indisponível:',err);
+  forestGroup.visible=false;grass.visible=true;sproutGroup.visible=true;
+  floraWanted=false;forestStatus('fallback: vegetação original');
+ }
+}
+function updateForestHealth(){
+ for(const a of forestInstances){
+  if(a.type==='rock'||a.type==='tree'||a.type==='pine')continue;
+  const i=clamp(Math.round((a.x+W*.5)/dx),0,NX-1);
+  const j=clamp(Math.round((a.z+L*.5)/dz),0,NZ-1),k=idx(i,j);
+  const biomass=clamp(soilPlant[k],.12,1.2),health=clamp(soilHealth[k],0,1);
+  const factor=.69+biomass*.30;
+  a.obj.scale.setScalar(a.baseScale*factor);
+  a.obj.visible=health>.10;
+ }
+}
+function animateForest(dt){
+ if(!forestGroup.visible)return;
+ const wind=clamp(atmWindMean*.0025,0,.012),t=visualTime;
+ for(const a of forestInstances){
+  if(a.type==='rock')continue;
+  a.obj.rotation.z=wind*Math.sin(t*(.62+atmWindMean*.13)+a.phase);
+ }
+}
+loadPainterlyForest();
+
 // A física permanece na malha original, o material 3D usa amostras mais densas.
 const SURFACE_VISIBLE=.006,SURFACE_RIPPLE=.012,SURFACE_POND=.018;
 const wet=new Float32Array(size),flow=new Float32Array(size*2);
@@ -926,7 +1066,7 @@ function seed(m){
  // Reiniciar no seco, sem poças pré-fabricadas: observar as poças se formando.
  configureSoilCells(false);
  for(let k=0;k<size;k++){soilMoisture[k]=soilCapacity[k]*.22;soilHealth[k]=minNutrientAt(k);}
- updatePlantVisuals();updateSprouts();soilEcologySeconds=0;plantVisualSeconds=0;
+ updatePlantVisuals();updateSprouts();updateForestHealth();soilEcologySeconds=0;plantVisualSeconds=0;
  initAtmosphere();updateAtmosphere(0);
  rebuild();updateInfo(true);
 }
@@ -1356,20 +1496,21 @@ let last=performance.now();function loop(now){
    ecologyStep(soilEcologySeconds);soilEcologySeconds=0;
   }
   if(plantVisualSeconds>=2.8){
-   updatePlantVisuals();updateSprouts();plantVisualSeconds=0;
+   updatePlantVisuals();updateSprouts();updateForestHealth();plantVisualSeconds=0;
   }
   if(acc>step*14)acc=step*14;
   if(++frame%2===0)rebuild();
   waterM.uniforms.uTime.value=visualTime;
   animateClimate(dt);
   updateReflections(dt);
+  animateForest(dt);
   updateInfo(false);
  }
  setView();renderer.render(scene,camera);
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1222'))fail(e.error||e.message);});
-window.arcanoWaterV1222={scene,renderer,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1223'))fail(e.error||e.message);});
+window.arcanoWaterV1223={scene,renderer,forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
