@@ -193,34 +193,39 @@ function setSoilType(next){
  land.material.color.set(next==='clay'?'#b6a08f':next==='loose'?'#c8ae94':next==='compacted'?'#bcb5ad':'#ffffff');
  rebuild();updateInfo(true);
 }
+// Ondas no solo são marcas baixas e curtas; em poças há dois anéis que se espalham.
+const groundRippleMaterial=rippleMaterial.clone();
+groundRippleMaterial.fragmentShader='precision mediump float; varying float vStrength; void main(){if(vStrength<.018)discard;gl_FragColor=vec4(.35,.25,.17,clamp(vStrength*.65,0.,.37));}';
 function updateRipples(dt){
  for(let i=ripples.length-1;i>=0;i--){
   const r=ripples[i];r.age+=dt;
   if(r.age>=r.life){r.mesh.visible=false;ripples.splice(i,1);continue;}
-  const mesh=r.mesh,g=mesh.geometry,p=g.attributes.position.array,fadeArray=g.attributes.strength.array;
-  const phase=r.age/r.life;
-  const outerRadius=.045+phase*.93;
-  const innerRadius=.025+Math.max(0,phase-.15)*.82;
-  const outerFade=(1-phase)*.90;
-  const innerFade=(1-phase)*.66*clamp((phase-.14)*6,0,1);
-  let visibility=0;
+  const mesh=r.mesh,g=mesh.geometry,p=g.attributes.position.array,fade=g.attributes.strength.array;
+  const phase=r.age/r.life,liquid=r.kind==='water';
+  const outer=liquid?(.045+phase*.94):(.012+phase*.19);
+  const inner=liquid?(.025+Math.max(0,phase-.15)*.82):0;
+  const outerFade=(1-phase)*(liquid?.92:.40);
+  const innerFade=liquid?(1-phase)*.65*clamp((phase-.14)*6,0,1):0;
+  let visible=0;
   for(let n=0;n<=RIPPLE_SEG;n++){
    const angle=n/RIPPLE_SEG*Math.PI*2,c=Math.cos(angle),sn=Math.sin(angle);
    for(let band=0;band<2;band++){
-    const radius=band===0?outerRadius:innerRadius,fade=band===0?outerFade:innerFade;
-    const halfWidth=.035+radius*.018;
+    const rad=band===0?outer:inner,strength=band===0?outerFade:innerFade;
+    const halfWidth=liquid?.035+rad*.018:.010+rad*.005;
     for(let e=0;e<3;e++){
-     const rr=Math.max(.004,radius+(e-1)*halfWidth);
-     const x=r.x+c*rr,z=r.z+sn*rr,k=n*6+band*3+e;
-     const d=sample(depth,x,z);
+     const rr=Math.max(.003,rad+(e-1)*halfWidth),x=r.x+c*rr,z=r.z+sn*rr,k=n*6+band*3+e;
      const edge=x>W*.5-.08||x<-W*.5+.08||z>L*.5-.08||z<-L*.5+.08;
-     p[k*3]=x;p[k*3+1]=waterHeight(x,z)+.029;p[k*3+2]=z;
-     fadeArray[k]=(!edge&&!rockAt(x,z)&&d>.014&&e===1)?fade:0;
-     visibility+=fadeArray[k];
+     const waterHere=sample(depth,x,z);
+     // Amostra topografia em todos os vértices, sem anel em plano horizontal.
+     const y=liquid?waterHeight(x,z):sample(soil,x,z);
+     p[k*3]=x;p[k*3+1]=y+(liquid?.026:.011);p[k*3+2]=z;
+     const allowed=!edge&&!rockAt(x,z)&&(!liquid||waterHere>.014)&&(!(!liquid&&waterHere>.015));
+     fade[k]=(allowed&&e===1&&strength>.01)?strength:0;
+     visible+=fade[k];
     }
    }
   }
-  mesh.visible=visibility>.02;
+  mesh.visible=visible>.02;
   g.attributes.position.needsUpdate=true;g.attributes.strength.needsUpdate=true;
  }
 }
