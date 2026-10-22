@@ -1,0 +1,87 @@
+name: Publicar chuva pocoes e lagoas 3D no Atelie Arcano
+on:
+  push:
+    branches: [atelie-arcano-public-demo]
+    paths: ['.github/workflows/publicar-arcano-agua-v11.yml']
+permissions:
+  contents: write
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: atelie-arcano-public-demo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile standalone animated water Three.js shaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd atelie-arcano-agua-v11/source
+          npm install --no-audit --no-fund --ignore-scripts
+          npm run build
+          test -s dist/index.html
+          test -n "$(find dist/assets -name '*.js' -print -quit)"
+          mkdir -p ../preview
+          cp -a dist/. ../preview/
+          cp node_modules/three/LICENSE ../preview/THREE_LICENSE_MIT.txt
+          cd ../..
+          python3 - <<'PY'
+          from pathlib import Path
+          hub=Path('atelie-arcano-laboratorio')
+          assert (hub/'index.html').exists() and (hub/'rollshade.html').exists() and (hub/'lightning.html').exists()
+          html=Path('atelie-arcano-agua-v11/preview/index.html').read_text()
+          assert 'src="./assets/' in html
+          html=html.replace('<head>','<head><base href="../atelie-arcano-agua-v11/preview/">',1)
+          (hub/'agua.html').write_text(html)
+          for file in ('index.html','rollshade.html'):
+            p=hub/file;s=p.read_text()
+            target='<button type="button" data-mode="catalogo.html">'
+            assert target in s, file+' nav changed'
+            s=s.replace(target,'<button type="button" data-mode="agua.html">🌧 Água</button>'+target,1)
+            s=s.replace('✦ Arcano 201','✦ Arcano · 201 + Água')
+            # Keep all navigation buttons visible at 360px.
+            s=s.replace('</head>','<style>.arcano-hubnav{gap:3px!important}.arcano-hubnav button{font-size:10px!important;padding:4px 5px!important}.arcano-hubnav strong{font-size:10px!important}</style></head>',1)
+            p.write_text(s)
+          p=hub/'lightning.html';s=p.read_text()
+          target='<button data-hub="catalogo.html">'
+          assert target in s,'lightning tab changed'
+          s=s.replace(target,'<button data-hub="agua.html">🌧 Água</button>'+target,1)
+          s=s.replace('✦ Arcano 201','✦ Arcano 201 + Água',1)
+          p.write_text(s)
+          p=hub/'catalogo.html';s=p.read_text()
+          assert '</nav>' in s
+          s=s.replace('</nav>','<a href="agua.html">🌧 Chuva e Lagoas</a></nav>',1)
+          cards='''<section class="pack"><h3>🌧 Chuva, poças surgindo e lagoas — Three.js · Integrado</h3><p>4 efeitos ambientais procedurais: chuva tridimensional, poças que crescem, lagoa em formação e temporal com ondulações.</p><p>Código original implementado em Three.js, sem copiar shaders GPL. Renderizador independente e econômico para Android.</p><a href="agua.html">Abrir laboratório aquático ↗</a> · <a href="https://github.com/boona13/threejs-grass-water-shaders" target="_blank" rel="noopener">Referência MIT de água estilizada</a></section>'''
+          s=s.replace('</body>',cards+'</body>',1)
+          p.write_text(s)
+          assert all((hub/x).exists() for x in ('index.html','rollshade.html','lightning.html','agua.html','catalogo.html'))
+          assert 'data-mode="agua.html"' in (hub/'index.html').read_text()
+          assert 'data-hub="agua.html"' in (hub/'lightning.html').read_text()
+          assert 'assets/' in (hub/'agua.html').read_text()
+          print('Navigation and separate 3D water preview verified')
+          PY
+      - name: Publish safe new lab and standalone sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add atelie-arcano-laboratorio/ atelie-arcano-agua-v11/preview/
+          git diff --cached --quiet || (git commit -m "Add standalone 3D rain spawning puddles and animated lagoon to Arcano" && git push origin HEAD:atelie-arcano-public-demo)
+      - name: Package integrated offline HTML and source
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip -qr -9 /tmp/atelie_arcano_201_magias_chuva_pocas_lagoas.zip atelie-arcano-laboratorio atelie-arcano-anime-v8 atelie-arcano-rollshade-v2 atelie-arcano-lightning-vfx atelie-arcano-agua-v11
+          unzip -t /tmp/atelie_arcano_201_magias_chuva_pocas_lagoas.zip | tail -1
+          ls -lh /tmp/atelie_arcano_201_magias_chuva_pocas_lagoas.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atelie-arcano-201-magias-4-efeitos-agua
+          path: /tmp/atelie_arcano_201_magias_chuva_pocas_lagoas.zip
+          retention-days: 14
+          compression-level: 0
