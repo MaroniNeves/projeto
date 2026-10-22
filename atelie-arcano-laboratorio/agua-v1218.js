@@ -998,7 +998,7 @@ $('cam').addEventListener('click',()=>{yaw=.83;pitch=.79;radius=24;});
 function updateInfo(force){
  const now=performance.now();if(!force&&now-lastUI<420)return;lastUI=now;
  const pct=Math.round(level/5*100),name=rainNames[level];
- $('intensityName').textContent=name;$('rainMeter').style.setProperty('--rain-fill',pct+'%');
+ $('intensityName').textContent=physicalWeather?'Limite: '+name:name;$('rainMeter').style.setProperty('--rain-fill',pct+'%');
  let surface=0,stored=0,ground=0,leaf=0,saturated=0,participating=0;
  let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0,mudTotal=0,mudWeight=0,wetSoilOnly=0;
  for(let k=0;k<size;k++){
@@ -1014,7 +1014,7 @@ function updateInfo(force){
  }
  surface*=area;stored*=area;ground*=area;leaf*=area;
  $('rainDetail').textContent=(physicalWeather
-  ?'Chuva por regiões · média '+(atmRainMean*1000).toFixed(2)+' un/s · máxima '+(atmRainPeak*1000).toFixed(2)
+  ?'Chuva por regiões · média '+Math.round(clamp(atmRainMean/.0036,0,1)*100)+'% · pico '+Math.round(clamp(atmRainPeak/.0036,0,1)*100)+'%'
   :'Chuva manual · '+name)+' • '+timeScale+'× • '+drops.length+' gotas 3D';
  $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
  $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
@@ -1049,7 +1049,7 @@ function updateInfo(force){
  $('atmosStats').textContent=(physicalWeather?'Atmosfera física':'Clima manual')+
   ' · '+atmTempMean.toFixed(1)+' °C · umidade '+Math.round(atmHumMean*100)+
   '% · '+atmPressureMean.toFixed(0)+' hPa · vento '+atmWindMean.toFixed(1)+
-  ' · nuvens '+Math.round(atmCloudMean*100)+'% · chuva local '+(atmRainMean*1000).toFixed(2);
+  ' · nuvens '+Math.round(atmCloudMean*100)+'% · intensidade de chuva '+Math.round(clamp(atmRainMean/.0036,0,1)*100)+'%';
  $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
  $('info').textContent=level===0
  ?'Chuva suspensa: poças infiltram e evaporam; o ciclo solar continua'
