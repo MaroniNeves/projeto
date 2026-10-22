@@ -1,0 +1,562 @@
+[
+  {
+    "school": "Água",
+    "name": "Lança das Profundezas",
+    "element": "water",
+    "recipe": "lance",
+    "new": true
+  },
+  {
+    "school": "Água",
+    "name": "Golpe das Marés",
+    "element": "water",
+    "recipe": "strike",
+    "new": true
+  },
+  {
+    "school": "Água",
+    "name": "Mísseis de Gotas",
+    "element": "water",
+    "recipe": "missiles",
+    "new": true
+  },
+  {
+    "school": "Água",
+    "name": "Barreira Oceânica",
+    "element": "water",
+    "recipe": "barrier",
+    "new": true
+  },
+  {
+    "school": "Água",
+    "name": "Nova de Espuma",
+    "element": "water",
+    "recipe": "nova",
+    "new": true
+  },
+  {
+    "school": "Água",
+    "name": "Cura das Ondas",
+    "element": "water",
+    "recipe": "heal",
+    "new": true
+  },
+  {
+    "school": "Água",
+    "name": "Prisão do Abismo Azul",
+    "element": "water",
+    "recipe": "prison",
+    "new": true
+  },
+  {
+    "school": "Água",
+    "name": "Golpe de Ressaca",
+    "element": "water",
+    "recipe": "wave",
+    "new": true
+  },
+  {
+    "school": "Fogo",
+    "name": "Corte da Fênix",
+    "element": "fire",
+    "recipe": "cleave",
+    "new": true
+  },
+  {
+    "school": "Fogo",
+    "name": "Broca de Lava",
+    "element": "fire",
+    "recipe": "drill",
+    "new": true
+  },
+  {
+    "school": "Fogo",
+    "name": "Sopro de Fogo",
+    "element": "fire",
+    "recipe": "torrent",
+    "new": true
+  },
+  {
+    "school": "Fogo",
+    "name": "Tornado de Chamas",
+    "element": "fire",
+    "recipe": "tornado",
+    "new": true
+  },
+  {
+    "school": "Fogo",
+    "name": "Tempestade de Brasas",
+    "element": "fire",
+    "recipe": "storm",
+    "new": true
+  },
+  {
+    "school": "Fogo",
+    "name": "Invocar Fênix",
+    "element": "fire",
+    "recipe": "summon",
+    "new": true
+  },
+  {
+    "school": "Fogo",
+    "name": "Palma de Fogo",
+    "element": "fire",
+    "recipe": "palm",
+    "new": true
+  },
+  {
+    "school": "Fogo",
+    "name": "Nova Incandescente",
+    "element": "fire",
+    "recipe": "nova",
+    "new": true
+  },
+  {
+    "school": "Gelo",
+    "name": "Projétil de Geada",
+    "element": "ice",
+    "recipe": "projectile",
+    "new": true
+  },
+  {
+    "school": "Gelo",
+    "name": "Estocada de Gelo",
+    "element": "ice",
+    "recipe": "thrust",
+    "new": true
+  },
+  {
+    "school": "Gelo",
+    "name": "Nevasca",
+    "element": "ice",
+    "recipe": "storm",
+    "new": true
+  },
+  {
+    "school": "Gelo",
+    "name": "Prisão Glacial",
+    "element": "ice",
+    "recipe": "prison",
+    "new": true
+  },
+  {
+    "school": "Gelo",
+    "name": "Escudo de Gelo",
+    "element": "ice",
+    "recipe": "barrier",
+    "new": true
+  },
+  {
+    "school": "Gelo",
+    "name": "Ascensão Boreal",
+    "element": "ice",
+    "recipe": "rising",
+    "new": true
+  },
+  {
+    "school": "Gelo",
+    "name": "Punho do Inverno",
+    "element": "ice",
+    "recipe": "uppercut",
+    "new": true
+  },
+  {
+    "school": "Gelo",
+    "name": "Tempestade de Cristais",
+    "element": "ice",
+    "recipe": "nine",
+    "new": true
+  },
+  {
+    "school": "Raios",
+    "name": "Orbe Elétrico",
+    "element": "thunder",
+    "recipe": "projectile",
+    "new": true
+  },
+  {
+    "school": "Raios",
+    "name": "Lança Relâmpago",
+    "element": "thunder",
+    "recipe": "lance",
+    "new": true
+  },
+  {
+    "school": "Raios",
+    "name": "Tornado Magnético",
+    "element": "thunder",
+    "recipe": "tornado",
+    "new": true
+  },
+  {
+    "school": "Raios",
+    "name": "Pilar Celeste",
+    "element": "thunder",
+    "recipe": "pillar",
+    "new": true
+  },
+  {
+    "school": "Raios",
+    "name": "Explosão de Trovão",
+    "element": "thunder",
+    "recipe": "explosion",
+    "new": true
+  },
+  {
+    "school": "Raios",
+    "name": "Ataque Relâmpago",
+    "element": "thunder",
+    "recipe": "rush",
+    "new": true
+  },
+  {
+    "school": "Raios",
+    "name": "Amarras Elétricas",
+    "element": "thunder",
+    "recipe": "bind",
+    "new": true
+  },
+  {
+    "school": "Raios",
+    "name": "Chicote Voltaico",
+    "element": "thunder",
+    "recipe": "swipe",
+    "new": true
+  },
+  {
+    "school": "Raios",
+    "name": "Final da Tempestade",
+    "element": "thunder",
+    "recipe": "finale",
+    "new": true
+  },
+  {
+    "school": "Luz",
+    "name": "Projétil Divino",
+    "element": "light",
+    "recipe": "projectile",
+    "new": true
+  },
+  {
+    "school": "Luz",
+    "name": "Raio de Aurora",
+    "element": "light",
+    "recipe": "beam",
+    "new": true
+  },
+  {
+    "school": "Luz",
+    "name": "Lança Sagrada",
+    "element": "light",
+    "recipe": "lance",
+    "new": true
+  },
+  {
+    "school": "Luz",
+    "name": "Bênção Guardiã",
+    "element": "light",
+    "recipe": "buff",
+    "new": true
+  },
+  {
+    "school": "Luz",
+    "name": "Guardião Celestial",
+    "element": "light",
+    "recipe": "summon",
+    "new": true
+  },
+  {
+    "school": "Luz",
+    "name": "Onda da Alvorada",
+    "element": "light",
+    "recipe": "shockwave",
+    "new": true
+  },
+  {
+    "school": "Luz",
+    "name": "Pilar do Amanhecer",
+    "element": "light",
+    "recipe": "pillar",
+    "new": true
+  },
+  {
+    "school": "Luz",
+    "name": "Cruz Luminosa",
+    "element": "light",
+    "recipe": "cross",
+    "new": true
+  },
+  {
+    "school": "Trevas",
+    "name": "Ritual Giratório",
+    "element": "dark",
+    "recipe": "spin",
+    "new": true
+  },
+  {
+    "school": "Trevas",
+    "name": "Amarras do Vazio",
+    "element": "dark",
+    "recipe": "bind",
+    "new": true
+  },
+  {
+    "school": "Trevas",
+    "name": "Corrente Sombria",
+    "element": "dark",
+    "recipe": "chain",
+    "new": true
+  },
+  {
+    "school": "Trevas",
+    "name": "Muralha das Sombras",
+    "element": "dark",
+    "recipe": "barrier",
+    "new": true
+  },
+  {
+    "school": "Trevas",
+    "name": "Pirâmide Obscura",
+    "element": "dark",
+    "recipe": "pyramid",
+    "new": true
+  },
+  {
+    "school": "Trevas",
+    "name": "Estilhaços Noturnos",
+    "element": "dark",
+    "recipe": "missiles",
+    "new": true
+  },
+  {
+    "school": "Trevas",
+    "name": "Corte do Abismo",
+    "element": "dark",
+    "recipe": "slash",
+    "new": true
+  },
+  {
+    "school": "Trevas",
+    "name": "Cárcere das Almas",
+    "element": "dark",
+    "recipe": "prison",
+    "new": true
+  },
+  {
+    "school": "Trevas",
+    "name": "Meteoro do Vazio",
+    "element": "dark",
+    "recipe": "meteor",
+    "new": true
+  },
+  {
+    "school": "Vento",
+    "name": "Salto de Ciclone",
+    "element": "wind",
+    "recipe": "heel",
+    "new": true
+  },
+  {
+    "school": "Vento",
+    "name": "Esfera de Ar",
+    "element": "wind",
+    "recipe": "projectile",
+    "new": true
+  },
+  {
+    "school": "Vento",
+    "name": "Ciclone Aéreo",
+    "element": "wind",
+    "recipe": "tornado",
+    "new": true
+  },
+  {
+    "school": "Vento",
+    "name": "Tempestade de Pétalas",
+    "element": "wind",
+    "recipe": "storm",
+    "new": true
+  },
+  {
+    "school": "Vento",
+    "name": "Chute Vendaval",
+    "element": "wind",
+    "recipe": "kick",
+    "new": true
+  },
+  {
+    "school": "Vento",
+    "name": "Onda Cortante",
+    "element": "wind",
+    "recipe": "wave",
+    "new": true
+  },
+  {
+    "school": "Vento",
+    "name": "Investida do Vendaval",
+    "element": "wind",
+    "recipe": "dash",
+    "new": true
+  },
+  {
+    "school": "Vento",
+    "name": "Golpe do Céu",
+    "element": "wind",
+    "recipe": "lance",
+    "new": true
+  },
+  {
+    "school": "Arcano",
+    "name": "Impacto Arcano",
+    "element": "arcane",
+    "recipe": "pound",
+    "new": true
+  },
+  {
+    "school": "Arcano",
+    "name": "Combo Rúnico",
+    "element": "arcane",
+    "recipe": "combo",
+    "new": true
+  },
+  {
+    "school": "Arcano",
+    "name": "Meteoro Astral",
+    "element": "arcane",
+    "recipe": "meteor",
+    "new": true
+  },
+  {
+    "school": "Arcano",
+    "name": "Onda Arcana",
+    "element": "arcane",
+    "recipe": "shockwave",
+    "new": true
+  },
+  {
+    "school": "Arcano",
+    "name": "Mísseis Arcanos",
+    "element": "arcane",
+    "recipe": "missiles",
+    "new": true
+  },
+  {
+    "school": "Arcano",
+    "name": "Ritual Supremo",
+    "element": "arcane",
+    "recipe": "finale",
+    "new": true
+  },
+  {
+    "school": "Arcano",
+    "name": "Corte Astral",
+    "element": "arcane",
+    "recipe": "iaido",
+    "new": true
+  },
+  {
+    "school": "Terra",
+    "name": "Pilares de Pedra",
+    "element": "earth",
+    "recipe": "pillars",
+    "new": true
+  },
+  {
+    "school": "Terra",
+    "name": "Meteoro Rochoso",
+    "element": "earth",
+    "recipe": "meteor",
+    "new": true
+  },
+  {
+    "school": "Terra",
+    "name": "Prisão de Cristais",
+    "element": "earth",
+    "recipe": "prison",
+    "new": true
+  },
+  {
+    "school": "Terra",
+    "name": "Barreira Telúrica",
+    "element": "earth",
+    "recipe": "barrier",
+    "new": true
+  },
+  {
+    "school": "Terra",
+    "name": "Onda Sísmica",
+    "element": "earth",
+    "recipe": "wave",
+    "new": true
+  },
+  {
+    "school": "Terra",
+    "name": "Investida Telúrica",
+    "element": "earth",
+    "recipe": "tackle",
+    "new": true
+  },
+  {
+    "school": "Terra",
+    "name": "Terremoto",
+    "element": "earth",
+    "recipe": "shockwave",
+    "new": true
+  },
+  {
+    "school": "Veneno",
+    "name": "Bomba Tóxica",
+    "element": "poison",
+    "recipe": "projectile",
+    "new": true
+  },
+  {
+    "school": "Veneno",
+    "name": "Meteorito Venenoso",
+    "element": "poison",
+    "recipe": "meteor",
+    "new": true
+  },
+  {
+    "school": "Veneno",
+    "name": "Cipós Peçonhentos",
+    "element": "poison",
+    "recipe": "bind",
+    "new": true
+  },
+  {
+    "school": "Veneno",
+    "name": "Prisão Venenosa",
+    "element": "poison",
+    "recipe": "prison",
+    "new": true
+  },
+  {
+    "school": "Veneno",
+    "name": "Tornado de Esporos",
+    "element": "poison",
+    "recipe": "tornado",
+    "new": true
+  },
+  {
+    "school": "Veneno",
+    "name": "Tempestade Corrosiva",
+    "element": "poison",
+    "recipe": "storm",
+    "new": true
+  },
+  {
+    "school": "Veneno",
+    "name": "Nova Pestilenta",
+    "element": "poison",
+    "recipe": "nova",
+    "new": true
+  },
+  {
+    "school": "Veneno",
+    "name": "Fúria Tóxica",
+    "element": "poison",
+    "recipe": "flurry",
+    "new": true
+  }
+]
