@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR"><head><base href="../atelie-arcano-agua-v124/preview/"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Água 3D V12.4 · Níveis de chuva</title>
+<style>
+:root{color-scheme:dark;--bg:#101d29;--edge:#45606b;--font:#eaf1ed;--muted:#aabfc7;--accent:#80c0bf}*{box-sizing:border-box}
+body{margin:0;background:#0b131b;color:var(--font);font:14px/1.35 system-ui,Segoe UI,sans-serif;overflow:hidden}
+canvas{position:fixed;inset:0;width:100vw;height:100dvh;display:block;touch-action:none}
+.top{position:fixed;z-index:10;top:calc(8px + env(safe-area-inset-top));left:9px;right:9px;padding:10px 11px;background:#10202de8;border:1px solid #46606c;border-radius:13px;box-shadow:0 6px 24px #0008}
+.top .row{display:flex;align-items:center;gap:10px}.name{flex:1;min-width:0}.name strong{display:block;font-size:14px;color:#f6dfad}.name small{display:block;font-size:11px;color:#bdd1d7}a.home{border:1px solid #6a8b97;color:#d6eef2;text-decoration:none;padding:8px 10px;border-radius:8px;white-space:nowrap;font-size:12px}
+.pills{display:flex;gap:5px;margin-top:8px}.pills button{flex:1;background:#243849;border:1px solid #54707e;color:#edf7f8;border-radius:9px;padding:9px 4px;font:600 12px system-ui}.pills button.active{background:#7cb9c0;color:#0a2330;border-color:#c9eff0}
+.hint{position:fixed;top:calc(120px + env(safe-area-inset-top));left:9px;right:9px;z-index:8;background:#0e1c28cc;border:1px solid #46606c;color:#b4d4dc;border-radius:10px;padding:7px 9px;font-size:12px;pointer-events:none}
+.bottom{position:fixed;z-index:11;left:9px;right:9px;bottom:calc(9px + env(safe-area-inset-bottom));padding:11px;background:#0e1d2aef;border:1px solid #46606c;border-radius:14px;box-shadow:0 6px 20px #0008}
+.bottom .row{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap}.bottom button{border:1px solid #547587;background:#273d52;color:#e9f7fb;border-radius:10px;font:700 12px system-ui;padding:10px 13px;min-height:42px;white-space:nowrap}.bottom button.primary{background:#c4a478;color:#171a1c;border-color:#eed2a0}.bottom label{display:flex;align-items:center;gap:7px;color:#c2d9de;font-size:12px}.bottom select{background:#213a4b;color:#e8f5f7;border:1px solid #80aebb;border-radius:9px;padding:9px;font:700 13px system-ui;min-height:43px;max-width:100%}
+.rain-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.rain-row label{flex:1;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap}
+#intensityName{font:700 12px system-ui;color:#cce9ec}
+#rainMeter{height:5px;margin-top:7px;background:linear-gradient(to right,#9ed7e0 var(--rain-fill,60%),#344957 var(--rain-fill,60%));border-radius:5px}
+#rainDetail{font-size:11px;color:#b5d4dc;margin:4px 0}
+@media(max-width:440px){.rain-row{flex-wrap:wrap}}
+#info{margin-top:5px;color:#b7cbd2;font-size:11px}#diag{position:fixed;z-index:30;top:50%;left:12px;right:12px;padding:16px;background:#4d2222ef;color:#fff;border-radius:12px;font-weight:600}#diag:empty{display:none}
+@media(max-width:390px){.name strong{font-size:12px}.name small{font-size:10px}.pills button{font-size:11px;padding:9px 2px}.bottom button{padding:9px 8px}.bottom input{max-width:65px}}
+</style>  <script type="module" crossorigin src="./assets/index-D6tJ15Nr.js"></script>
+</head>
+<body><canvas id="stage" aria-label="Cena tridimensional de chuva, poças e lagoas"></canvas>
+<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Água V12.4 · estilo anime</strong><small>Solo anime CC0 · poças que enchem · lama escura · filetes</small></div><a class="home" href="../../atelie-arcano-laboratorio/index.html" id="back">← Laboratório</a></div>
+<nav class="pills" aria-label="Escolher efeito"><button type="button" data-mode="rain">🌧 Chuva</button><button type="button" data-mode="puddle">💧 Poças</button><button type="button" data-mode="lagoon">🌊 Lagoa</button><button type="button" data-mode="storm">⛈ Temporal</button></nav></header>
+<div class="hint" id="hint">Carregando efeito 3D…</div>
+<footer class="bottom"><div class="row"><button class="primary" id="replay">↻ Fazer surgir</button><button id="pause">⏸ Pausar</button><button id="cam">◎ Câmera</button></div><div class="rain-row"><label for="intensity">🌧 Intensidade <select id="intensity" aria-label="Nível da chuva"><option value="0">0 · Sem chuva</option><option value="1">1 · Garoa</option><option value="2">2 · Chuva fraca</option><option selected value="3">3 · Chuva moderada</option><option value="4">4 · Chuva forte</option><option value="5">5 · Temporal intenso</option></select></label><output id="intensityName" for="intensity">Chuva moderada</output></div><div id="rainMeter" aria-hidden="true"></div><div id="rainDetail" aria-live="polite"></div><div id="info">Arraste para girar • dois dedos para aproximar • toque na água para criar ondas</div></footer>
+<div id="diag" role="alert"></div>
+</body></html>
