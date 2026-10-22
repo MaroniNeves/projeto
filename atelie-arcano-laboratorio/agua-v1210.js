@@ -78,9 +78,9 @@ for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
 baseCapacity.set(soilCapacity);basePermeability.set(permeability);
 landG.setAttribute('color',new T.BufferAttribute(colors,3));landG.computeVertexNormals();
 const land=new T.Mesh(landG,new T.MeshStandardMaterial({map:groundTexture(),vertexColors:true,roughness:1,side:T.DoubleSide}));
-land.receiveShadow=true;land.name='Terra batida e barro dinâmico V12.6';scene.add(land);
+land.receiveShadow=true;land.name='Terra batida e barro dinâmico V12.10';scene.add(land);
 const slab=new T.Mesh(new T.BoxGeometry(W,.52,L),new T.MeshStandardMaterial({color:'#614832',roughness:1}));
-slab.position.y=-1.75;slab.receiveShadow=true;scene.add(slab);
+slab.position.y=Math.min(...soil)-.55;slab.receiveShadow=true;scene.add(slab);
 const stones=new T.Group();scene.add(stones);
 const stoneGeo=new T.DodecahedronGeometry(1,0),stonePalette=['#858e89','#958575','#6b817c','#a69984','#6b7972'];
 for(let i=0;i<rocks.length;i++){
@@ -530,5 +530,5 @@ let last=performance.now();function loop(now){
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1210'))fail(e.error||e.message);});
 window.arcanoWaterV1210={scene,renderer,seed,setMode,add,setSoilType,terrain:land,water,stones,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
-try{resize();setMode('rain');requestAnimationFrame(loop);}catch(e){fail(e);}
+try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
