@@ -588,13 +588,80 @@ for(let i=0;i<rocks.length&&pebbleCount<pebbleMax;i++){
 pebbles.count=pebbleCount;pebbles.instanceMatrix.needsUpdate=true;
 stones.add(pebbles);
 
-const grass=new T.InstancedMesh(new T.ConeGeometry(.092,.42,3),new T.MeshStandardMaterial({color:'#849878',roughness:1,flatShading:true}),mobile?62:138);
-const ob=new T.Object3D();let gcount=0;
-for(let k=0;k<grass.count;k++){
+// Plantas 3D estilizadas: cada muda tem âncora no solo, biomassa e cor próprias.
+// A mesma malha instanciada responde à fertilidade local (água, N/P/K, pH, sais e oxigênio).
+const grass=new T.InstancedMesh(
+ new T.ConeGeometry(.085,.36,4),
+ new T.MeshStandardMaterial({color:'#ffffff',roughness:1,flatShading:true}),
+ mobile?160:330);
+const ob=new T.Object3D(),grassAnchors=[];
+let gcount=0;
+for(let k=0;k<grass.count*3&&gcount<grass.count;k++){
  const x=(random()-.5)*W,z=(random()-.5)*L,y=elevation(x,z);
- if(rockAt(x,z)||y<-.15)continue;const s=.45+random()*1.2;
- ob.position.set(x,y+.09,z);ob.scale.set(s,s,s);ob.rotation.y=random()*6.28;ob.updateMatrix();grass.setMatrixAt(gcount++,ob.matrix);
-}grass.count=gcount;grass.castShadow=true;scene.add(grass);
+ if(rockAt(x,z)||y<-.15)continue;
+ const scale=.60+random()*.95,angle=random()*6.28;
+ grassAnchors.push({x,z,y,scale,angle});
+ ob.position.set(x,y+.09*scale,z);ob.scale.set(scale,scale,scale);ob.rotation.y=angle;ob.updateMatrix();
+ grass.setMatrixAt(gcount++,ob.matrix);
+ grass.setColorAt(gcount-1,new T.Color('#6b9465'));
+}
+grass.count=gcount;
+grass.castShadow=true;grass.frustumCulled=false;scene.add(grass);
+const plantBaseGreen=new T.Color('#668f5e'),plantHealthyGreen=new T.Color('#90ae71'),plantDry=new T.Color('#a19463');
+function updatePlantVisuals(){
+ for(let i=0;i<grass.count;i++){
+  const a=grassAnchors[i],cell=idx(clamp(Math.round((a.x+W*.5)/dx),0,NX-1),
+                                   clamp(Math.round((a.z+L*.5)/dz),0,NZ-1));
+  const growth=clamp(soilPlant[cell],.05,1.2),health=clamp(soilHealth[cell],0,1);
+  const visibleHeight=clamp(.24+growth*.85,.22,1.30)*a.scale;
+  ob.position.set(a.x,a.y+.18*visibleHeight,a.z);
+  ob.scale.set(a.scale*(.72+.27*growth),visibleHeight,a.scale*(.72+.27*growth));
+  ob.rotation.set(0,a.angle,0);ob.updateMatrix();
+  grass.setMatrixAt(i,ob.matrix);
+  const c=plantBaseGreen.clone().lerp(plantHealthyGreen,health);
+  c.lerp(plantDry,(1-health)*.55);
+  grass.setColorAt(i,c);
+ }
+ grass.instanceMatrix.needsUpdate=true;
+ if(grass.instanceColor)grass.instanceColor.needsUpdate=true;
+}
+configureSoilCells(false);
+for(let k=0;k<size;k++)minNutrientAt(k);
+updatePlantVisuals();
+// Mudas com dois lóbulos/folhas, sem efeitos mágicos: arte original low-poly.
+const sproutGroup=new T.Group();sproutGroup.name='Mudas anime alimentadas pelo solo';scene.add(sproutGroup);
+const sproutHeads=[],sproutColors=['#83a775','#6f9666','#98ae7e'];
+const sproutMaterial=new T.MeshToonMaterial({color:'#ffffff',vertexColors:false});
+for(let i=0;i<(mobile?24:48);i++){
+ const x=(random()-.5)*(W-1),z=(random()-.5)*(L-1),y=elevation(x,z);
+ if(y<-.16||rockAt(x,z))continue;
+ const g=new T.Group(),stem=new T.Mesh(new T.CylinderGeometry(.015,.020,.26,5),
+  new T.MeshToonMaterial({color:'#6c8054'}));
+ stem.position.y=.13;g.add(stem);
+ for(const sign of [-1,1]){
+  const leaf=new T.Mesh(new T.SphereGeometry(.115,5,4),
+   new T.MeshToonMaterial({color:sproutColors[i%3]}));
+  leaf.position.set(sign*.10,.24,0);
+  leaf.scale.set(.90,.42,.56);
+  leaf.rotation.z=sign*.35;g.add(leaf);
+ }
+ g.position.set(x,y+.012,z);sproutGroup.add(g);sproutHeads.push({group:g,x,z});
+}
+function updateSprouts(){
+ for(const item of sproutHeads){
+  const k=idx(clamp(Math.round((item.x+W*.5)/dx),0,NX-1),
+              clamp(Math.round((item.z+L*.5)/dz),0,NZ-1));
+  const biomass=clamp(soilPlant[k],.05,1.25),health=clamp(soilHealth[k],0,1);
+  const scale=.47+biomass*.77;
+  item.group.scale.set(scale,scale,scale);
+  for(let i=1;i<item.group.children.length;i++){
+   const leaf=item.group.children[i],shade=new T.Color('#b09e69').lerp(
+    new T.Color('#789e70'),health);
+   leaf.material.color.copy(shade);
+  }
+ }
+}
+updateSprouts();
 // A física permanece na malha original, o material 3D usa amostras mais densas.
 const SURFACE_VISIBLE=.006,SURFACE_RIPPLE=.012,SURFACE_POND=.018;
 const wet=new Float32Array(size),flow=new Float32Array(size*2);
@@ -745,14 +812,27 @@ function sample(a,x,z){
 }
 function waterHeight(x,z){return sample(soil,x,z)+sample(depth,x,z);}
 function setSoilType(next){
- soilType=next;
- const cfg={loam:[1,1.45],loose:[1.12,2.30],clay:[1.24,.34],compacted:[.64,.16]}[next]||[1,1.45];
- for(let k=0;k<size;k++){
-  soilCapacity[k]=baseCapacity[k]*cfg[0];permeability[k]=basePermeability[k]*cfg[1];
-  if(soilMoisture[k]>soilCapacity[k]){depth[k]+=soilMoisture[k]-soilCapacity[k];soilMoisture[k]=soilCapacity[k];}
- }
- land.material.color.set(next==='clay'?'#b6a08f':next==='loose'?'#c8ae94':next==='compacted'?'#bcb5ad':'#ffffff');
+ soilType=next==='mosaico'||SOIL_PROFILES[next]?next:'mosaico';
+ configureSoilCells(true);
+ for(let k=0;k<size;k++)minNutrientAt(k);
+ updatePlantVisuals();updateSprouts();
  rebuild();updateInfo(true);
+}
+function addSoilOrganic(){
+ for(let k=0;k<size;k++){
+  soilLitter[k]=clamp(soilLitter[k]+.22,0,1.5);
+  soilOrganic[k]=clamp(soilOrganic[k]+.08,0,1.5);
+ }
+ updateInfo(true);
+}
+function addSoilNutrients(){
+ for(let k=0;k<size;k++){
+  soilN[k]=clamp(soilN[k]+.17,0,1.3);
+  soilP[k]=clamp(soilP[k]+.17,0,1.3);
+  soilK[k]=clamp(soilK[k]+.17,0,1.3);
+  minNutrientAt(k);
+ }
+ updatePlantVisuals();updateSprouts();updateInfo(true);
 }
 // Ondas no solo são marcas baixas e curtas; em poças há dois anéis que se espalham.
 const groundRippleMaterial=rippleMaterial.clone();
@@ -837,7 +917,9 @@ function seed(m){
  stats.rain=stats.infiltrated=stats.evaporated=stats.transpired=stats.outflow=0;
  time=0;visualTime=0;acc=0;spawnAcc=0;lastUI=0;
  // Reiniciar no seco, sem poças pré-fabricadas: observar as poças se formando.
- for(let k=0;k<size;k++)soilMoisture[k]=soilCapacity[k]*.025;
+ configureSoilCells(false);
+ for(let k=0;k<size;k++){soilMoisture[k]=soilCapacity[k]*.22;minNutrientAt(k);}
+ updatePlantVisuals();updateSprouts();soilEcologySeconds=0;plantVisualSeconds=0;
  initAtmosphere();updateAtmosphere(0);
  rebuild();updateInfo(true);
 }
@@ -1247,6 +1329,13 @@ let last=performance.now();function loop(now){
   acc+=dt*timeScale;
   const step=timeScale>=64?.22:timeScale>=16?.14:timeScale>=4?.09:.06;
   let steps=0;while(acc>=step&&steps<12){hydrologyStep(step);acc-=step;steps++;}
+  soilEcologySeconds+=dt;plantVisualSeconds+=dt;
+  if(soilEcologySeconds>=.85){
+   ecologyStep(soilEcologySeconds);soilEcologySeconds=0;
+  }
+  if(plantVisualSeconds>=2.8){
+   updatePlantVisuals();updateSprouts();plantVisualSeconds=0;
+  }
   if(acc>step*14)acc=step*14;
   if(++frame%2===0)rebuild();
   waterM.uniforms.uTime.value=visualTime;
