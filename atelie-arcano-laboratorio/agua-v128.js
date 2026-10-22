@@ -201,13 +201,13 @@ function updateRipples(dt){
    const angle=n/RIPPLE_SEG*Math.PI*2,c=Math.cos(angle),sn=Math.sin(angle);
    for(let band=0;band<2;band++){
     const radius=band===0?outerRadius:innerRadius,fade=band===0?outerFade:innerFade;
-    const halfWidth=.022+radius*.012;
+    const halfWidth=.035+radius*.018;
     for(let e=0;e<3;e++){
      const rr=Math.max(.004,radius+(e-1)*halfWidth);
      const x=r.x+c*rr,z=r.z+sn*rr,k=n*6+band*3+e;
      const d=sample(depth,x,z);
      const edge=x>W*.5-.08||x<-W*.5+.08||z>L*.5-.08||z<-L*.5+.08;
-     p[k*3]=x;p[k*3+1]=waterHeight(x,z)+.035;p[k*3+2]=z;
+     p[k*3]=x;p[k*3+1]=waterHeight(x,z)+.029;p[k*3+2]=z;
      fadeArray[k]=(!edge&&!rockAt(x,z)&&d>.014&&e===1)?fade:0;
      visibility+=fadeArray[k];
     }
