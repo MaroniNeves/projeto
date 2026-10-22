@@ -1002,7 +1002,7 @@ stage.addEventListener('touchmove',e=>{if(e.touches.length!==2){pinch=0;return;}
  if(pinch)radius=clamp(radius+(pinch-dist)*.04,11,34);pinch=dist;},{passive:true});
 stage.addEventListener('touchend',()=>pinch=0,{passive:true});
 function setRainLevel(value){
- level=clamp(value,0,5);
+ level=clamp(Math.round(value),0,5);
  if(level>0)lastRainLevel=level;
  refreshRainDiagnostics();
  $('intensity').value=String(level);
@@ -1052,7 +1052,8 @@ $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=p
 $('cam').addEventListener('click',()=>{yaw=.83;pitch=.79;radius=24;});
 function updateInfo(force){
  const now=performance.now();if(!force&&now-lastUI<420)return;lastUI=now;
- const pct=Math.round(level/5*100),name=rainNames[level];
+ // A régua visual é não linear, acompanhando a força crescente da precipitação.
+ const pct=Math.round(Math.pow(rainMeters[level]/rainMeters[5],.62)*100),name=rainNames[level];
  $('intensityName').textContent=name;$('rainMeter').style.setProperty('--rain-fill',pct+'%');
  let surface=0,stored=0,ground=0,leaf=0,saturated=0,participating=0;
  let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0,mudTotal=0,mudWeight=0,wetSoilOnly=0;
