@@ -249,7 +249,7 @@ function atmosphereStep(dt){
              clamp((hum-.59)*3.4,0,1)*
              (.72+.45*uplift+.30*front);
   // Condensado reduz nuvem e umidade quando precipita; recarga por evaporação.
-  const rainRate=clamp(precipitation*(severe?.0104:.0036),0,severe?.019:.0082);
+  const rainRate=level===0?0:clamp(precipitation*(severe?.0085:.0036),0,severe?.016:.0082);
   cloud=clamp(cloud-rainRate*dt*(severe?1.25:4.5),0,1);
   hum=clamp(hum-rainRate*dt*(severe?.28:.75),0,1);
   atmHumidity[k]=hum;atmCloud[k]=cloud;atmRain[k]=rainRate;
@@ -693,7 +693,7 @@ function seed(m){
 // A chuva é alimentada por um campo uniforme; gotas animadas representam a mesma chuva,
 // sem depositar um segundo volume ao colidir (evita contagem dupla).
 function hydrologyStep(dt){
- const manualRain=rainMeters[level]*dt*(stormActive()?2.1:mode==='lagoon'?1.36:1);
+ const manualRain=rainMeters[level]*dt*(stormActive()?1.65:mode==='lagoon'?1.36:1);
  const interp=process==='retention'?1.75:process==='infiltration'?.95:1;
  const infiltrate=process==='runoff'?.11:process==='infiltration'?3.0:process==='retention'?.8:1;
  const sunIntensity=Math.max(0,solarAt(dayClock));
@@ -703,9 +703,9 @@ function hydrologyStep(dt){
  for(let k=0;k<size;k++){
   // Precipitação regional derivada de nuvens, umidade e transporte pelo vento.
   const rain=physicalWeather
-    ?(level===0?0:Math.min(rainField[k]*(stormActive()?1.17:1),
-      rainMeters[level]*(stormActive()?2.55:1.50))*
-      (stormActive()?1.12:mode==='lagoon'?1.10:1))*dt
+    ?(level===0?0:Math.min(rainField[k]*(stormActive()?1:1),
+      rainMeters[level]*(stormActive()?1.95:1.50))*
+      (stormActive()?.94:mode==='lagoon'?1.10:1))*dt
     :manualRain;
   if(rain>0){
    const canopyCap=.007+cover[k]*.037;
