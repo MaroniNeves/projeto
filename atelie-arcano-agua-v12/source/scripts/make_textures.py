@@ -39,27 +39,44 @@ small=rng.random((N,N))
 alpha=np.clip((foam+.25)*0.13 + fleck*.11+np.where(small>.993,.47,0),0,.75)
 rgba=np.stack([np.ones_like(alpha)*225,np.ones_like(alpha)*253,np.ones_like(alpha)*244,np.clip(alpha*255,0,255)],axis=-1).astype('uint8')
 Image.fromarray(rgba,'RGBA').save(P/'shore_foam.png')
-# animated-caustic source tile; shader scrolls 2 layers and mixes with water
-from PIL import ImageDraw
+# Tiled caustic pattern: diffuse light along softly warped Voronoi cell edges.
+# Deliberately avoid hand-drawn spirals or sharp outlines on the water.
 N=256
-im=Image.new('L',(N,N),35);d=ImageDraw.Draw(im)
-for i in range(210):
-    cx=float(rng.uniform(-25,N+25));cy=float(rng.uniform(-25,N+25));rx=float(rng.uniform(5,28));ry=float(rng.uniform(4,18))
-    # transparent curvy caustic cells
-    for j in (0,1):
-        off=j*N/2
-        box=[int(cx-rx),int(cy-ry),int(cx+rx),int(cy+ry)]
-        d.arc(box,start=int(rng.uniform(0,60)),end=int(rng.uniform(150,360)),fill=210,width=1)
-im=im.filter(ImageFilter.GaussianBlur(.8)); a=np.array(im,dtype=float)
-rgba=np.stack([np.clip(42+a*.35,0,255),np.clip(95+a*.54,0,255),np.clip(117+a*.53,0,255),np.ones_like(a)*255],axis=-1).astype('uint8')
-Image.fromarray(rgba,'RGBA').save(P/'water_caustics.png')
-# Splash impact corona sprite: irregular broken ring with soft central highlights
-N=256; y,x=np.mgrid[0:N,0:N];u=(x-127.5)/127.5;v=(y-127.5)/127.5;r=np.hypot(u,v);ang=np.arctan2(v,u)
-cr=(.50+.055*np.sin(9*ang)+.024*np.sin(21*ang+1))
-corona=np.exp(-((r-cr)/.048)**2)
-spurs=np.maximum(0,np.sin(13*ang+.4))**9*np.exp(-((r-.61)/.22)**2)
-alpha=np.clip(corona*.64+spurs*.38,0,1)
-rgba=np.stack([np.ones_like(alpha)*212,np.ones_like(alpha)*246,np.ones_like(alpha)*250,alpha*255],axis=-1).astype('uint8')
+y,x=np.mgrid[0:N,0:N]
+xx=x.astype(float)+7*np.sin(y*.031)+3*np.sin((x+y)*.043)
+yy=y.astype(float)+5*np.sin(x*.043)-2*np.sin((x-y)*.038)
+min1=np.full((N,N),np.inf,dtype=np.float32)
+min2=np.full((N,N),np.inf,dtype=np.float32)
+for gy in range(6):
+ for gx in range(6):
+  px=(gx+.4+rng.uniform(-.22,.22))*N/6
+  py=(gy+.5+rng.uniform(-.22,.22))*N/6
+  dx=np.minimum(np.abs(xx-px),N-np.abs(xx-px))
+  dy=np.minimum(np.abs(yy-py),N-np.abs(yy-py))
+  d2=dx*dx+dy*dy
+  changed=d2<min1
+  min2=np.where(changed,min1,np.minimum(min2,d2))
+  min1=np.minimum(min1,d2)
+sep=np.sqrt(min2)-np.sqrt(min1)
+light=np.exp(-((sep/5.3)**2))
+light=np.clip(light*.88+.07*np.sin(xx*.04+yy*.027),0,1)
+a=np.uint8(np.clip(30+light*209,0,255))
+rgba=np.stack([np.uint8(np.clip(23+a*.62,0,255)),np.uint8(np.clip(60+a*.69,0,255)),np.uint8(np.clip(85+a*.64,0,255)),np.full_like(a,255)],axis=-1)
+Image.fromarray(rgba,'RGBA').filter(ImageFilter.GaussianBlur(.55)).save(P/'water_caustics.png')
+# Raindrop corona: irregular fine splash ring with scattered airborne droplets.
+N=256
+y,x=np.mgrid[0:N,0:N]
+u=(x-127.5)/127.5;v=(y-127.5)/127.5
+r=np.hypot(u,v);ang=np.arctan2(v,u)
+cr=.48+.025*np.sin(7*ang+1.3)+.028*np.sin(16*ang)+.016*np.sin(23*ang-1)
+corona=np.exp(-((r-cr)/.036)**2)
+noise=.78+.14*np.sin(17*ang)**2
+alpha=corona*.67*noise
+for k in range(24):
+ a0=float(rng.uniform(0,np.pi*2));rad=float(rng.uniform(.52,.85));size=float(rng.uniform(.009,.023))
+ alpha+=np.exp(-(((u-rad*np.cos(a0))**2+(v-rad*np.sin(a0))**2)/(size*size)))*float(rng.uniform(.14,.44))
+alpha=np.clip(alpha,0,.83)
+rgba=np.stack([np.ones_like(alpha)*206,np.ones_like(alpha)*241,np.ones_like(alpha)*251,alpha*255],axis=-1).astype('uint8')
 Image.fromarray(rgba,'RGBA').save(P/'rain_splash.png')
 for path in P.glob('*.png'):
  print(path.name, round(path.stat().st_size/1024,1),'KB')
