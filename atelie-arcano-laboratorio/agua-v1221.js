@@ -907,21 +907,31 @@ function spawnSplash(x,z,h){
  }
 }
 function dropStep(dt){
- const severe=stormActive();
- const rainfall=physicalWeather
-  ?(level===0?0:clamp(atmRainMean/(severe?.004:.0028),0,severe?4.0:2.5)*
-      (severe?2.8:1.45))
-  :rainLevels[level]*(severe?3.5:1);
- spawnAcc+=rainfall*(mobile?185:265)*dt;
+ // A densidade visual segue o MESMO nível aplicado à física.
+ // O clima só modula o número de gotas e a distribuição entre as regiões.
+ const severe=stormActive(),profile=RAIN_SCALE[level];
+ const availability=physicalWeather?(level===0||appliedRainPeak<.0000001?0:
+   clamp(Math.pow(appliedRainMean/Math.max(.0000001,profile.rate),.48),0,1)):1;
+ const dropsPerSecond=(mobile?profile.dropsM:profile.dropsD)*availability;
+ if(dropsPerSecond===0)spawnAcc=0;
+ else spawnAcc=Math.min(MAX_DROPS,spawnAcc+dropsPerSecond*dt);
  const toSpawn=Math.min(severe?(mobile?95:145):65,Math.floor(spawnAcc));
  spawnAcc-=toSpawn;
- spawnAcc=Math.min(spawnAcc,MAX_DROPS*1.0);
  for(let k=0;k<toSpawn&&drops.length<MAX_DROPS;k++){
-  const x=(random()-.5)*(W-.8),z=(random()-.5)*(L-.8);
-  if(physicalWeather&&random()>clamp(atmosphereRainAt(x,z)/Math.max(.00005,atmRainPeak),0,1))continue;
+  let x=0,z=0,accepted=!physicalWeather;
+  // Amostragem espacial favorece regiões de precipitação sem fabricar gotas onde está seco.
+  for(let attempt=0;attempt<(physicalWeather?4:1);attempt++){
+   x=(random()-.5)*(W-.8);z=(random()-.5)*(L-.8);
+   if(!physicalWeather){accepted=true;break;}
+   const local=atmosphereRainAt(x,z);
+   if(local>0&&random()<clamp(local/Math.max(.0000001,atmRainPeak),0,1)){
+    accepted=true;break;
+   }
+  }
+  if(!accepted)continue;
   drops.push({x,z,y:2.5+random()*4.8,
-   speed:severe?8.8+random()*4.8:4.4+random()*3.2,
-   stretch:severe?1.35+random()*1.25:.70+random()*.75});
+   speed:profile.speed+random()*profile.speedVar,
+   stretch:profile.length*(.79+random()*.44)});
  }
  const factor=1+Math.log2(timeScale)*.12;
  let displayedImpacts=0;
@@ -934,21 +944,21 @@ function dropStep(dt){
   }
   const gh=impactHeightAt(d.x,d.z);
   if(d.y<=gh){
-   if(displayedImpacts<(severe?13:5)){spawnSplash(d.x,d.z,gh);displayedImpacts++;}
+   if(displayedImpacts<([0,1,2,4,7,13][level])){spawnSplash(d.x,d.z,gh);displayedImpacts++;}
    drops[i]=drops[drops.length-1];drops.pop();
   }
  }
  const enhanced=rainStyle==='enhanced';
- streak.material.opacity=severe?.71:enhanced?.67:.46;
- halo.material.size=severe?(mobile?6.8:6.3):enhanced?(mobile?10:9):(mobile?7:6);
- halo.material.opacity=severe?.36:enhanced?.49:.31;
+ streak.material.opacity=(enhanced?1:.75)*[0,.31,.43,.56,.67,.73][level];
+ halo.material.size=(mobile?8.0:7.3)*Math.max(.56,profile.thick);
+ halo.material.opacity=[0,.19,.25,.32,.35,.39][level];
  for(let i=0;i<drops.length;i++){
   const d=drops[i],o=i*3;dropPos[o]=d.x;dropPos[o+1]=d.y-.1;dropPos[o+2]=d.z;
-  dropObj.position.set(d.x,d.y,d.z);const windSlant=severe?clamp(atmWindMean*.14,0,.36):.095;
+  dropObj.position.set(d.x,d.y,d.z);const windSlant=physicalWeather?clamp(atmWindMean*(severe?.15:.055),0,severe?.42:.20):.07;
   dropObj.rotation.set(severe?windSlant*Math.sin(atmWindHeading):0,0,
     -windSlant*Math.cos(atmWindHeading));
-  dropObj.scale.set(severe?.83:enhanced?1.05:.78,
-    severe?d.stretch*1.12:enhanced?d.stretch*.90:d.stretch*.7,severe?.83:enhanced?1.05:.78);
+  const thickness=profile.thick*(enhanced?1:.79);
+  dropObj.scale.set(thickness,d.stretch*(severe?1.15:enhanced?.91:.78),thickness);
   dropObj.updateMatrix();streak.setMatrixAt(i,dropObj.matrix);
  }
  dropG.setDrawRange(0,drops.length);dropG.attributes.position.needsUpdate=true;
@@ -1043,7 +1053,7 @@ $('cam').addEventListener('click',()=>{yaw=.83;pitch=.79;radius=24;});
 function updateInfo(force){
  const now=performance.now();if(!force&&now-lastUI<420)return;lastUI=now;
  const pct=Math.round(level/5*100),name=rainNames[level];
- $('intensityName').textContent=physicalWeather?'Limite: '+name:name;$('rainMeter').style.setProperty('--rain-fill',pct+'%');
+ $('intensityName').textContent=name;$('rainMeter').style.setProperty('--rain-fill',pct+'%');
  let surface=0,stored=0,ground=0,leaf=0,saturated=0,participating=0;
  let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0,mudTotal=0,mudWeight=0,wetSoilOnly=0;
  for(let k=0;k<size;k++){
@@ -1059,8 +1069,10 @@ function updateInfo(force){
  }
  surface*=area;stored*=area;ground*=area;leaf*=area;
  $('rainDetail').textContent=(physicalWeather
-  ?'Chuva por regiões · média '+Math.round(clamp(atmRainMean/.0036,0,1)*100)+'% · pico '+Math.round(clamp(atmRainPeak/.0036,0,1)*100)+'%'
-  :'Chuva manual · '+name)+' • '+timeScale+'× • '+drops.length+' gotas 3D';
+  ?'Escala '+level+'/5 · chuva regional '+Math.round(clamp(appliedRainMean/.0073,0,1)*100)+
+    '% · '+activeRainRegions+'/'+ATM_N+' zonas com chuva'
+  :'Escala '+level+'/5 · chuva manual '+name)+
+   ' • '+timeScale+'× • '+drops.length+' gotas 3D';
  $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
  $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
  $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
@@ -1094,7 +1106,7 @@ function updateInfo(force){
  $('atmosStats').textContent=(physicalWeather?'Atmosfera física':'Clima manual')+
   ' · '+atmTempMean.toFixed(1)+' °C · umidade '+Math.round(atmHumMean*100)+
   '% · '+atmPressureMean.toFixed(0)+' hPa · vento '+atmWindMean.toFixed(1)+
-  ' · nuvens '+Math.round(atmCloudMean*100)+'% · intensidade de chuva '+Math.round(clamp(atmRainMean/.0036,0,1)*100)+'%';
+  ' · nuvens '+Math.round(atmCloudMean*100)+'% · chuva efetiva '+Math.round(clamp(appliedRainMean/.0073,0,1)*100)+'%';
  $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
  $('info').textContent=level===0
  ?'Chuva suspensa: poças infiltram e evaporam; o ciclo solar continua'
