@@ -1283,18 +1283,19 @@ function updateInfo(force){
   :'Escala '+level+'/5 · chuva manual '+name)+
    ' • '+timeScale+'× • '+drops.length+' gotas 3D';
  $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
- let nAvg=0,pAvg=0,kAvg=0,omAvg=0,growthAvg=0,healthAvg=0;
+ let nAvg=0,pAvg=0,kAvg=0,caAvg=0,phAvg=0,biotaAvg=0,salAvg=0,omAvg=0,growthAvg=0,healthAvg=0;
  const limited=new Array(SOIL_LIMITS.length).fill(0);
  for(let k=0;k<size;k++){
-  nAvg+=soilN[k];pAvg+=soilP[k];kAvg+=soilK[k];omAvg+=soilOrganic[k];
+  nAvg+=soilN[k];pAvg+=soilP[k];kAvg+=soilK[k];caAvg+=soilCa[k];phAvg+=soilPH[k];
+  biotaAvg+=soilBiota[k];salAvg+=soilSalinity[k];omAvg+=soilOrganic[k];
   growthAvg+=soilPlant[k];healthAvg+=soilHealth[k];limited[soilLimiting[k]]++;
  }
  const asPct=x=>Math.round(clamp(x/size,0,1)*100);
  const mainLimit=limited.indexOf(Math.max(...limited));
  $('fertilityStats').textContent=(soilType==='mosaico'?'Mosaico ecológico ('+SOIL_KEYS.length+' perfis disponíveis)':SOIL_PROFILES[soilType].name)+
-  ' · N '+asPct(nAvg)+'% · P '+asPct(pAvg)+'% · K '+asPct(kAvg)+'% · húmus '+asPct(omAvg)+'%';
+  ' · N '+asPct(nAvg)+'% · P '+asPct(pAvg)+'% · K '+asPct(kAvg)+'% · Ca '+asPct(caAvg)+'% · húmus '+asPct(omAvg)+'%';
  $('plantStats').textContent='🌱 Biomassa '+asPct(growthAvg)+'% · condição de crescimento '+asPct(healthAvg)+
-  '% · principal limitante: '+SOIL_LIMITS[mainLimit]+' · solo vivo: '+soilUpdates+' atualizações';
+  '% · principal limitante: '+SOIL_LIMITS[mainLimit]+' · pH '+(phAvg/size).toFixed(1)+' · salinidade '+asPct(salAvg)+'% · biota '+asPct(biotaAvg)+'%';
  $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
  $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
  $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondas · '+foamCount+' manchas de espuma/sujeira';
