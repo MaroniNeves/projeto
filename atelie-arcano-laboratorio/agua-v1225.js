@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.24 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.25 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.24]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.25]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -813,15 +813,34 @@ updateSprouts();
 // Falhas de GPU, WebGL, rede ou GLTFLoader mantêm as mudas antigas como fallback.
 const forestGroup=new T.Group();forestGroup.name='Floresta Quaternius CC0 — painterly';scene.add(forestGroup);
 const forestInstances=[],forestModels={};let floraWanted=true,floraLoaded=0,floraState='Preparando';
+const FLORA_TOTAL=23;
+let ultimaLoaded=0,ultimaState='opcional',ultimaEnabled=!mobile;
+const ultimateCollection=new T.Group();ultimateCollection.name='Ultimate Stylized Nature — arquivos enviados pelo usuário';
+forestGroup.add(ultimateCollection);
 const FOREST_MODELS=[
- {name:'CommonTree_1',type:'tree',mobile:5,desktop:9,height:4.4},
- {name:'CommonTree_2',type:'tree',mobile:3,desktop:7,height:4.0},
- {name:'Pine_2',type:'pine',mobile:2,desktop:4,height:4.7},
- {name:'Bush_Common_Flowers',type:'bush',mobile:8,desktop:17,height:.95},
- {name:'Flower_3_Group',type:'flower',mobile:13,desktop:33,height:.47},
- {name:'Grass_Common_Short',type:'grass',mobile:14,desktop:35,height:.29},
- {name:'Fern_1',type:'fern',mobile:5,desktop:12,height:.61},
- {name:'Rock_Medium_2',type:'rock',mobile:5,desktop:8,height:.70}
+ {name:'CommonTree_1',type:'tree',mobile:2,desktop:5,height:4.5},
+ {name:'CommonTree_2',type:'tree',mobile:2,desktop:4,height:4.4},
+ {name:'CommonTree_3',type:'tree',mobile:2,desktop:5,height:4.7},
+ {name:'CommonTree_4',type:'tree',mobile:1,desktop:4,height:4.8},
+ {name:'CommonTree_5',type:'tree',mobile:2,desktop:4,height:4.4},
+ {name:'Pine_1',type:'pine',mobile:1,desktop:3,height:5.1},
+ {name:'Pine_2',type:'pine',mobile:1,desktop:3,height:4.9},
+ {name:'Pine_3',type:'pine',mobile:1,desktop:2,height:4.6},
+ {name:'Pine_4',type:'pine',mobile:1,desktop:2,height:4.7},
+ {name:'Bush_Common',type:'bush',mobile:6,desktop:15,height:1},
+ {name:'Bush_Common_Flowers',type:'bush',mobile:8,desktop:18,height:1},
+ {name:'Flower_3_Group',type:'flower',mobile:11,desktop:24,height:0.5},
+ {name:'Flower_4_Group',type:'flower',mobile:12,desktop:26,height:0.46},
+ {name:'Grass_Common_Short',type:'grass',mobile:10,desktop:24,height:0.26},
+ {name:'Grass_Common_Tall',type:'grass',mobile:10,desktop:20,height:0.41},
+ {name:'Grass_Wispy_Short',type:'grass',mobile:11,desktop:24,height:0.33},
+ {name:'Grass_Wispy_Tall',type:'grass',mobile:10,desktop:23,height:0.51},
+ {name:'Fern_1',type:'fern',mobile:9,desktop:22,height:0.75},
+ {name:'Clover_1',type:'clover',mobile:14,desktop:28,height:0.29},
+ {name:'Plant_1',type:'plant',mobile:8,desktop:18,height:0.6},
+ {name:'Rock_Medium_1',type:'rock',mobile:4,desktop:7,height:0.77},
+ {name:'Rock_Medium_2',type:'rock',mobile:5,desktop:8,height:0.81},
+ {name:'Rock_Medium_3',type:'rock',mobile:4,desktop:7,height:0.78}
 ];
 // Gramado fino instanciado: 2 lâminas cruzadas por tufo, com degradê de cor.
 function makeMeadowBlade(){
@@ -882,7 +901,7 @@ function updateMeadowHealth(){
 function forestStatus(state){
  floraState=state;
  if($('floraStatus'))$('floraStatus').textContent=
-  '🌳 Modelos Quaternius: '+floraLoaded+'/8 · '+state+
+  '🌳 MegaKit '+floraLoaded+'/'+FLORA_TOTAL+' · Ultimate '+ultimaLoaded+'/12 · '+state+
   ' · solo aquarelado procedural';
 }
 function setFloraVisible(v){
@@ -970,6 +989,15 @@ function placeForestModel(item,root){
   if(basinBlocked)continue;
   const y=elevation(x,z);
   if(y<-.13)continue;
+  const k=idx(clamp(Math.round((x+W*.5)/dx),0,NX-1),
+    clamp(Math.round((z+L*.5)/dz),0,NZ-1));
+  const soilName=SOIL_KEYS[soilKeyIndex[k]];
+  // Vegetação acompanha os perfis de solo e evita locais impróprios.
+  const wetSpecies=item.type==='fern'||item.type==='clover';
+  if(soilName==='salino'&&item.type!=='rock'&&randomForest()<.88)continue;
+  if(soilName==='pedregoso'&&wetSpecies&&randomForest()<.72)continue;
+  if(soilName==='arenoso'&&wetSpecies&&randomForest()<.46)continue;
+  if(soilName==='aluvial'&&item.type==='pine'&&randomForest()<.65)continue;
   const obj=root.clone(true),factor=.78+randomForest()*.52;
   const desired=item.height*factor;
   const scale=desired/h;
@@ -999,13 +1027,14 @@ async function loadPainterlyForest(){
     const doc=await loader.loadAsync('./assets/quaternius/'+item.name+'.gltf');
     forestModels[item.name]=doc.scene;
     placeForestModel(item,doc.scene);ok++;floraLoaded=ok;
-    forestStatus('carregando flora '+ok+'/8');
+    forestStatus('carregando MegaKit '+ok+'/'+FLORA_TOTAL);
    }catch(err){console.warn('[Arcano] Modelo não carregado',item.name,err);}
   }
   if(ok===0)throw new Error('Nenhum modelo glTF carregou');
   setFloraVisible(floraWanted);
   updateForestHealth();
-  forestStatus('floresta 3D carregada');
+  forestStatus('MegaKit carregado · verificando modelos Ultimate');
+  await loadUltimatePack();
  }catch(err){
   console.warn('[Arcano] Mantendo vegetação original; importação glTF indisponível:',err);
   forestGroup.visible=false;grass.visible=true;sproutGroup.visible=true;
@@ -1763,7 +1792,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1224'))fail(e.error||e.message);});
-window.arcanoWaterV1224={scene,renderer,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1225'))fail(e.error||e.message);});
+window.arcanoWaterV1225={scene,renderer,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
