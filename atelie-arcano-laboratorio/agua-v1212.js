@@ -110,22 +110,61 @@ for(let k=0;k<grass.count;k++){
 // inclusive nas áreas secas. Alguns WebGL móveis não apresentavam as poças.
 // Aqui desenhamos APENAS triângulos molhados: cor opaca, malha rastreável e sem "água invisível".
 const SURFACE_VISIBLE=.006, SURFACE_RIPPLE=.012, SURFACE_POND=.018;
-const waterG=grid(),wet=new Float32Array(size),flow=new Float32Array(size*2);
-const waterColors=new Float32Array(size*3),waterIndices=waterG.index.array;
-const waterClear=new T.Color('#347f99'),waterBright=new T.Color('#4894a8');
-const waterMud=new T.Color('#876043');
-const waterClearRGB=waterClear.toArray(),waterBrightRGB=waterBright.toArray(),waterMudRGB=waterMud.toArray();
-waterG.setAttribute('wet',new T.BufferAttribute(wet,1).setUsage(T.DynamicDrawUsage));
-waterG.setAttribute('flow',new T.BufferAttribute(flow,2).setUsage(T.DynamicDrawUsage));
-waterG.setAttribute('turbidity',new T.BufferAttribute(turbidity,1).setUsage(T.DynamicDrawUsage));
+// Margem recortada por isovalor e interpolada nas arestas (marching triangles).
+// Ao contrário dos triângulos inteiros, o polígono termina entre os vértices.
+const wet=new Float32Array(size),flow=new Float32Array(size*2);
+const maxWaterVertices=(NX-1)*(NZ-1)*12;
+const waterPositions=new Float32Array(maxWaterVertices*3);
+const waterColors=new Float32Array(maxWaterVertices*3),waterVertexColors=new Float32Array(size*3);
+const waterG=new T.BufferGeometry();
+waterG.setAttribute('position',new T.BufferAttribute(waterPositions,3).setUsage(T.DynamicDrawUsage));
 waterG.setAttribute('color',new T.BufferAttribute(waterColors,3).setUsage(T.DynamicDrawUsage));
 waterG.setDrawRange(0,0);
-const waterM=new T.MeshBasicMaterial({
- vertexColors:true,side:T.DoubleSide,transparent:false,depthWrite:true,toneMapped:false,fog:true
-});
+const waterClearRGB=new T.Color('#347f99').toArray(),waterBrightRGB=new T.Color('#4894a8').toArray(),
+ waterMudRGB=new T.Color('#876043').toArray();
+const waterM=new T.MeshBasicMaterial({vertexColors:true,side:T.DoubleSide,transparent:false,depthWrite:true,toneMapped:false,fog:true});
 const water=new T.Mesh(waterG,waterM);
-water.frustumCulled=false;water.renderOrder=3;water.name='Poças e lagoas orgânicas V12.12';
-scene.add(water);
+water.frustumCulled=false;water.renderOrder=3;water.name='Poças e lagoas orgânicas V12.12';scene.add(water);
+// Instâncias de detritos/espuma baixa perto de alguns trechos calmos das margens.
+const foamLimit=mobile?120:220,foamObj=new T.Object3D();
+const foamMesh=new T.InstancedMesh(new T.PlaneGeometry(.060,.027),
+ new T.MeshBasicMaterial({color:'#e2d5bb',transparent:true,opacity:.60,side:T.DoubleSide,depthWrite:false}),foamLimit);
+foamMesh.count=0;foamMesh.frustumCulled=false;foamMesh.renderOrder=5;scene.add(foamMesh);
+const foamClean=new T.Color('#c8c5b8'),foamDirty=new T.Color('#a48a69');
+const clipX=new Float32Array(5),clipY=new Float32Array(5),clipZ=new Float32Array(5),
+ clipR=new Float32Array(5),clipG=new Float32Array(5),clipB=new Float32Array(5);
+let clipN=0,waterVertexCount=0;
+function putVertex(k){
+ const n=clipN++;
+ clipX[n]=nx(k%NX);clipZ[n]=nz(Math.floor(k/NX));
+ clipY[n]=soil[k]+depth[k]+.014;
+ clipR[n]=waterVertexColors[3*k];clipG[n]=waterVertexColors[3*k+1];clipB[n]=waterVertexColors[3*k+2];
+}
+function putCross(a,b,da,db){
+ const t=clamp(da/(da-db),0,1),n=clipN++;
+ const x0=nx(a%NX),z0=nz(Math.floor(a/NX)),x1=nx(b%NX),z1=nz(Math.floor(b/NX));
+ clipX[n]=x0+(x1-x0)*t;clipZ[n]=z0+(z1-z0)*t;
+ clipY[n]=(soil[a]+depth[a]+.014)*(1-t)+(soil[b]+depth[b]+.014)*t;
+ clipR[n]=waterVertexColors[a*3]*(1-t)+waterVertexColors[b*3]*t;
+ clipG[n]=waterVertexColors[a*3+1]*(1-t)+waterVertexColors[b*3+1]*t;
+ clipB[n]=waterVertexColors[a*3+2]*(1-t)+waterVertexColors[b*3+2]*t;
+}
+function appendCutTriangle(a,b,c){
+ if(waterVertexCount+6>maxWaterVertices)return;
+ clipN=0;let prior=c,dp=shoreField[c],wasWet=dp>=0;
+ for(let n=0;n<3;n++){
+  const k=n===0?a:n===1?b:c,dk=shoreField[k],isWet=dk>=0;
+  if(wasWet!==isWet)putCross(prior,k,dp,dk);
+  if(isWet)putVertex(k);
+  prior=k;dp=dk;wasWet=isWet;
+ }
+ if(clipN<3)return;
+ for(let n=1;n<clipN-1;n++)for(let e=0;e<3;e++){
+  const v=e===0?0:e===1?n:n+1,off=waterVertexCount++*3;
+  waterPositions[off]=clipX[v];waterPositions[off+1]=clipY[v];waterPositions[off+2]=clipZ[v];
+  waterColors[off]=clipR[v];waterColors[off+1]=clipG[v];waterColors[off+2]=clipB[v];
+ }
+}
 function impactHeightAt(x,z){
  const h=sample(soil,x,z),d=sample(depth,x,z);
  return d>=SURFACE_RIPPLE?h+d:h;
@@ -323,47 +362,52 @@ function flowStep(dt,multiplier){
  }
 }
 function rebuild(){
- const p=waterG.attributes.position.array,w=waterG.attributes.wet.array,f=waterG.attributes.flow.array;
- const vc=waterG.attributes.color.array;
- let count=0,faceIndex=0;
+ let count=0;waterVertexCount=0;foamCount=0;
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
-  const k=idx(i,j),v=depth[k];
-  const show=v>=SURFACE_VISIBLE;
-  w[k]=clamp((v-.002)/.013,0,1);
-  p[k*3+1]=soil[k]+(show?v+.015:.010);
-  if(show)count++;
+  const k=idx(i,j),d=depth[k],x=nx(i),z=nz(j);
+  // Irregularidade de contorno apenas visual: não produz água adicional.
+  const shoreNoise=.0017*Math.sin(x*3.9+z*4.2)+.0011*Math.sin(x*8.7-z*5.1);
+  shoreField[k]=blocked[k]?-.25:d-SURFACE_VISIBLE-shoreNoise;
+  wet[k]=clamp((d-.002)/.014,0,1);
+  if(d>=SURFACE_VISIBLE&&!blocked[k])count++;
   const left=idx(Math.max(0,i-1),j),right=idx(Math.min(NX-1,i+1),j);
   const up=idx(i,Math.max(0,j-1)),down=idx(i,Math.min(NZ-1,j+1));
-  f[k*2]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
-  f[k*2+1]=(soil[up]+depth[up]-soil[down]-depth[down])*.6;
-  // Mistura gradual azul -> barro, e contraste sutil para mostrar movimento.
-  const muddiness=clamp(turbidity[k]*.89,0,.89);
-  const wave=.5+.5*Math.sin(nx(i)*11.0+nz(j)*8.0-visualTime*2.7);
-  const highlight=.09+wave*.09;
+  flow[k*2]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
+  flow[k*2+1]=(soil[up]+depth[up]-soil[down]-depth[down])*.6;
+  const muddy=clamp(turbidity[k]*.89,0,.89);
+  const wave=.5+.5*Math.sin(x*11+z*8-visualTime*2.7),hi=.10+.09*wave;
   for(let m=0;m<3;m++){
-   const clear=waterClearRGB[m]*(1-highlight)+waterBrightRGB[m]*highlight;
-   vc[k*3+m]=clear*(1-muddiness)+waterMudRGB[m]*muddiness;
+   const clear=waterClearRGB[m]*(1-hi)+waterBrightRGB[m]*hi;
+   waterVertexColors[k*3+m]=clear*(1-muddy)+waterMudRGB[m]*muddy;
   }
-  const sat=showWet?clamp(soilMoisture[k]/Math.max(soilCapacity[k],.001)*.95+w[k]*.35,0,.94):0;
-  for(let m=0;m<3;m++)colors[3*k+m]=dry[3*k+m]*(1-sat)+mudRGB[m]*sat;
+  const moist=showWet?clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k])*.95+wet[k]*.28,0,.94):0;
+  for(let m=0;m<3;m++)colors[k*3+m]=dry[k*3+m]*(1-moist)+mudRGB[m]*moist;
  }
- // Escolhemos triângulos molhados, em vez de um plano transparente sobre todo o relevo.
  for(let j=0;j<NZ-1;j++)for(let i=0;i<NX-1;i++){
   const a=idx(i,j),b=a+1,c=a+NX,d=c+1;
-  // Apenas triângulos com 2 ou 3 vértices molhados; evita pintar os trechos secos.
-  const triA=(depth[a]>=SURFACE_VISIBLE?1:0)+(depth[b]>=SURFACE_VISIBLE?1:0)+(depth[c]>=SURFACE_VISIBLE?1:0);
-  const triB=(depth[b]>=SURFACE_VISIBLE?1:0)+(depth[c]>=SURFACE_VISIBLE?1:0)+(depth[d]>=SURFACE_VISIBLE?1:0);
-  if(triA>=2){waterIndices[faceIndex++]=a;waterIndices[faceIndex++]=c;waterIndices[faceIndex++]=b;}
-  if(triB>=2){waterIndices[faceIndex++]=b;waterIndices[faceIndex++]=c;waterIndices[faceIndex++]=d;}
+  appendCutTriangle(a,c,b);appendCutTriangle(b,c,d);
  }
- waterG.setDrawRange(0,faceIndex);
- wetted=count*area;
- waterG.index.needsUpdate=true;
+ waterG.setDrawRange(0,waterVertexCount);
  waterG.attributes.position.needsUpdate=true;
- waterG.attributes.color.needsUpdate=true;
- waterG.attributes.wet.needsUpdate=true;waterG.attributes.flow.needsUpdate=true;
- waterG.attributes.turbidity.needsUpdate=true;landG.attributes.color.needsUpdate=true;
- waterG.computeVertexNormals();
+ waterG.attributes.color.needsUpdate=true;landG.attributes.color.needsUpdate=true;
+ wetted=count*area;
+ // Espuma e folhas sujas somente em faixas localizadas de água rasa e calma.
+ for(let j=1;j<NZ-1&&foamCount<foamLimit;j++)for(let i=1;i<NX-1&&foamCount<foamLimit;i++){
+  const k=idx(i,j),v=depth[k];if(blocked[k]||v<SURFACE_VISIBLE+.002||v>.071)continue;
+  const edge=Math.min(shoreField[k-1],shoreField[k+1],shoreField[k-NX],shoreField[k+NX]);
+  if(edge>.003)continue;
+  const x=nx(i),z=nz(j),variation=.5+.5*Math.sin(x*8.13+z*6.7);
+  if(variation<.66||Math.hypot(flow[k*2],flow[k*2+1])>.38)continue;
+  if(turbidity[k]<.09&&cover[k]<.42)continue;
+  foamObj.position.set(x,soil[k]+v+.025,z);
+  foamObj.rotation.set(-Math.PI/2,0,.8*Math.sin(x*5.5-z*3.1));
+  const scale=.48+.6*variation;foamObj.scale.set(scale,scale*.75,1);
+  foamObj.updateMatrix();foamMesh.setMatrixAt(foamCount,foamObj.matrix);
+  foamMesh.setColorAt(foamCount,foamClean.clone().lerp(foamDirty,clamp(turbidity[k]*1.35,0,1)));
+  foamCount++;
+ }
+ foamMesh.count=foamCount;foamMesh.instanceMatrix.needsUpdate=true;
+ if(foamMesh.instanceColor)foamMesh.instanceColor.needsUpdate=true;
 }
 // O solo define a cor, a altura e o número das partículas expelidas.
 function spawnSplash(x,z,h){
@@ -527,7 +571,7 @@ function updateInfo(force){
  $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
  $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
  $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
- $('splashStats').textContent='Impactos visíveis '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondulações no relevo';
+ $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondas · '+foamCount+' manchas de espuma/sujeira';
   $('mudStats').textContent='Sedimentos suspensos: '+Math.round(mudTotal/Math.max(.0001,mudWeight)*100)+'% · '+({loam:'terra comum',loose:'terra solta',clay:'barro argiloso',compacted:'terra compactada'}[soilType]||soilType);
  $('lakeStats').textContent='Lagoa: '+Math.round(lagoonWet/Math.max(1,lagoonCells)*100)+'% da bacia coberta · profundidade '+lagoonMax.toFixed(2)+' m · '+otherPuddles+' células de poças';
  $('cycleStats').textContent='Infiltrou '+stats.infiltrated.toFixed(1)+' m³ · folhas '+leaf.toFixed(1)+' m³ · evapotranspiração '+(stats.evaporated+stats.transpired).toFixed(1)+' m³ · drenou '+stats.outflow.toFixed(1)+' m³';
