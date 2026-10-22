@@ -69,7 +69,7 @@ for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
  const moss=.5+.5*Math.sin(x*1.4-z*.88),v=clamp(.48+.29*Math.sin(x*.43+z*.3)+.15*moss,.14,.9);
  cover[k]=clamp(.05+.60*moss+.24*Math.sin(z*.55+x*1.33),0,.82);
  soilCapacity[k]=.060+.085*cover[k]+.023*(.5+.5*Math.cos(x*1.7-z*.8));
- permeability[k]=.00045+.00055*cover[k]+.00025*(.5+.5*Math.sin(x*.9+z*1.4));
+ permeability[k]=.003+.002*cover[k]+.0007*(.5+.5*Math.sin(x*.9+z*1.4));
  const a=new T.Color(h<-.10?'#a47e62':'#b99b7d'),b=new T.Color((h>.52&&moss>.78)?'#777960':'#8d6952');
  a.lerp(b,clamp(.32+v*.45,0,1));for(let m=0;m<3;m++)dry[k*3+m]=colors[k*3+m]=a.toArray()[m];
 }
@@ -169,18 +169,18 @@ function updateRipples(dt){
     const rr=rad*(e?.95:1.07),x=r.x+cs*rr,z=r.z+sn*rr,k=n*2+e;
     const d=sample(depth,x,z),edge=x>W/2-.1||x<-W/2+.1||z>L/2-.1||z<-L/2+.1;
     p[k*3]=x;p[k*3+1]=waterHeight(x,z)+.025;p[k*3+2]=z;
-    a[k]=(!edge&&!rockAt(x,z)&&d>.002)?fade:0;intensity+=a[k];
+    a[k]=(!edge&&!rockAt(x,z)&&d>.015)?fade:0;intensity+=a[k];
    }
   }
   mesh.visible=intensity>.08;g.attributes.position.needsUpdate=true;g.attributes.strength.needsUpdate=true;
  }
 }
 const dropObj=new T.Object3D(),splashObj=new T.Object3D();
-let mode='rain',process='combined',level=3,timeScale=16,paused=false,showWet=true,enableInfiltration=true;
+let mode='rain',process='combined',level=3,timeScale=4,paused=false,showWet=true,enableInfiltration=true;
 let rainStyle='enhanced',time=0,visualTime=0,acc=0,spawnAcc=0,lastUI=0,wetted=0,frame=0;
 const rainLevels=[0,.32,.63,1,1.57,2.4],rainNames=['Sem chuva','Garoa','Chuva fraca','Chuva moderada','Chuva forte','Temporal intenso'];
 // Chuva ampliada para visualizar a formação no time-lapse, sem criar lagos artificialmente.
-const rainMeters=[0,.0012,.0031,.0069,.0135,.023];
+const rainMeters=[0,.0007,.0018,.0043,.0085,.015];
 function add(x,z,vol){
  const i=Math.round((x+W/2)/dx),j=Math.round((z+L/2)/dz);
  if(i<1||j<1||i>=NX-1||j>=NZ-1)return;
@@ -260,9 +260,9 @@ function rebuild(){
  const p=waterG.attributes.position.array,w=waterG.attributes.wet.array,f=waterG.attributes.flow.array;
  let count=0;
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
-  const k=idx(i,j),v=depth[k],t=clamp(v/.011,0,1);
+  const k=idx(i,j),v=depth[k],t=clamp((v-.009)/.022,0,1);
   w[k]=t;p[3*k+1]=soil[k]+(t>.02?v+.018:-.028);
-  if(v>.003)count++;
+  if(v>.022)count++;
   const left=idx(Math.max(0,i-1),j),right=idx(Math.min(NX-1,i+1),j);
   const up=idx(i,Math.max(0,j-1)),down=idx(i,Math.min(NZ-1,j+1));
   f[k*2]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
@@ -281,7 +281,7 @@ function spawnSplash(x,z,h){
  const k=idx(i,j);if(blocked[k])return;
  totalImpacts++;
  const saturation=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
- const ponded=depth[k]>.0025;
+ const ponded=depth[k]>.018;
  // Dry ground gives very little brown spatter; wet clay gives muddy spatters;
  // a puddle gives pale blue water droplets and a slope-conforming ripple.
  let n=ponded?5+Math.floor(random()*4):saturation>.70?4+Math.floor(random()*3):2+Math.floor(random()*2);
@@ -401,8 +401,8 @@ function updateInfo(force){
   saturated+=clamp(soilMoisture[k]/soilCapacity[k],0,1);participating++;
   const i=k%NX,j=Math.floor(k/NX),x=nx(i),z=nz(j),b=basins[1];
   const q=((x-b.x)/b.sx)**2+((z-b.z)/b.sz)**2;
-  if(q<.72){lagoonCells++;if(depth[k]>.004)lagoonWet++;lagoonMax=Math.max(lagoonMax,depth[k]);}
-  if(depth[k]>.004&&q>.72)otherPuddles++;
+  if(q<.72){lagoonCells++;if(depth[k]>.022)lagoonWet++;lagoonMax=Math.max(lagoonMax,depth[k]);}
+  if(depth[k]>.022&&q>.72)otherPuddles++;
  }
  surface*=area;stored*=area;ground*=area;leaf*=area;
  $('rainDetail').textContent='Chuva '+name+' • '+timeScale+'× • '+drops.length+' gotas 3D';
