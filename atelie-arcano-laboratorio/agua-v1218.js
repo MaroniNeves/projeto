@@ -147,7 +147,12 @@ let atmRainMean=0,atmRainPeak=0,atmCloudMean=.42,atmHumMean=.70,atmTempMean=23,
  atmPressureMean=1011,atmWindMean=.4,atmWindHeading=0,atmosDayIndex=0;
 const atmId=(i,j)=>j*ATM_NX+i,atmX=i=>-W*.5+i*W/(ATM_NX-1),
  atmZ=j=>-L*.5+j*L/(ATM_NZ-1);
-const solarAt=seconds=>Math.sin(2*Math.PI*(seconds/DAY_SECONDS-.25));
+const SEASON_DAYS=24;
+const seasonShift=()=>Math.cos(2*Math.PI*(atmosDayIndex%SEASON_DAYS)/SEASON_DAYS);
+// Inverno: nascer mais tarde e sol mais baixo; verão: dias um pouco mais longos.
+const solarAt=seconds=>
+ Math.sin(2*Math.PI*(seconds/DAY_SECONDS-.25))*(.87+.09*seasonShift())+
+ .16*seasonShift();
 function fieldAt(field,x,z){
  const fx=clamp((x/W+.5)*(ATM_NX-1),0,ATM_NX-1-.000001);
  const fz=clamp((z/L+.5)*(ATM_NZ-1),0,ATM_NZ-1-.000001);
@@ -167,6 +172,10 @@ function initAtmosphere(){
   atmHumidity[k]=clamp(.76+.10*wave+.08*other,.44,.94);
   atmPressure[k]=1012.5+3.1*Math.sin(x*.28+z*.35);
   atmCloud[k]=clamp(.40+.19*Math.sin(x*.56+z*.41)+.16*Math.cos(z*.65-x*.19),.02,.83);
+  if(mode==='storm'){
+   atmHumidity[k]=Math.max(.87,atmHumidity[k]);
+   atmCloud[k]=Math.max(.66,atmCloud[k]);
+  }
   atmRain[k]=0;atmWindX[k]=.32;atmWindZ[k]=.15;
  }
  rainField.fill(0);atmRainMean=atmRainPeak=0;
@@ -201,8 +210,10 @@ function atmosphereStep(dt){
  for(let j=0;j<ATM_NZ;j++)for(let i=0;i<ATM_NX;i++){
   const k=atmId(i,j),x=atmX(i),z=atmZ(j),terrain=elevation(x,z);
   const front=Math.exp(-Math.pow((x-frontX)/2.0,2));
-  const forest=clamp(.31+.26*Math.sin(x*.7-z*.51),.05,.85);
-  const airTempTarget=15.7+15.2*daySun-2.4*forest-1.8*terrain-7.4*front;
+  const terrainI=clamp(Math.round((x+W*.5)/dx),0,NX-1);
+  const terrainJ=clamp(Math.round((z+L*.5)/dz),0,NZ-1);
+  const forest=cover[idx(terrainI,terrainJ)];
+  const airTempTarget=15.7+15.2*daySun+3.5*seasonShift()-2.4*forest-1.8*terrain-7.4*front;
   atmTemp[k]+= (airTempTarget-atmTemp[k])*clamp(dt*.0075,0,.15);
   const pressureTarget=1013.8+2.1*Math.cos(2*Math.PI*clock)
         -7.4*front+2.0*Math.sin(z*.39+clock*5.1);
@@ -222,7 +233,8 @@ function atmosphereStep(dt){
   let hum=atmNextHum[k]+(forest*.00024+recycled/ATM_N+cooling-
                           daySun*.000085-rainSink/ATM_N)*dt;
   hum=clamp(hum,.22,.985);
-  const saturated=clamp((hum-.70)*3.15+(23-atmTemp[k])*.018+uplift*.24+front*.22,0,1);
+  const saturated=clamp((hum-.70)*3.15+(23-atmTemp[k])*.018+
+      uplift*.24+front*.22+(mode==='storm'?.22:0),0,1);
   let cloud=clamp(atmNextCloud[k]+(saturated*.032-
                   (1-saturated)*(.007+.009*daySun))*dt,0,1);
   const precipitation=clamp((cloud-.47)*2.7,0,1)*
@@ -230,7 +242,7 @@ function atmosphereStep(dt){
              (.72+.45*uplift+.30*front);
   // Condensado reduz nuvem e umidade quando precipita; recarga por evaporação.
   const rainRate=clamp(precipitation*.0036,0,.0082);
-  cloud=clamp(cloud-rainRate*dt*2.0,0,1);
+  cloud=clamp(cloud-rainRate*dt*4.5,0,1);
   hum=clamp(hum-rainRate*dt*.75,0,1);
   atmHumidity[k]=hum;atmCloud[k]=cloud;atmRain[k]=rainRate;
   tSum+=atmTemp[k];hSum+=hum;cSum+=cloud;pSum+=atmPressure[k];
@@ -1027,11 +1039,12 @@ function updateInfo(force){
  $('cycleStats').textContent='Infiltrou '+stats.infiltrated.toFixed(1)+' m³ · folhas '+leaf.toFixed(1)+' m³ · evapotranspiração '+(stats.evaporated+stats.transpired).toFixed(1)+' m³ · drenou '+stats.outflow.toFixed(1)+' m³';
  const hour=Math.floor(dayClock/60),minute=Math.floor(dayClock%60);
  const hh=String(hour).padStart(2,'0'),mm=String(minute).padStart(2,'0');
+ const seasonName=(['Verão','Outono','Inverno','Primavera'])[Math.floor((atmosDayIndex%SEASON_DAYS)/(SEASON_DAYS/4))];
  const sunAltitude=solarAt(dayClock);
  const phaseName=sunAltitude<-.035?'Noite':sunAltitude<.10?'Crepúsculo':
   dayClock<DAY_SECONDS*.50?'Manhã':'Tarde';
  $('dayCycleStats').textContent=(sunAltitude<-.035?'☾ ':'☀ ')+
-  'Dia '+(atmosDayIndex+1)+' · '+hh+':'+mm+' · '+phaseName+' · 1 dia = 24 min reais';
+  'Dia '+(atmosDayIndex+1)+' · '+hh+':'+mm+' · '+phaseName+' · '+seasonName+' · 1 dia = 24 min reais';
  $('dayCycleBar').style.width=(dayClock/DAY_SECONDS*100).toFixed(2)+'%';
  $('atmosStats').textContent=(physicalWeather?'Atmosfera física':'Clima manual')+
   ' · '+atmTempMean.toFixed(1)+' °C · umidade '+Math.round(atmHumMean*100)+
