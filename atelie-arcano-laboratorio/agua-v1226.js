@@ -2027,6 +2027,111 @@ function rebuildImportedRocks(){
    placed.length,importedRockModels.map(x=>x.item.name).join(', '));
  }
 }
+// V12.30 — Bancada de revisão in situ para TODAS as espécies não minerais.
+// É uma cópia temporária fora da distribuição, não altera a floresta original.
+const assetTestGroup=new T.Group();
+assetTestGroup.name='Bancada temporária de revisão de modelos';
+scene.add(assetTestGroup);
+let assetTestActor=null,assetTestAnchor=null,assetTestMarker=null;
+function assetTestMessage(message){
+ if($('assetTestStatus'))$('assetTestStatus').textContent=message;
+}
+function setupAssetTest(){
+ const select=$('assetTestSelect');if(!select)return;
+ select.textContent='';
+ for(const item of FOREST_MODELS){
+  if(item.type==='rock')continue;
+  const option=document.createElement('option');
+  option.value=item.name;
+  const labels={tree:'Árvore',pine:'Pinheiro',bush:'Arbusto',
+   flower:'Flores',fern:'Samambaia',grass:'Grama'};
+  option.textContent=(labels[item.type]||item.type)+' · '+item.name+
+   ' ('+(item.pack==='mega'?'MegaKit':'Ultimate')+')';
+  select.appendChild(option);
+ }
+ select.value='MapleTree_3';
+ select.addEventListener('change',()=>{
+  const available=!!forestModels[select.value];
+  assetTestMessage(available?'Pronto para testar: '+select.value:
+   'Aguardando carregamento do modelo '+select.value);
+ });
+ $('assetTestPlace')?.addEventListener('click',()=>placeAssetTest(select.value));
+ $('assetTestNext')?.addEventListener('click',()=>{
+  if(!select.options.length)return;
+  select.selectedIndex=(select.selectedIndex+1)%select.options.length;
+  placeAssetTest(select.value);
+ });
+ $('assetTestRemove')?.addEventListener('click',removeAssetTest);
+ $('assetTestIsolate')?.addEventListener('change',()=>applyAssetTestIsolation());
+}
+function applyAssetTestIsolation(){
+ if(!assetTestActor)return;
+ forestGroup.visible=!!floraWanted&&!$('assetTestIsolate')?.checked;
+}
+function removeAssetTest(){
+ assetTestGroup.clear();
+ assetTestActor=null;assetTestAnchor=null;assetTestMarker=null;
+ forestGroup.visible=!!floraWanted;
+ assetTestMessage('Amostra removida. Floresta original restaurada.');
+ if(typeof reflectionAge!=='undefined')reflectionAge=999;
+}
+function placeAssetTest(name){
+ const item=FOREST_MODELS.find(x=>x.name===name);
+ const root=forestModels[name];
+ if(!item||item.type==='rock'){assetTestMessage('Espécie não encontrada.');return;}
+ if(!root){
+  assetTestMessage('Modelo '+name+' ainda não carregado. Confira a conexão e tente novamente.');
+  return;
+ }
+ assetTestGroup.clear();assetTestActor=null;
+ const orientation=arcanoBestOrientation(item,root);
+ const diagnostic=!orientation;
+ const orient=orientation||{
+  quaternion:new T.Quaternion(),
+  height:new T.Box3().setFromObject(root).getSize(new T.Vector3()).y||1
+ };
+ const placed=new T.Group(),correction=new T.Group(),clone=root.clone(true);
+ const x=5.15,z=-5.4,groundY=terrainContact(x,z);
+ placed.name='Amostra temporária '+name;
+ correction.quaternion.copy(arcanoStraightenSpecies(item,root,orient.quaternion));
+ correction.add(clone);placed.add(correction);
+ const scale=item.height/Math.max(.01,orient.height);
+ placed.scale.setScalar(scale);placed.position.set(x,0,z);
+ assetTestGroup.add(placed);
+ const anchor={obj:placed,orientationNode:correction,x,z,contactY:groundY,
+  crownWidth:item.height,embed:item.type==='tree'||item.type==='pine'?.025:.008,
+  type:item.type,pack:item.pack,modelName:name};
+ snapForestToGround(anchor);
+ placed.traverse(obj=>{
+  if(obj.isMesh){obj.castShadow=true;obj.receiveShadow=false;}
+ });
+ // O círculo marca a posição correta do solo e permanece fixo.
+ const marker=new T.Mesh(new T.RingGeometry(.36,.43,44),
+  new T.MeshBasicMaterial({color:'#6ccfa7',transparent:true,
+   opacity:.92,side:T.DoubleSide,depthWrite:false}));
+ marker.rotation.x=-Math.PI/2;marker.position.set(x,groundY+.025,z);
+ marker.renderOrder=8;assetTestGroup.add(marker);
+ placed.updateMatrixWorld(true);
+ const foot=item.type==='tree'||item.type==='pine'?
+  arcanoTrunkRootPoint(placed):null;
+ const baseY=foot?.y??arcanoPlantBaseY(placed,anchor);
+ const error=Number.isFinite(baseY)?baseY-groundY:NaN;
+ if(!Number.isFinite(error)||Math.abs(error)>.17)marker.material.color.set('#f0ac67');
+ const bounds=new T.Box3().setFromObject(placed),dimensions=new T.Vector3();
+ bounds.getSize(dimensions);
+ assetTestActor=placed;assetTestAnchor=anchor;assetTestMarker=marker;
+ applyAssetTestIsolation();
+ // Direcionar a câmera para a amostra: fácil comparar arbustos pequenos.
+ target.set(x,groundY+Math.min(2.0,dimensions.y*.43),z);
+ radius=clamp(item.height*2.8+4.5,6.7,15.0);pitch=.68;yaw=.83;
+ setView();reflectionAge=999;
+ const result=!Number.isFinite(error)?'base não identificada':
+  'diferença base/solo '+(error>=0?'+':'')+error.toFixed(3)+' m';
+ assetTestMessage((diagnostic?'⚠ Orientação rejeitada na floresta · ':'')+
+  name+' · '+result+' · marcador '+((Math.abs(error)<=.17)?'verde':'laranja')+
+  ' · use Próximo modelo para revisar todas as espécies.');
+}
+setupAssetTest();
 function setForestCollection(value){
  forestCollection=['mixed','mega','ultimate'].includes(value)?value:'mixed';
  applyForestVisibility();
