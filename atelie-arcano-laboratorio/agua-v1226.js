@@ -2123,6 +2123,11 @@ function rebuildImportedRocks(){
  const placed=[];
  for(let i=0;i<rocks.length;i++){
   const [x,z,r]=rocks[i],seeded=rand(5839+i*7603);
+  // Rochas volumosas jamais ocupam a faixa pisoteada já existente.
+  // Não mover as rochas físicas (que afetam água/erosão) sem recalcular
+  // hidrologia; omitir somente a geometria que conflita com o caminho.
+  const roadZ=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
+  if(Math.abs(z-roadZ)<Math.max(.86,r*.92+.30))continue;
   const selected=importedRockModels[(i*7+Math.floor(seeded()*11))%importedRockModels.length];
   const visual=selected.root.clone(true);
   visual.name='Pedra original '+selected.item.name+' / variação '+(i+1);
