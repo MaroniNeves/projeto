@@ -399,10 +399,10 @@ function animateLeafFall(dt){
  const rain=api.getRainLevel?.()||0;
  const wind=clamp((atm.wind||0)/3,0,1.4);
  // Queda ocasional: probabilidade baixa em calmaria, maior com ventania.
- leafClock+=dt*(.22+wind*wind*1.4+(rain>=3?.56:0));
+ leafClock+=dt*(.60+wind*wind*1.35+(rain>=3?.56:0));
  while(leafClock>1.0){
   leafClock-=1.0;
-  if(random()<.35+clamp(wind*.38,0,.50))spawnFallingLeaf();
+  if(random()<.60+clamp(wind*.26,0,.35))spawnFallingLeaf();
  }
  const compostMult=1+(rain>0?.45:0)+
   clamp((atm.humidity||.5),0,1)*.5;
@@ -513,7 +513,7 @@ function animateFruits(dt){
    f.y-=f.fallVelocity*dt;
    f.x+=wind*dt*.012*Math.sin(f.phase+f.age);
    f.z+=wind*dt*.012*Math.cos(f.phase+f.age);
-   const ground=height(f.x,f.z)+.035;
+   const ground=height(f.x,f.z)+.075;
    if(f.y<=ground){f.y=ground;f.stage='fallen';}
    f.mesh.position.set(f.x,f.y,f.z);
    f.mesh.rotation.z+=dt*1.8;
@@ -958,6 +958,16 @@ function antGeometry(name){
  normalizedAntGeometries.set(source,geom);
  return geom;
 }
+// Esconde quaisquer modelos antigos de formiga inseridos fora do sistema
+// de instâncias animadas; protege contra a formiga gigante estática.
+function hideDetachedAntModels(){
+ const pattern=/(^|[_\s-])(ant|formiga|leafcutter)([_\s-]|$)/i;
+ api.scene.traverse(obj=>{
+  if(obj===realm||realm.getObjectById(obj.id))return;
+  if(obj.isMesh&&pattern.test(obj.name||'')&&
+     !obj.userData.arcanoRetainAnt) obj.visible=false;
+ });
+}
 function visualizeAnimals(){
  for(const child of [...animals.children]){
   animals.remove(child);
@@ -1203,7 +1213,7 @@ function update(dt){
  }
  while(ecologicalAccumulator>1){lifeDay(1);ecologicalAccumulator-=1;if(nestCutGroup.visible)drawNestCutaway();}
  moveAnimals(time);animateUndergroundWorkers(time);
- if(uiAccumulator>1.4){uiAccumulator=0;status();}
+ if(uiAccumulator>1.4){uiAccumulator=0;hideDetachedAntModels();status();}
 }
 function status(){
  const workers=colonies.reduce((a,b)=>a+b.workers,0),eggs=colonies.reduce((a,b)=>a+b.brood.filter(g=>g.stage==='egg').reduce((sum,c)=>sum+c.count,0),0);
@@ -1330,7 +1340,7 @@ function updateColonyInspector(){
 }
 async function setup(){
  await loadMeshes();initializeLandscape();grassShape();rockShape();setupLeafVisuals();setupFruits();initialColonies();visualizeAnimals();
- drawNestCutaway();
+ drawNestCutaway();hideDetachedAntModels();
  const board=$('ecoStatus');if(board)board.textContent='Pacotes enviados integrados: '+Object.keys(meshLibrary).length+' malhas · '+colonies.length+' colônias.';
  const s=$('ecoSpeed');if(s){s.oninput=e=>{biologicalSpeed=clamp(+e.target.value,1,200);$('ecoSpeedVal').textContent=biologicalSpeed+'×';};}
  const mag=$('ecoMagnify');if(mag)mag.onchange=e=>{previewMagnification=e.target.checked?4:1;};
