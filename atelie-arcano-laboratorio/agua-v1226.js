@@ -9,7 +9,7 @@ function fail(error){if(diag)diag.textContent='Não foi possível iniciar a águ
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 // V12.39: 2x largura e 2x profundidade = quatro vezes a superfície.
 // Densidade de células comparável ao mapa anterior, com LOD em aparelhos móveis.
-const mobile=innerWidth<680, NX=mobile?136:192,NZ=mobile?112:156,W=40,L=32;
+const mobile=innerWidth<680, NX=mobile?108:192,NZ=mobile?88:156,W=40,L=32;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
 const soil=new Float32Array(size),depth=new Float32Array(size),delta=new Float32Array(size),blocked=new Uint8Array(size);
 const soilMoisture=new Float32Array(size),soilCapacity=new Float32Array(size),deepWater=new Float32Array(size);
