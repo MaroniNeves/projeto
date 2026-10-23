@@ -1940,10 +1940,10 @@ function placeForestModel(item,root){
   // distribuídos no mesmo ponto, parecendo madeira suspensa/desconectada.
   // Só afeta a escolha do local das árvores: nenhum modelo é modificado.
   if(item.type==='tree'||item.type==='pine'){
-   const radius=clamp(projected*.41,1.20,2.10);
+   const radius=clamp(projected*.47,1.30,2.30);
    const collision=forestInstances.some(a=>{
     if(a.type!=='tree'&&a.type!=='pine')return false;
-    const otherRadius=clamp((a.crownWidth||2.8)*.41,1.20,2.10);
+    const otherRadius=clamp((a.crownWidth||2.8)*.47,1.30,2.30);
     const gap=(a.x-x)*(a.x-x)+(a.z-z)*(a.z-z);
     // Somar os raios das duas copas impede interpenetração visual.
     return gap<Math.pow(radius+otherRadius,2);
