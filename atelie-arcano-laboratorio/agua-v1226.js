@@ -939,9 +939,14 @@ for(let k=0;k<grass.count*3&&gcount<grass.count;k++){
  grass.setColorAt(gcount-1,new T.Color('#6b9465'));
 }
 grass.count=gcount;
-grass.castShadow=true;grass.frustumCulled=false;scene.add(grass);
+// V12.51: grama cônica antiga é apenas um artefato histórico.
+// NÃO anexar à cena: nenhuma ordem de carregamento pode fazê-la reaparecer.
+grass.castShadow=false;grass.frustumCulled=false;grass.visible=false;
+grass.count=0;
 const plantBaseGreen=new T.Color('#668f5e'),plantHealthyGreen=new T.Color('#90ae71'),plantDry=new T.Color('#a19463');
 function updatePlantVisuals(){
+ // Grama cônica aposentada; não atualiza matrizes antigas.
+ if(!grass.parent)return;
  for(let i=0;i<grass.count;i++){
   const a=grassAnchors[i],cell=idx(clamp(Math.round((a.x+W*.5)/dx),0,NX-1),
                                    clamp(Math.round((a.z+L*.5)/dz),0,NZ-1));
@@ -1026,13 +1031,11 @@ const FOREST_MODELS=[
  // Sub-bosque, flores e rochas dos mesmos pacotes existentes.
  {name:'Bush_Common_Flowers',type:'bush',pack:'mega',mobile:76,desktop:212,height:.95},
  {name:'Flower_3_Group',type:'flower',pack:'mega',mobile:83,desktop:200,height:.47},
- {name:'Grass_Common_Short',type:'grass',pack:'mega',mobile:10,desktop:25,height:.29},
  {name:'Fern_1',type:'fern',pack:'mega',mobile:13,desktop:28,height:.61},
  {name:'Rock_Medium_2',type:'rock',pack:'mega',mobile:5,desktop:8,height:.70},
  {name:'Bush_Large_Flowers',type:'bush',pack:'ultimate',mobile:76,desktop:188,height:1.10},
  {name:'Flower_1_Clump',type:'flower',pack:'ultimate',mobile:83,desktop:180,height:.46},
  {name:'Plant_Flowers',type:'flower',pack:'ultimate',mobile:62,desktop:140,height:.51},
- {name:'Grass_Large_Extruded',type:'grass',pack:'ultimate',mobile:8,desktop:20,height:.35},
  {name:'Rock_3',type:'rock',pack:'ultimate',mobile:3,desktop:7,height:.83},
  {name:'Rock_5',type:'rock',pack:'ultimate',mobile:3,desktop:6,height:.62}
 ];
@@ -1081,8 +1084,12 @@ for(let n=0;n<meadowCount*3&&meadowMesh.count<meadowCount;n++){
 }
 meadowMesh.instanceMatrix.needsUpdate=true;
 if(meadowMesh.instanceColor)meadowMesh.instanceColor.needsUpdate=true;
-meadowMesh.frustumCulled=false;forestGroup.add(meadowMesh);
+// V12.51: lâminas triangulares do gramado procedural aposentadas.
+// Não entram na hierarquia da cena nem quando o pacote ecológico demora.
+meadowMesh.count=0;meadowMesh.visible=false;meadowMesh.frustumCulled=false;
 function updateMeadowHealth(){
+ // Gramado legado não participa da cena; dispensa atualizações de cor.
+ if(!meadowMesh.parent)return;
  const green=new T.Color('#85ab69'),dryColor=new T.Color('#a8a076');
  for(let i=0;i<meadowAnchors.length;i++){
   const a=meadowAnchors[i],health=clamp(soilHealth[a.k],0,1);
@@ -1114,7 +1121,7 @@ try{
  if(distance>=55&&distance<=240)viewDistance=distance;
 }catch(_){} 
 try{const saved=localStorage.getItem('arcano.graphicsQuality');if(QUALITY_PRESETS[saved])graphicsQuality=saved;}catch(_){}
-const fullMeadowCount=meadowMesh.count;
+const fullMeadowCount=0; // Só a grama 3D Quaternius tem permissão para aparecer.
 const originalDetailMaps=new Map(),originalDetailLoading=new Set(),qualityMaterials=new Set();
 const originalDetailFailures=new Set(),originalDetailQueue=[];
 let originalDetailBusy=false;
@@ -1153,16 +1160,16 @@ function visibleByQuality(a){
                  clamp(Math.round((a.z+L*.5)/dz),0,NZ-1))]>.10);
 }
 function applyForestVisibility(){
- const ecologyActive=!!window.arcanoEcoV1232?.active;
  for(const a of forestInstances){
-  a.obj.visible=visibleByQuality(a)&&!(ecologyActive&&a.type==='grass');
+  // Jamais renderizar Grass_Common_Short / Grass_Large_Extruded
+  // da floresta legada. A grama correta vive no módulo Quaternius.
+  a.obj.visible=a.type!=='grass'&&visibleByQuality(a);
  }
- const originalGrass=forestInstances.some(a=>a.type==='grass'&&a.obj.visible);
- meadowMesh.visible=!(originalGrass||ecologyActive);
- meadowMesh.count=(originalGrass||ecologyActive)?0:
-  Math.floor(fullMeadowCount*QUALITY_PRESETS[graphicsQuality].meadow);
- grass.visible=!ecologyActive&&!forestGroup.visible;
- if(meadowMesh.instanceMatrix)meadowMesh.instanceMatrix.needsUpdate=true;
+ // Proteção incondicional, antes e depois da inicialização ecológica,
+ // durante troca de qualidade, fallback e recarregamento de assets.
+ grass.visible=false;grass.count=0;
+ meadowMesh.visible=false;meadowMesh.count=0;
+ sproutGroup.visible=forestGroup.visible?false:sproutGroup.visible;
 }
 
 // V12.26 / reparo de folhagens: vincula o PNG correto e conserva recortes alpha.
@@ -1421,7 +1428,8 @@ function setFloraVisible(v){
  floraWanted=!!v;forestGroup.visible=floraWanted&&floraLoaded>0&&
   !(assetTestActor&&$('assetTestIsolate')?.checked);
  applyForestVisibility();
- grass.visible=!forestGroup.visible&&!window.arcanoEcoV1232?.active;
+ grass.visible=false;meadowMesh.visible=false;
+ grass.count=0;meadowMesh.count=0;
  sproutGroup.visible=!forestGroup.visible;
  if($('floraToggle'))$('floraToggle').checked=floraWanted;
  forestStatus(floraWanted?(floraLoaded?'ativos':'carregando'):'vegetação clássica');
@@ -1924,6 +1932,8 @@ const roadsideTreeSpecies=[
 ];
 const treeRoadSeed=3;
 function placeForestModel(item,root){
+ // Grama de cena desativada: usa-se somente os modelos Quaternius do ecossistema.
+ if(item.type==='grass')return;
  if(item.type==='rock'){
   registerImportedRock(item,root);
   return;
@@ -2425,7 +2435,8 @@ async function loadPainterlyForest(){
   forestStatus('floresta carregada ('+forestInstances.length+' objetos)');
  }catch(err){
   console.warn('[Arcano] Usando a vegetação original:',err);
-  forestGroup.visible=false;grass.visible=true;sproutGroup.visible=true;
+  forestGroup.visible=false;grass.visible=false;meadowMesh.visible=false;
+  grass.count=0;meadowMesh.count=0;sproutGroup.visible=true;
   floraWanted=false;forestStatus('fallback: vegetação clássica');
  }
 }
