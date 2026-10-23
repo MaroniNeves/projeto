@@ -1518,6 +1518,11 @@ function solidForestFootY(obj,anchor){
 // A rotação corretiva fica em um nó separado: não modifica as transformações
 // internas do FBX nem os movimentos de troncos e copas já implementados.
 const arcanoOrientationCache=new Map();
+// V12.31: MapleTree_3 já foi exportada com conversão Z-up → Y-up no FBX.
+// O fuste original cresce no eixo Z do Blender e o FBX aplica -90° em X.
+// A copa adulta é mais larga do que alta; isso NÃO a torna uma árvore caída.
+// Não aplicar outra rotação corretiva na malha importada para essa espécie.
+const arcanoTrustedSourceOrientation=new Set(['MapleTree_3']);
 const arcanoOrientationCandidates=[
  [0,0,0],[Math.PI*.5,0,0],[-Math.PI*.5,0,0],
  [0,0,Math.PI*.5],[0,0,-Math.PI*.5],
@@ -1530,6 +1535,24 @@ const arcanoModelAudit=[];
 function arcanoBestOrientation(item,root){
  const key=item.pack+'/'+item.name;
  if(arcanoOrientationCache.has(key))return arcanoOrientationCache.get(key);
+ // Confirmação na fonte Ultimate Stylized Nature Pack/MapleTrees.fbx:
+ // MapleTree_3: eixo longitudinal do tronco em Z; rotação FBX -90° X.
+ // O FBXLoader já incorpora essa conversão à raiz carregada.
+ if(item.pack==='ultimate'&&arcanoTrustedSourceOrientation.has(item.name)){
+  root.updateMatrixWorld(true);
+  const bounds=new T.Box3().setFromObject(root),span=new T.Vector3();
+  bounds.getSize(span);
+  if(bounds.isEmpty()||!Number.isFinite(span.y)||span.y<.00001){
+   arcanoOrientationCache.set(key,null);return null;
+  }
+  const fixed={quaternion:new T.Quaternion(),height:span.y,
+   woodRatio:0,overallRatio:span.y/Math.max(.0001,span.x,span.z),
+   selected:0,sourcePreserved:true};
+  arcanoOrientationCache.set(key,fixed);
+  arcanoModelAudit.push({model:item.name,kind:item.type,status:'eixo original preservado',orientation:0});
+  console.info('[Arcano V12.31] Preservada orientação nativa do FBX:',item.name);
+  return fixed;
+ }
  if(item.type==='rock')return {quaternion:new T.Quaternion(),height:1};
  const probe=new T.Group();probe.add(root.clone(true));
  const results=[];
@@ -1709,6 +1732,9 @@ const arcanoStraightenCache=new WeakMap();
 function arcanoStraightenSpecies(item,root,rotation){
  if(arcanoStraightenCache.has(root))return arcanoStraightenCache.get(root).clone();
  function retain(q){arcanoStraightenCache.set(root,q.clone());return q;}
+ // Não endireitar artificialmente uma árvore cuja pose FBX já é correta.
+ if(item.pack==='ultimate'&&arcanoTrustedSourceOrientation.has(item.name))
+  return retain(rotation.clone());
 
  if(item.type!=='tree'&&item.type!=='pine')return retain(rotation);
  const probe=new T.Group();probe.quaternion.copy(rotation);
@@ -1842,6 +1868,8 @@ function placeForestModel(item,root){
   obj.updateMatrixWorld(true);
   const worldBox=new T.Box3().setFromObject(obj);
   if(!Number.isFinite(worldBox.min.y)||!Number.isFinite(worldBox.max.y))continue;
+  // O fuste da árvore com copa vermelha/laranja fica perpendicular ao solo.
+  // Rotação de vento é aplicada SOMENTE ao pivô de chão, não à pose FBX.
   const projected=Math.max(worldBox.max.x-worldBox.min.x,worldBox.max.z-worldBox.min.z);
   // Importações com conversão de eixo inadequada geram toras horizontais
   // gigantes no lugar de árvores: não as espalhar pela cena.
