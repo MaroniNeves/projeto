@@ -959,7 +959,7 @@ function moveAnimals(t){
     if(remaining>0){
      body.position.set(agent.x,height(agent.x,agent.z)+.004,agent.z);
      body.rotation.set(.45,0,1.35);
-     body.scale.set(.057*magnify,.005*magnify,.046*magnify*
+     body.scale.set(.011*magnify,.001*magnify,.010*magnify*
       clamp(remaining/3.4,.02,1));
     }else{
      body.position.set(agent.x,-100,agent.z);body.scale.setScalar(.000001);
@@ -1013,15 +1013,15 @@ function moveAnimals(t){
    agent.x=x;agent.z=z;
    // Marcha: pequenas oscilações de corpo e passos, quase invisíveis fora da lupa.
    const phase=t*(13+i%3*2)+agent.walkPhase;
-   body.position.set(x,height(x,z)+.003+Math.abs(Math.sin(phase))*.0018,z);
+   body.position.set(x,height(x,z)+.002+Math.abs(Math.sin(phase))*.00035,z);
    body.rotation.set(.025*Math.sin(phase),direction,.05*Math.cos(phase));
-   body.scale.setScalar((api.depth[idx(x,z)]>.06?.025:.056)*magnify);
+   body.scale.setScalar((api.depth[idx(x,z)]>.06?.004:.011)*magnify);
    body.updateMatrix();m.setMatrixAt(i,body.matrix);
    const nearNest=Math.hypot(x-c.x,z-c.z)<.38;
    if(!heavy&&nearNest&&c.leafCargo>.004&&i%3===0){
-    carrier.position.set(x,height(x,z)+.027,z);
+    carrier.position.set(x,height(x,z)+.008,z);
     carrier.rotation.set(0,direction,0);
-    carrier.scale.setScalar(.13*magnify);
+    carrier.scale.setScalar(.08*magnify);
     carrier.updateMatrix();cargo.setMatrixAt(cargo.count++,carrier.matrix);
    }
   }
