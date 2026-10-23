@@ -3078,7 +3078,8 @@ function resize(){
  const w=innerWidth,h=innerHeight;
  renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
 }
-let yaw=.83,pitch=.79,radius=24,drag=false, moved=false, prevX=0,prevY=0,pinch=0;
+let yaw=.83,pitch=.79,radius=39,drag=false,moved=false,prevX=0,prevY=0,pinch=0;
+let pinchX=0,pinchY=0;
 const target=new T.Vector3(0,-.12,0);
 function setView(){camera.position.set(target.x+radius*Math.cos(pitch)*Math.sin(yaw),target.y+radius*Math.sin(pitch),target.z+radius*Math.cos(pitch)*Math.cos(yaw));camera.lookAt(target);}
 function tapAdd(event){
@@ -3128,6 +3129,7 @@ stage.addEventListener('pointerdown',e=>{
 });
 stage.addEventListener('pointermove',e=>{
  if(!drag)return;
+ if(pressedPointers.size>1){moved=true;return;} // multitoque: panorâmica e zoom
  if(paintWalkingStep(e)){moved=true;prevX=e.clientX;prevY=e.clientY;return;}
  const a=e.clientX-prevX,b=e.clientY-prevY;
  if(Math.abs(a)+Math.abs(b)>3)moved=true;
@@ -3140,11 +3142,28 @@ stage.addEventListener('pointerup',e=>{
  drag=false;
 });
 stage.addEventListener('pointercancel',e=>{pressedPointers.delete(e.pointerId);drag=false;});
-stage.addEventListener('wheel',e=>{e.preventDefault();radius=clamp(radius+Math.sign(e.deltaY)*1.5,11,34);},{passive:false});
-stage.addEventListener('touchmove',e=>{if(e.touches.length!==2){pinch=0;return;}
- const a=e.touches[0],b=e.touches[1],dist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
- if(pinch)radius=clamp(radius+(pinch-dist)*.04,11,34);pinch=dist;},{passive:true});
-stage.addEventListener('touchend',()=>pinch=0,{passive:true});
+stage.addEventListener('wheel',e=>{
+ e.preventDefault();
+ // Roda: zoom. Shift+roda: desloca pelo mapa grande.
+ if(e.shiftKey)target.z=clamp(target.z+Math.sign(e.deltaY)*radius*.07,-L*.42,L*.42);
+ else radius=clamp(radius+Math.sign(e.deltaY)*Math.max(1.2,radius*.095),9,135);
+},{passive:false});
+stage.addEventListener('touchmove',e=>{
+ if(e.touches.length!==2){pinch=0;return;}
+ e.preventDefault();
+ const a=e.touches[0],b=e.touches[1];
+ const dist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+ const cx=(a.clientX+b.clientX)*.5,cy=(a.clientY+b.clientY)*.5;
+ if(pinch){
+  radius=clamp(radius+(pinch-dist)*Math.max(.05,radius*.0018),9,135);
+  const dx=(cx-pinchX)/Math.max(1,innerWidth)*radius*.9;
+  const dz=(cy-pinchY)/Math.max(1,innerHeight)*radius*.9;
+  target.x=clamp(target.x-dx*Math.cos(yaw)-dz*Math.sin(yaw),-W*.43,W*.43);
+  target.z=clamp(target.z+dx*Math.sin(yaw)-dz*Math.cos(yaw),-L*.43,L*.43);
+ }
+ pinch=dist;pinchX=cx;pinchY=cy;
+},{passive:false});
+stage.addEventListener('touchend',e=>{if(e.touches.length<2)pinch=0;},{passive:true});
 function setRainLevel(value){
  level=clamp(Math.round(value),0,5);
  if(level>0)lastRainLevel=level;
