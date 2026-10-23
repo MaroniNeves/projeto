@@ -1148,6 +1148,11 @@ async function arcanoFoliageTexture(filename){
 async function arcanoRepairForestMaterials(item,root){
  const leafFile=item.pack==='ultimate'?arcanoLeafFiles[item.name]:null;
  const leafMap=leafFile?await arcanoFoliageTexture(leafFile):null;
+ // Arbustos claros misturam folhagem e pétalas em cartões diferentes:
+ // não substituir todas as submalhas por Bush_Leaves.png.
+ const flowersMap=item.pack==='ultimate'&&
+   (item.type==='bush'||item.type==='flower')?
+   await arcanoFoliageTexture('Flowers.png'):null;
  root.traverse(obj=>{
   if(!obj.isMesh)return;
   const source=Array.isArray(obj.material)?obj.material:[obj.material];
@@ -1159,19 +1164,28 @@ async function arcanoRepairForestMaterials(item,root){
      && !/(bark|trunk|wood|stem|rock|stone)/.test(name);
    const wood=/(bark|trunk|wood|stem|branch)/.test(name);
    const rock=/(rock|stone)/.test(name);
+   const petal=/(flower|petal|blossom)/.test(name)||
+     (!name&&/(flower|petal|blossom)/.test(obj.name||'')&&item.type==='flower');
    let map=old.map||null;
-   if(foliage&&leafMap&&item.pack==='ultimate')map=leafMap;
+   if(foliage&&item.pack==='ultimate'){
+    // Respeitar mapas vinculados pelo importador. Forçar o atlas de folhas
+    // sobre pétalas claras removia pedaços e criava recortes imprecisos.
+    if(!map)map=petal?(flowersMap||leafMap):leafMap;
+   }
    if(item.type==='rock')map=arcanoRockFallback;
    const tint=item.type==='rock'?new T.Color('#d6d3ca'):
      map&&item.pack==='ultimate'?
-     new T.Color('#ffffff'):(old.color?.clone?.()||new T.Color('#ffffff'));
+      new T.Color(item.type==='bush'&&!petal?'#d7e3d0':'#ffffff'):
+      (old.color?.clone?.()||new T.Color('#ffffff'));
    const material=new T.MeshStandardMaterial({
     name:old.name||'',color:tint,map:map,
     roughness:1,metalness:0,
     transparent:false,opacity:1,depthWrite:true,
     // Arbustos/florais têm muitos cartões alpha finos: o recorte forte
     // removia quase toda a copa em Android, parecendo faltar pedaços.
-    alphaTest:foliage?((item.type==='bush'||item.type==='flower'||item.type==='fern')?.12:.31):0,
+    alphaTest:foliage?((item.type==='bush'||item.type==='flower'||item.type==='fern')?.035:.23):0,
+    // AlphaMap antigo pode existir separado do atlas RGB; não descartá-lo.
+    alphaMap:foliage?(old.alphaMap||null):null,
     side:foliage?T.DoubleSide:T.FrontSide,
     fog:true,toneMapped:true,
     vertexColors:!!old.vertexColors,flatShading:!!old.flatShading
@@ -1863,15 +1877,26 @@ function placeForestModel(item,root){
   if(basinBlocked)continue;
   const groundY=terrainContact(x,z);
   if(groundY<-.13)continue;
+  // Estrada no solo com clareira contínua. Deve permanecer visível mesmo
+  // após carregar todos os FBX, sem árvores/arbustos crescendo no traçado.
+  const roadCenter=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
+  const pathDistance=Math.abs(z-roadCenter);
+  if((item.type==='tree'||item.type==='pine')&&pathDistance<1.55)continue;
+  if((item.type==='bush'||item.type==='flower'||item.type==='fern')&&
+     pathDistance<(item.type==='bush'?1.13:.78))continue;
   if(item.type==='bush'||item.type==='flower'||item.type==='fern'){
    // Evitar que a base da planta afunde em barrancos de grande inclinação.
    const rr=item.type==='bush'?.24:.12;
    const slopes=[[rr,0],[-rr,0],[0,rr],[0,-rr]]
     .map(([u,v])=>terrainContact(x+u,z+v));
    if(Math.max(...slopes)-Math.min(...slopes)>.31)continue;
-   const tooClose=forestInstances.some(a=>
-    (a.type==='bush'||a.type==='flower'||a.type==='fern')&&
-    Math.hypot(a.x-x,a.z-z)<(item.type==='bush'?.50:.23));
+   const tooClose=forestInstances.some(a=>{
+    const distance=Math.hypot(a.x-x,a.z-z);
+    if(a.type==='tree'||a.type==='pine')return distance<
+     (item.type==='bush'?.72:.39)+(a.crownWidth||2.8)*.19;
+    return (a.type==='bush'||a.type==='flower'||a.type==='fern')&&
+     distance<(item.type==='bush'?.75:.29);
+   });
    if(tooClose)continue;
   }
   const factor=.78+randomForest()*.52;
@@ -1913,12 +1938,13 @@ function placeForestModel(item,root){
   // distribuídos no mesmo ponto, parecendo madeira suspensa/desconectada.
   // Só afeta a escolha do local das árvores: nenhum modelo é modificado.
   if(item.type==='tree'||item.type==='pine'){
-   const minimumGap=clamp(projected*.42,1.15,2.45);
+   const radius=clamp(projected*.41,1.20,2.10);
    const collision=forestInstances.some(a=>{
     if(a.type!=='tree'&&a.type!=='pine')return false;
-    const otherGap=clamp((a.crownWidth||2.8)*.42,1.15,2.45);
-    const d2=(a.x-x)*(a.x-x)+(a.z-z)*(a.z-z);
-    return d2<Math.pow(Math.max(minimumGap,otherGap),2);
+    const otherRadius=clamp((a.crownWidth||2.8)*.41,1.20,2.10);
+    const gap=(a.x-x)*(a.x-x)+(a.z-z)*(a.z-z);
+    // Somar os raios das duas copas impede interpenetração visual.
+    return gap<Math.pow(radius+otherRadius,2);
    });
    if(collision)continue;
   }
@@ -2819,14 +2845,16 @@ function rebuild(){
  if(eco?.active&&eco.cover){
   for(let k=0;k<size;k++){
    const health=clamp(eco.cover[k]*(1-eco.traffic[k]),0,1);
-   const greenAmount=clamp(health*.74,0,.69);
+   const greenAmount=clamp(health*.96,0,.94);
    const road=clamp(eco.roadMask[k],0,1);
    const abrasion=clamp(eco.traffic[k],0,1);
    const saturated=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1.4);
    const mud=clamp((saturated-.20)*.90+depth[k]*6.5,0,1);
-   const dirtAmount=clamp(road*(.79+.16*abrasion),0,.95);
-   const grassRGB=[.105,.295,.076];
-   const dryPath=[.49,.355,.22],mudPath=[.245,.172,.12];
+   const dirtAmount=clamp(road*(.99+.08*abrasion),0,.99);
+   // O mapa do chão é multiplicativo (tons ocres); verde vivo para que
+   // o substrato sob a grama curta realmente PAREÇA um gramado contínuo.
+   const grassRGB=[.245,.49,.16];
+   const dryPath=[.66,.49,.31],mudPath=[.27,.18,.12];
    for(let m=0;m<3;m++){
     const ix=k*3+m;
     const green=colors[ix]*(1-greenAmount)+grassRGB[m]*greenAmount;
