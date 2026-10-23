@@ -149,6 +149,54 @@ function updateFootprints(){
  muddyFootprints.visible=intensity>.02;
  muddyFootprints.material.opacity=intensity*.70;
 }
+// Material do caminho, não uma faixa de malha: grãos soltos, seixos
+// minúsculos e fragmentos de galhos apoiados diretamente no relevo.
+// Os maiores blocos continuam fora da estrada.
+function makeRoadSurfaceDetails(){
+ const group=new T.Group();
+ group.name='Terra batida · grãos, seixos e gravetos sobre a estrada fixa';
+ roads.add(group);
+ const rng=rand(27821),total=mobileDevice?2100:4200;
+ const kinds=[
+  {geometry:new T.IcosahedronGeometry(.050,0),color:'#a8906f'},
+  {geometry:new T.IcosahedronGeometry(.034,0),color:'#574332'},
+  {geometry:new T.BoxGeometry(.11,.008,.025),color:'#766149'},
+  {geometry:new T.IcosahedronGeometry(.020,0),color:'#c6ae89'}
+ ];
+ const meshes=kinds.map((k,j)=>{
+  const mesh=new T.InstancedMesh(k.geometry,
+   new T.MeshStandardMaterial({color:k.color,roughness:1,metalness:0,
+    side:T.DoubleSide}),Math.ceil(total*.38));
+  mesh.name=['Pedrinhas desgastadas','Grãos escuros de terra',
+   'Gravetos e cascas','Areia e minerais'][j];
+  mesh.frustumCulled=false;mesh.count=0;mesh.castShadow=false;
+  mesh.receiveShadow=true;group.add(mesh);return mesh;
+ });
+ const o=new T.Object3D();
+ let count=0,attempts=0;
+ while(count<total&&attempts<total*5){
+  attempts++;
+  const x=(rng()-.5)*W*.955;
+  const z=roadZ(x)+(rng()-.5)*1.66;
+  const k=idx(x,z);
+  if(fixedRoadMask[k]<.13||api.depth[k]>.045||riverMask[k]>.56||
+     (Math.abs(x+1.5)<2.2&&Math.abs(z-roadZ(x))<.6))continue;
+  const t=rng(),kind=t<.38?0:t<.62?1:t<.79?2:3;
+  const mesh=meshes[kind],index=mesh.count;
+  if(index>=mesh.instanceMatrix.count)continue;
+  const sz=kind===2?.65+rng()*.65:.45+rng()*.95;
+  o.position.set(x,height(x,z)+.014,z);
+  o.rotation.set(kind===2?0:(rng()-.5)*.23,rng()*Math.PI*2,
+   kind===2?0:(rng()-.5)*.22);
+  o.scale.set(sz*(.7+rng()*.6),sz*(.42+rng()*.25),
+   sz*(.8+rng()*.5));
+  o.updateMatrix();mesh.setMatrixAt(index,o.matrix);
+  mesh.count++;count++;
+ }
+ for(const mesh of meshes)mesh.instanceMatrix.needsUpdate=true;
+ console.info('[Arcano V12.41] Estrada de terra:',count,
+  'grãos e fragmentos ancorados, sem tapar o solo.');
+}
 function makeRoad(){
  // Um tablado CONTÍNUO, horizontal, sustentado por vigas e fixado em dois
  // encontros elevados. Nenhuma tábua cresce em degraus sobre o terreno.
@@ -221,6 +269,7 @@ function makeRoad(){
   }else console.warn('[Arcano] Margens opostas não encontradas, ponte omitida.');
  }
  muddyFootprints=generateFootprints();updateFootprints();
+ makeRoadSurfaceDetails();
 }
 function initializeLandscape(){
  for(let k=0;k<cells;k++){
