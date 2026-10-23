@@ -1028,7 +1028,7 @@ function update(dt){
   updateGrassMeshes();
  }
  while(ecologicalAccumulator>1){lifeDay(1);ecologicalAccumulator-=1;if(nestCutGroup.visible)drawNestCutaway();}
- moveAnimals(time);
+ moveAnimals(time);animateUndergroundWorkers(time);
  if(uiAccumulator>1.4){uiAccumulator=0;status();}
 }
 function status(){
@@ -1050,7 +1050,9 @@ function status(){
 const nestCutGroup=new T.Group();
 nestCutGroup.name='Raio-X das galerias do formigueiro';
 nestCutGroup.visible=false;realm.add(nestCutGroup);
+let undergroundAgents=null,undergroundQueen=null;
 function drawNestCutaway(){
+ undergroundAgents=null;undergroundQueen=null;
  for(const mesh of [...nestCutGroup.children]){
   nestCutGroup.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();
  }
@@ -1083,9 +1085,44 @@ function drawNestCutaway(){
   const lines=new T.LineSegments(geo,mat);lines.renderOrder=20;
   nestCutGroup.add(lines);
  }
+ // Indivíduos diminutos circulam ENTRE camadas/câmaras. Renderização
+ // somente no raio-X para não onerar o Android durante o jogo normal.
+ if(meshLibrary.ant1&&c.workers>0){
+  const geo=meshLibrary.ant1.clone(),mat=new T.MeshBasicMaterial({
+   color:'#b28c56',depthTest:false,depthWrite:false,side:T.DoubleSide});
+  const m=new T.InstancedMesh(geo,mat,12);
+  m.name='Operárias movendo-se entre câmaras subterrâneas';
+  m.frustumCulled=false;m.renderOrder=22;nestCutGroup.add(m);
+  undergroundAgents={mesh:m,colony:c};
+ }
+ if(c.queen){
+  const q=new T.Mesh(new T.SphereGeometry(.025,8,6),
+   new T.MeshBasicMaterial({color:'#e6ac73',depthTest:false,depthWrite:false}));
+  q.position.set(c.x,y-c.queenDepth,c.z);
+  q.renderOrder=23;nestCutGroup.add(q);undergroundQueen=q;
+ }
  // O raio-X só existe quando solicitado; no cenário normal tudo fica
  // sob o solo, com operárias emergindo exclusivamente pela entrada.
  nestCutGroup.visible=!!$('ecoBurrows')?.checked;
+}
+function animateUndergroundWorkers(t){
+ if(!nestCutGroup.visible||!undergroundAgents)return;
+ const {mesh,colony:c}=undergroundAgents;
+ const o=new T.Object3D(),y=height(c.x,c.z);
+ let count=0;
+ for(let i=0;i<12;i++){
+  const layerIndex=1+i%3,layer=c.subterranean[layerIndex];
+  if(!layer||layer.chambers===0)continue;
+  const speed=t*.5+i*.8,offset=.09+Math.sin(speed)*.12;
+  const angle=i*2.399+Math.sin(t*.4+i)*.3;
+  o.position.set(c.x+Math.cos(angle)*offset,y-layer.depth,
+   c.z+Math.sin(angle)*offset);
+  o.rotation.set(0,angle+Math.PI*.5,0);
+  o.scale.setScalar(.014*previewMagnification);o.updateMatrix();
+  mesh.setMatrixAt(count++,o.matrix);
+ }
+ mesh.count=count;mesh.instanceMatrix.needsUpdate=true;
+ if(undergroundQueen)undergroundQueen.position.set(c.x,y-c.queenDepth,c.z);
 }
 function updateColonyInspector(){
  const select=$('ecoColonySelect'),panel=$('ecoColonyDetails');
