@@ -978,8 +978,8 @@ const forestGroup=new T.Group();forestGroup.name='Floresta Quaternius CC0 — pa
 const forestInstances=[],forestModels={};let floraWanted=true,floraLoaded=0,floraState='Preparando',forestCollection='mixed';
 let ultimateModelsLoaded=0,megaModelsLoaded=0;
 const FOREST_MODELS=[
- {name:'CommonTree_1',type:'tree',pack:'mega',mobile:4,desktop:8,height:4.4},
- {name:'CommonTree_2',type:'tree',pack:'mega',mobile:3,desktop:5,height:4.0},
+ {name:'CommonTree_1',type:'tree',pack:'mega',mobile:5,desktop:10,height:4.4},
+ {name:'CommonTree_2',type:'tree',pack:'mega',mobile:4,desktop:7,height:4.0},
  {name:'Pine_2',type:'pine',pack:'mega',mobile:2,desktop:3,height:4.7},
  {name:'Bush_Common_Flowers',type:'bush',pack:'mega',mobile:5,desktop:13,height:.95},
  {name:'Flower_3_Group',type:'flower',pack:'mega',mobile:8,desktop:23,height:.47},
@@ -988,10 +988,10 @@ const FOREST_MODELS=[
  {name:'Rock_Medium_2',type:'rock',pack:'mega',mobile:5,desktop:8,height:.70},
  // Quaternius Ultimate: mesmos modelos do pacote agrupado enviado pelo usuário,
  // extraídos como malhas FBX individuais para controlar densidade/performance.
- {name:'BirchTree_1',type:'tree',pack:'ultimate',mobile:2,desktop:5,height:4.9},
+ {name:'BirchTree_1',type:'tree',pack:'ultimate',mobile:3,desktop:6,height:4.9},
  {name:'BirchTree_3',type:'tree',pack:'ultimate',mobile:1,desktop:3,height:4.5},
- {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:2,desktop:5,height:4.4},
- {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:2,desktop:4,height:4.8},
+ {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:3,desktop:6,height:4.4},
+ {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:3,desktop:6,height:4.8},
  {name:'PineTree_2',type:'pine',pack:'ultimate',mobile:1,desktop:3,height:5.0},
  {name:'Bush_Large_Flowers',type:'bush',pack:'ultimate',mobile:5,desktop:11,height:1.10},
  {name:'Flower_1_Clump',type:'flower',pack:'ultimate',mobile:9,desktop:20,height:.46},
@@ -1866,7 +1866,7 @@ function placeForestModel(item,root){
   const x=(randomForest()-.5)*(W-1.3),z=(randomForest()-.5)*(L-1.3);
   const edge=Math.max(Math.abs(x)/(W*.5),Math.abs(z)/(L*.5));
   if(item.type==='tree'||item.type==='pine'){
-   if(edge<.48&&randomForest()<.85)continue;
+   if(edge<.34&&randomForest()<.70)continue;
   }
   if(rockAt(x,z))continue;
   let basinBlocked=false;
