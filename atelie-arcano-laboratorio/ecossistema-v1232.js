@@ -46,7 +46,7 @@ function height(x,z){
  return A*(1-a)*(1-b)+B*a*(1-b)+C*(1-a)*b+D*a*b;
 }
 const mobileDevice=innerWidth<680;
-const grassBudgets=mobileDevice?{high:72000,balanced:36000,low:9500}:{high:120000,balanced:60000,low:18000};
+const grassBudgets=mobileDevice?{high:112000,balanced:65000,low:18000}:{high:190000,balanced:105000,low:32000};
 let grassDrawn=0,lastGrassQuality='';
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
@@ -272,13 +272,13 @@ function grassShape(){
   meshes.set(name,mesh);dummies.set(name,new T.Object3D());foliage.add(mesh);
  }
  if(!meshes.size)return;
- const lowBudget=Math.floor(budget*.77),tallBudget=budget-lowBudget;
+ const lowBudget=Math.floor(budget*.69),tallBudget=budget-lowBudget;
  let planted=0;
  function plant(name,x,z,k,size=1){
   if(planted>=budget)return false;
   const mesh=meshes.get(name),dummy=dummies.get(name);
   if(!mesh)return false;
-  const scale=(name==='grassTall1'?.43:name==='grassShort1'?.27:.35)*
+  const scale=(name==='grassTall1'?.48:name==='grassShort1'?.30:.39)*
    (.74+random()*.48)*size;
   dummy.position.set(x,height(x,z)-.012,z);
   dummy.rotation.set(0,random()*6.283,0);
@@ -293,7 +293,7 @@ function grassShape(){
  // Passada 1: CAMADA BAIXA distribuída uniformemente por toda a área viva,
  // inclusive clareiras entre tufos altos. A cobertura não é sorteada em
  // grandes blocos vazios (erro da versão anterior).
- const cols=mobileDevice?390:550,rows=mobileDevice?306:442;
+ const cols=mobileDevice?520:690,rows=mobileDevice?400:540;
  const positions=[];
  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
   const x=-W*.48+(i+.5)/cols*W*.96;
@@ -308,8 +308,8 @@ function grassShape(){
  const step=positions.length/Math.max(1,lowBudget);
  for(let n=0;n<Math.min(lowBudget,positions.length);n++){
   const p=positions[Math.min(positions.length-1,Math.floor((n+.5)*step))];
-  const dx=(random()-.5)*.06,dz=(random()-.5)*.06;
-  plant(n%5===0?'grassMixed1':'grassShort1',p.x+dx,p.z+dz,p.k,
+  const jitterX=(random()-.5)*Math.min(.34,W/cols*.92),jitterZ=(random()-.5)*Math.min(.34,L/rows*.92);
+  plant(n%5===0?'grassMixed1':'grassShort1',p.x+jitterX,p.z+jitterZ,p.k,
    .76+p.health*.36);
  }
  // Passada 2: GRAMA ALTA em colônias densas e naturalizadas. Os tufos se
@@ -1289,12 +1289,18 @@ function stampTraffic(x,z,weight=.25,animal=false){
   cover[k]=clamp(cover[k]-press*.48,0,1);
  }
 }
+function clearLargeRocksFromTrails(){
+ for(const mesh of rocks.children){
+  const x=mesh.position.x,z=mesh.position.z,k=idx(x,z);
+  if(Math.max(roadMask[k],animalTrail[k])>.22)mesh.visible=false;
+ }
+}
 function trample(x,z,weight=.22){
  if(!trampleEnabled)return;
  markFootprint(x,z);
  checkAntTrampling(x,z,weight);
  stampTraffic(x,z,weight,false);
- updateGrassMeshes();
+ clearLargeRocksFromTrails();updateGrassMeshes();
 }
 function registerAnimalFootfall(x,z,mass=1){
  // API para grandes animais que forem integrados no laboratório:
@@ -1352,7 +1358,7 @@ function update(dt){
   grassAccumulator=0;
   animateAnimalTrails(.7);
   if(api.getGraphicsQuality()!==lastGrassQuality)applyGrassQuality();
-  updateFootprints();
+  updateFootprints();clearLargeRocksFromTrails();
   // Alimentação distribuída ao longo da entrada do canal.
   // A célula única forçada a 9 cm criava um disco azul desconectado no canto.
   // Adiciona pequenas parcelas sem substituir a profundidade existente.
@@ -1463,7 +1469,7 @@ function drawNestCutaway(){
  // Indivíduos diminutos circulam ENTRE camadas/câmaras. Renderização
  // somente no raio-X para não onerar o Android durante o jogo normal.
  if(meshLibrary.ant1&&c.workers>0){
-  const geo=meshLibrary.ant1.clone(),mat=new T.MeshBasicMaterial({
+  const geo=compactAntGeometry(),mat=new T.MeshBasicMaterial({
    color:'#b28c56',depthTest:false,depthWrite:false,side:T.DoubleSide});
   const m=new T.InstancedMesh(geo,mat,12);
   m.name='Operárias movendo-se entre câmaras subterrâneas';
@@ -1493,7 +1499,7 @@ function animateUndergroundWorkers(t){
   o.position.set(c.x+Math.cos(angle)*offset,y-layer.depth,
    c.z+Math.sin(angle)*offset);
   o.rotation.set(0,angle+Math.PI*.5,0);
-  o.scale.setScalar(.014*previewMagnification);o.updateMatrix();
+  o.scale.setScalar(Math.min(.014*previewMagnification,.056));o.updateMatrix();
   mesh.setMatrixAt(count++,o.matrix);
  }
  mesh.count=count;mesh.instanceMatrix.needsUpdate=true;
@@ -1549,7 +1555,7 @@ async function setup(){
    registerAnimalFootfall(x,z,.95);
   }
   recordEcoEvent('Trilha de animais grandes formada por trânsito repetido.');
-  updateGrassMeshes();status();
+  clearLargeRocksFromTrails();updateGrassMeshes();status();
  };
  const regrowButton=$('ecoRegrowTest');
  if(regrowButton)regrowButton.onclick=()=>{
