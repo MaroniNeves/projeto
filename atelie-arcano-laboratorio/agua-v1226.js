@@ -654,7 +654,8 @@ const stones=new T.Group();stones.name='Rochas dos pacotes Quaternius';scene.add
 // Manter os volumes físicos de colisão e chuva, substituindo SÓ o visual.
 // Pedras procedurais aparecem apenas até chegarem as malhas originais.
 const proceduralStoneVisuals=new T.Group();
-proceduralStoneVisuals.name='Rochas antigas — fallback temporário';
+proceduralStoneVisuals.name='Volumes procedurais invisíveis (somente física)';
+proceduralStoneVisuals.visible=false;
 stones.add(proceduralStoneVisuals);
 const importedStoneVisuals=new T.Group();
 importedStoneVisuals.name='Rochas originais MegaKit + Ultimate';
@@ -1508,11 +1509,14 @@ function snapForestToGround(anchor){
  if(!Number.isFinite(foot))return;
  // O pivô PAI permanece no solo; inclinar pelo vento não desloca o pé.
  // Ajustar a posição LOCAL da correção, sem alterar o eixo original do asset.
- const delta=a.contactY-a.embed-foot;
+ const desiredY=a.contactY-a.embed;
  if(a.orientationNode){
-  a.orientationNode.position.y+=delta/Math.max(.000001,obj.scale.y);
-  obj.position.y=a.contactY-a.embed;
- }else obj.position.y+=delta;
+  // O deslocamento compensa a altura da base em relação ao pivô atual,
+  // ANTES de mover o pai para o nível do chão (evita somar duas alturas).
+  a.orientationNode.position.y+=(obj.position.y-foot)/
+   Math.max(.000001,Math.abs(obj.scale.y));
+  obj.position.y=desiredY;
+ }else obj.position.y+=desiredY-foot;
  obj.updateMatrixWorld(true);
 }
 function placeForestModel(item,root){
