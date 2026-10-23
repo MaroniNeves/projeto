@@ -1240,9 +1240,56 @@ function arcanoWorldPartBox(root,kind){
  });
  return result.isEmpty()?null:result;
 }
-function solidForestFootY(obj){
+// V12.27.2: extremos de galhos não podem definir a altura do pé do tronco.
+// A malha pode ter madeira e folhas no mesmo BufferGeometry: amostramos apenas
+// vértices das faces com material de madeira, já transformados para o mundo.
+// Para árvores, preferimos os vértices junto ao eixo do pivô da raiz.
+const arcanoTrunkWorldPoint=new T.Vector3();
+function arcanoCentralTrunkFootY(obj,wood){
+ const span=new T.Vector3();wood.getSize(span);
+ const radius=clamp(Math.min(span.x,span.z)*.22,.18,.85);
+ const radius2=radius*radius;
+ let nearbyMin=Infinity,samples=0;
+ obj.updateMatrixWorld(true);
+ obj.traverse(mesh=>{
+  if(!mesh.isMesh||!mesh.visible)return;
+  const geometry=mesh.geometry,position=geometry?.getAttribute('position');
+  if(!position)return;
+  const index=geometry.getIndex(),mats=Array.isArray(mesh.material)?
+    mesh.material:[mesh.material];
+  const groups=geometry.groups.length?geometry.groups:
+    [{start:0,count:index?index.count:position.count,materialIndex:0}];
+  for(const g of groups){
+   const name=mats[g.materialIndex]?.name||mesh.name||'';
+   if(!arcanoBarkRE.test(name)||arcanoLeafRE.test(name))continue;
+   const end=Math.min(g.start+g.count,index?index.count:position.count);
+   // O mesmo vértice pode ocorrer várias vezes em polígonos diferentes;
+   // o menor Y observado é suficiente e não exige ordenar arrays.
+   for(let k=g.start;k<end;k++){
+    const vertex=index?index.getX(k):k;
+    arcanoTrunkWorldPoint.fromBufferAttribute(position,vertex).
+      applyMatrix4(mesh.matrixWorld);
+    const dx=arcanoTrunkWorldPoint.x-obj.position.x,
+          dz=arcanoTrunkWorldPoint.z-obj.position.z;
+    if(dx*dx+dz*dz>radius2)continue;
+    nearbyMin=Math.min(nearbyMin,arcanoTrunkWorldPoint.y);
+    samples++;
+   }
+  }
+ });
+ if(samples>=3&&Number.isFinite(nearbyMin)){
+  // Só elevar o ponto de ancoragem, nunca substituí-lo pela ponta
+  // de um galho distante que mergulha abaixo do tronco.
+  return Math.max(wood.min.y,nearbyMin);
+ }
+ return wood.min.y;
+}
+function solidForestFootY(obj,anchor){
  const wood=arcanoWorldPartBox(obj,'wood');
- if(wood)return wood.min.y;
+ if(wood){
+  const isTree=anchor&&(anchor.type==='tree'||anchor.type==='pine');
+  return isTree?arcanoCentralTrunkFootY(obj,wood):wood.min.y;
+ }
  obj.updateMatrixWorld(true);
  const whole=new T.Box3().setFromObject(obj);
  return whole.min.y;
@@ -1320,7 +1367,7 @@ function arcanoBestOrientation(item,root){
 }
 function snapForestToGround(anchor){
  const a=anchor,obj=a.obj;
- const foot=solidForestFootY(obj);
+ const foot=solidForestFootY(obj,a);
  if(!Number.isFinite(foot))return;
  // Pivô no terreno: mesmo após crescimento e inclinação do vento, sem soma
  // incorreta da escala duas vezes e sem assumir o pivô FBX em y=0.
@@ -1384,6 +1431,9 @@ function placeForestModel(item,root){
    pack:item.pack||'mega',type:item.type,phase:randomForest()*Math.PI*2,
    qualityRank:randomForest(),modelName:item.name};
   snapForestToGround(anchor);
+  // Uma segunda amostragem após posicionar no mundo mantém a base central
+  // aderida ao terreno mesmo em árvores secas com galhos descendentes.
+  if(item.type==='tree'||item.type==='pine')snapForestToGround(anchor);
   obj.traverse(o=>{
    if(!o.isMesh)return;
    o.castShadow=!mobile&&(item.type==='tree'||item.type==='pine')&&created<4;
