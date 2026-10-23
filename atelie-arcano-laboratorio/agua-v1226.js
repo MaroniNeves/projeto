@@ -2783,17 +2783,25 @@ function rebuild(){
    colors[k*3+m]=base*(1-dark)+[.22,.11,.07][m]*dark;
   }
  }
- // Densidade de grama real colore o substrato; passagem constante
- // expõe a terra e deixa a estrada compactada, mesmo sob a chuva.
+ // Solo vivo e caminho compacto no MESMO buffer de cores da superfície.
+ // Não usar uma fita 3D sobre o terreno: forma, elevação e lama vêm do solo.
  const eco=window.arcanoEcoV1232;
  if(eco?.active&&eco.cover){
   for(let k=0;k<size;k++){
-   const greenAmount=clamp(eco.cover[k]*(1-eco.traffic[k])*.56,0,.52);
-   const dirtAmount=clamp(eco.roadMask[k]*.76,0,.76);
+   const health=clamp(eco.cover[k]*(1-eco.traffic[k]),0,1);
+   const greenAmount=clamp(health*.74,0,.69);
+   const road=clamp(eco.roadMask[k],0,1);
+   const abrasion=clamp(eco.traffic[k],0,1);
+   const saturated=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1.4);
+   const mud=clamp((saturated-.20)*.90+depth[k]*6.5,0,1);
+   const dirtAmount=clamp(road*(.79+.16*abrasion),0,.95);
+   const grassRGB=[.105,.295,.076];
+   const dryPath=[.49,.355,.22],mudPath=[.245,.172,.12];
    for(let m=0;m<3;m++){
-    const ix=k*3+m,grassColor=[.075,.246,.06][m],pathColor=[.40,.26,.155][m];
-    const grassMix=colors[ix]*(1-greenAmount)+grassColor*greenAmount;
-    colors[ix]=grassMix*(1-dirtAmount)+pathColor*dirtAmount;
+    const ix=k*3+m;
+    const green=colors[ix]*(1-greenAmount)+grassRGB[m]*greenAmount;
+    const soilTone=dryPath[m]*(1-mud)+mudPath[m]*mud;
+    colors[ix]=green*(1-dirtAmount)+soilTone*dirtAmount;
    }
   }
  }
