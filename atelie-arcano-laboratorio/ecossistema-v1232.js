@@ -1225,6 +1225,12 @@ function status(){
   grassDrawn+' tufos de grama ('+lastGrassQuality+') · '+colonies.length+' colônias · '+workers+' operárias · '+eggs+' ovos · '+larva+' larvas · '+adults+' minhocas adultas · '+cocoons+' casulos · galerias '+burrowLength.toFixed(1)+' m simulados · resíduos '+castsReturned.toFixed(2)+' u. '+
   'É uma simulação ecológica simplificada; rainhas e crias ficam nos ninhos. Quase invisíveis fora da lupa.';
  const eventPanel=$('ecoEvents');if(eventPanel)eventPanel.textContent=ecoEvents.join('\n');
+ const waterStatus=$('ecoWaterStatus');if(waterStatus)waterStatus.textContent=
+  '💧 Solo: '+api.stats.infiltrated.toFixed(2)+' m³ infiltrados · '+
+  api.stats.evaporated.toFixed(2)+' m³ evaporados · '+
+  api.getWetArea().toFixed(1)+' m² de água visível · '+
+  (api.deepWater.reduce((a,b)=>a+b,0)*dx*dz).toFixed(2)+' m³ no aquífero raso. '+
+  'A precipitação contínua pode repor a água enquanto chove.';
  const fruitsStatus=$('ecoFruitStatus');if(fruitsStatus)fruitsStatus.textContent=
   '🍎 '+fruits.length+' frutas · verdes '+fruits.filter(f=>f.stage==='green').length+
   ' · maduras '+fruits.filter(f=>f.stage==='ripe').length+
@@ -1369,6 +1375,11 @@ async function setup(){
  const advance=$('ecoAdvance');if(advance)advance.onclick=()=>{
   for(let d=0;d<30;d++)lifeDay(1);
   if(nestCutGroup.visible)drawNestCutaway();
+  status();
+ };
+ const dryTest=$('ecoDryTest');if(dryTest)dryTest.onclick=()=>{
+  api.setRainLevel(0);
+  recordEcoEvent('Teste de secagem iniciado: chuva parada; a poça infiltra e evapora.');
   status();
  };
  const fruitTest=$('ecoFruitTest');if(fruitTest)fruitTest.onclick=()=>{
