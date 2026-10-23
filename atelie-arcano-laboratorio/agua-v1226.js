@@ -1444,6 +1444,7 @@ const waterM=new T.ShaderMaterial({
  uniforms:{
   uTime:{value:0},uEnv:{value:reflectionRT.texture},
   uEnv2:{value:reflectionRT2?reflectionRT2.texture:reflectionRT.texture},
+  uPlanar:{value:null},uPlanarMatrix:{value:new T.Matrix4()},uPlanarReady:{value:0},uMirrorY:{value:0},
   uReflect:{value:0},uDualProbes:{value:0},
   uProbeA:{value:new T.Vector2(basins[1].x,basins[1].z)},
   uProbeB:{value:new T.Vector2(basins[0].x,basins[0].z)},
@@ -1451,10 +1452,19 @@ const waterM=new T.ShaderMaterial({
   uSunPower:{value:.8},uCloudiness:{value:.43},uWind:{value:.35},
   uWeatherReflect:{value:.92},uWeatherTint:{value:new T.Color('#a1c7d0')}
  },
- vertexShader:"precision highp float;\nattribute float waterDepth;attribute float mudAmount;attribute vec2 waterFlow;uniform float uTime,uWind;\nvarying vec3 vWorld;varying float vDepth;varying float vMud;varying vec2 vSlope;varying float vMovement;\nvoid main(){\n vec3 p=position;vDepth=waterDepth;vMud=mudAmount;\n float motion=clamp(length(waterFlow)*3.0+uWind*.38,0.0,1.0);vMovement=motion;\n float amp=(.0018+.018*motion)*smoothstep(.006,.065,waterDepth);\n float a=p.x*3.5+p.z*1.4-uTime*(1.2+1.9*motion);\n float b=p.z*5.1-p.x*1.7+uTime*(1.5+1.6*motion);\n p.y+=(sin(a)*.64+cos(b)*.36)*amp;\n vSlope=vec2((cos(a)*3.5*.64+sin(b)*1.7*.36)*amp,(cos(a)*1.4*.64-sin(b)*5.1*.36)*amp);\n vec4 w=modelMatrix*vec4(p,1.0);vWorld=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;\n}",fragmentShader:"precision highp float;\nuniform float uTime;uniform samplerCube uEnv;uniform samplerCube uEnv2;\nuniform float uReflect,uDualProbes,uSunPower,uCloudiness,uWind,uWeatherReflect;\nuniform vec2 uProbeA,uProbeB;\nuniform vec3 uSun,uWeatherTint;\nvarying vec3 vWorld;varying float vDepth;varying float vMud;varying vec2 vSlope;varying float vMovement;\nvoid main(){\n float irregular=.0018*sin(vWorld.x*4.2+vWorld.z*3.7)+.0011*sin(vWorld.x*10.3-vWorld.z*7.4);\n float alpha=smoothstep(.002,.017,vDepth-.0045+irregular);if(alpha<.025)discard;\n float shallow=clamp((vDepth-.006)/.054,0.,1.),deep=clamp((vDepth-.055)/.175,0.,1.);\n float abyss=clamp((vDepth-.21)/.28,0.,1.);\n vec3 color=mix(vec3(.40,.89,.85),vec3(.12,.73,.80),shallow);\n color=mix(color,vec3(.025,.40,.62),deep);\n color=mix(color,vec3(.012,.17,.35),abyss*.85);\n float dirty=clamp(vMud*.86,0.,.90);\n color=mix(color,vec3(.48,.29,.14),dirty);\n float rim=(1.-smoothstep(.004,.027,vDepth))*(1.-dirty*.85);\n color=mix(color,vec3(.71,.96,.91),rim*.28);\n vec2 tiny=vec2(sin(vWorld.x*6.1+vWorld.z*3.8-uTime*(1.3+uWind))+\n cos(vWorld.z*11.2-uTime*(1.6+uWind)),\n cos(vWorld.z*6.8-vWorld.x*3.4+uTime*(1.+uWind))+\n sin(vWorld.x*10.5+uTime*(1.4+uWind)));\n float breeze=.020+.055*vMovement+.026*uWind;\n vec3 n=normalize(vec3(-vSlope.x-tiny.x*breeze,1.,-vSlope.y-tiny.y*breeze));\n vec3 viewDir=normalize(cameraPosition-vWorld);\n float fresnel=pow(1.-clamp(dot(n,viewDir),0.,1.),2.1);\n vec3 ray=reflect(-viewDir,n);\n vec3 reflected=textureCube(uEnv,ray).rgb;\n // Segunda sonda posicionada numa depressão diferente: melhora a parallax aproximada.\n vec3 second=textureCube(uEnv2,ray).rgb;\n float d1=length(vWorld.xz-uProbeA),d2=length(vWorld.xz-uProbeB);\n float blend=uDualProbes*smoothstep(-1.4,1.4,d1-d2);\n reflected=mix(reflected,second,blend);\n reflected=mix(reflected,uWeatherTint,.045+.065*uCloudiness);\n float roughness=clamp(vMovement*.75+uWind*.16,0.,1.);\n float reflectMix=uReflect*uWeatherReflect*(.14+.53*fresnel)*\n                  (1.-dirty*.72)*(1.-roughness*.22);\n color=mix(color,reflected,clamp(reflectMix,0.,.63));\n float sun=pow(max(dot(reflect(-normalize(uSun),n),viewDir),0.),52.);\n float waveA=sin(vWorld.x*13.7+vWorld.z*9.2-uTime*2.6);\n float waveB=sin(vWorld.z*17.3-vWorld.x*6.9+uTime*2.2);\n float crest=pow(max(0.,waveA*.60+waveB*.40),9.);\n float sparkle=(.11*crest+.86*sun*uSunPower*(1.-uCloudiness*.60))*\n               (.75+.25*shallow)*(1.-dirty*.70);\n color=mix(color,vec3(.81,1.,.97),clamp(sparkle,0.,.69));\n gl_FragColor=vec4(color,alpha*(.83+.14*deep));\n}"
+ vertexShader:"precision highp float;\nattribute float waterDepth;attribute float mudAmount;attribute vec2 waterFlow;uniform float uTime,uWind;\nvarying vec3 vWorld;varying float vDepth;varying float vMud;varying vec2 vSlope;varying float vMovement;\nvoid main(){\n vec3 p=position;vDepth=waterDepth;vMud=mudAmount;\n float motion=clamp(length(waterFlow)*3.0+uWind*.38,0.0,1.0);vMovement=motion;\n float amp=(.0018+.018*motion)*smoothstep(.006,.065,waterDepth);\n float a=p.x*3.5+p.z*1.4-uTime*(1.2+1.9*motion);\n float b=p.z*5.1-p.x*1.7+uTime*(1.5+1.6*motion);\n p.y+=(sin(a)*.64+cos(b)*.36)*amp;\n vSlope=vec2((cos(a)*3.5*.64+sin(b)*1.7*.36)*amp,(cos(a)*1.4*.64-sin(b)*5.1*.36)*amp);\n vec4 w=modelMatrix*vec4(p,1.0);vWorld=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;\n}",fragmentShader:"precision highp float;\nuniform float uTime;uniform samplerCube uEnv;uniform samplerCube uEnv2;\nuniform sampler2D uPlanar;\nuniform mat4 uPlanarMatrix;\nuniform float uPlanarReady,uMirrorY;\nuniform float uReflect,uDualProbes,uSunPower,uCloudiness,uWind,uWeatherReflect;\nuniform vec2 uProbeA,uProbeB;\nuniform vec3 uSun,uWeatherTint;\nvarying vec3 vWorld;varying float vDepth;varying float vMud;varying vec2 vSlope;varying float vMovement;\nvoid main(){\n float irregular=.0018*sin(vWorld.x*4.2+vWorld.z*3.7)+.0011*sin(vWorld.x*10.3-vWorld.z*7.4);\n float alpha=smoothstep(.002,.017,vDepth-.0045+irregular);if(alpha<.025)discard;\n float shallow=clamp((vDepth-.006)/.054,0.,1.),deep=clamp((vDepth-.055)/.175,0.,1.);\n float abyss=clamp((vDepth-.21)/.28,0.,1.);\n vec3 color=mix(vec3(.40,.89,.85),vec3(.12,.73,.80),shallow);\n color=mix(color,vec3(.025,.40,.62),deep);\n color=mix(color,vec3(.012,.17,.35),abyss*.85);\n float dirty=clamp(vMud*.86,0.,.90);\n color=mix(color,vec3(.48,.29,.14),dirty);\n float rim=(1.-smoothstep(.004,.027,vDepth))*(1.-dirty*.85);\n color=mix(color,vec3(.71,.96,.91),rim*.28);\n vec2 tiny=vec2(sin(vWorld.x*6.1+vWorld.z*3.8-uTime*(1.3+uWind))+\n cos(vWorld.z*11.2-uTime*(1.6+uWind)),\n cos(vWorld.z*6.8-vWorld.x*3.4+uTime*(1.+uWind))+\n sin(vWorld.x*10.5+uTime*(1.4+uWind)));\n float breeze=.020+.055*vMovement+.026*uWind;\n vec3 n=normalize(vec3(-vSlope.x-tiny.x*breeze,1.,-vSlope.y-tiny.y*breeze));\n vec3 viewDir=normalize(cameraPosition-vWorld);\n float fresnel=pow(1.-clamp(dot(n,viewDir),0.,1.),2.1);\n vec3 ray=reflect(-viewDir,n);\n vec3 reflected=textureCube(uEnv,ray).rgb;\n // Segunda sonda posicionada numa depressão diferente: melhora a parallax aproximada.\n vec3 second=textureCube(uEnv2,ray).rgb;\n float d1=length(vWorld.xz-uProbeA),d2=length(vWorld.xz-uProbeB);\n float blend=uDualProbes*smoothstep(-1.4,1.4,d1-d2);\n reflected=mix(reflected,second,blend);\n // Espelho planar projetado do ponto de vista real.\n vec4 projected=uPlanarMatrix*vec4(vWorld,1.0);\n vec2 projUV=projected.xy/max(projected.w,.0001)*.5+.5;\n projUV+=tiny*(.00065+.0016*uWind);\n float valid=step(.005,projUV.x)*step(projUV.x,.995)*step(.005,projUV.y)*step(projUV.y,.995)*step(.01,projected.w);\n float heightMatch=exp(-abs(vWorld.y-uMirrorY)*1.5);\n vec3 mirrored=texture2D(uPlanar,clamp(projUV,vec2(.005),vec2(.995))).rgb;\n reflected=mix(reflected,mirrored,clamp(uPlanarReady*valid*heightMatch,0.,1.));\n reflected=mix(reflected,uWeatherTint,.045+.065*uCloudiness);\n float roughness=clamp(vMovement*.75+uWind*.16,0.,1.);\n float reflectMix=uReflect*uWeatherReflect*(.14+.53*fresnel)*\n                  (1.-dirty*.72)*(1.-roughness*.22);\n color=mix(color,reflected,clamp(reflectMix,0.,.63));\n float sun=pow(max(dot(reflect(-normalize(uSun),n),viewDir),0.),52.);\n float waveA=sin(vWorld.x*13.7+vWorld.z*9.2-uTime*2.6);\n float waveB=sin(vWorld.z*17.3-vWorld.x*6.9+uTime*2.2);\n float crest=pow(max(0.,waveA*.60+waveB*.40),9.);\n float sparkle=(.11*crest+.86*sun*uSunPower*(1.-uCloudiness*.60))*\n               (.75+.25*shallow)*(1.-dirty*.70);\n color=mix(color,vec3(.81,1.,.97),clamp(sparkle,0.,.69));\n gl_FragColor=vec4(color,alpha*(.83+.14*deep));\n}"
 });
 const water=new T.Mesh(waterG,waterM);water.frustumCulled=false;water.renderOrder=3;
-water.name='Água V12.15, ondulações e reflexos dos objetos';scene.add(water);
+water.name='Água V12.27 · reflexos alinhados ao cenário';scene.add(water);
+// Render target da câmera espelhada; preserva os cubemaps existentes como fallback.
+const planarRT=new T.WebGLRenderTarget(mobile?640:1024,mobile?512:768,{
+ generateMipmaps:false,minFilter:T.LinearFilter,magFilter:T.LinearFilter,
+ format:T.RGBAFormat,depthBuffer:true
+});
+const mirrorCamera=new T.PerspectiveCamera(camera.fov,camera.aspect,camera.near,camera.far);
+const mirrorLook=new T.Vector3(),mirrorDirection=new T.Vector3();
+const mirrorPlane=new T.Plane(new T.Vector3(0,1,0),0);
+waterM.uniforms.uPlanar.value=planarRT.texture;
 const foamLimit=mobile?120:220,foamObj=new T.Object3D();
 const foamMesh=new T.InstancedMesh(new T.PlaneGeometry(.060,.027),
  new T.MeshBasicMaterial({color:'#e2d5bb',transparent:true,opacity:.60,side:T.DoubleSide,depthWrite:false}),foamLimit);
@@ -1465,29 +1475,59 @@ let reflectionTurn=0;
 function updateReflections(dt){
  if(!reflectionsOn){waterM.uniforms.uReflect.value=0;return;}
  reflectionAge+=dt;
- if(reflectionAge<(mobile?QUALITY_PRESETS[graphicsQuality].reflectMobile:QUALITY_PRESETS[graphicsQuality].reflectDesktop))return;
+ const interval=mobile?(graphicsQuality==='low'?.42:.22):(graphicsQuality==='high'?.095:.18);
+ if(reflectionAge<interval&&reflectionReady)return;
  reflectionAge=0;
- const previous=[water.visible,foamMesh.visible,splashMesh.visible,halo.visible,streak.visible];
+ camera.updateMatrixWorld(true);
+ const basin=basins[1];
+ const mirrorY=sample(soil,basin.x,basin.z)+
+               Math.max(.025,sample(depth,basin.x,basin.z))+.018;
+ const forward=camera.getWorldDirection(mirrorDirection).normalize();
+ mirrorLook.copy(camera.position).addScaledVector(forward,6);
+ mirrorLook.y=2*mirrorY-mirrorLook.y;
+ mirrorCamera.position.copy(camera.position);
+ mirrorCamera.position.y=2*mirrorY-camera.position.y;
+ mirrorCamera.up.set(camera.up.x,-camera.up.y,camera.up.z);
+ mirrorCamera.lookAt(mirrorLook);
+ mirrorCamera.fov=camera.fov;mirrorCamera.aspect=camera.aspect;
+ mirrorCamera.near=camera.near;mirrorCamera.far=camera.far;
+ mirrorCamera.updateProjectionMatrix();mirrorCamera.updateMatrixWorld(true);
+ waterM.uniforms.uPlanarMatrix.value.multiplyMatrices(
+   mirrorCamera.projectionMatrix,mirrorCamera.matrixWorldInverse);
+ waterM.uniforms.uMirrorY.value=mirrorY;
+ const previous=[water.visible,foamMesh.visible,splashMesh.visible,
+   halo.visible,streak.visible];
  const ringVisibility=ripplePool.map(mesh=>mesh.visible);
- water.visible=false;foamMesh.visible=false;splashMesh.visible=false;halo.visible=false;streak.visible=false;
+ const oldClipping=renderer.clippingPlanes;
+ const oldTarget=renderer.getRenderTarget();
+ const oldClipEnabled=renderer.localClippingEnabled;
+ water.visible=false;foamMesh.visible=false;splashMesh.visible=false;
+ halo.visible=false;streak.visible=false;
  ripplePool.forEach(mesh=>mesh.visible=false);
- const second=!!(reflectionCamera2&&reflectionReady&&reflectionTurn%2===1);
- const probe=second?reflectionCamera2:reflectionCamera;
- const basin=second?basins[0]:basins[1];
- probe.position.set(basin.x,sample(soil,basin.x,basin.z)+.65,basin.z);
+ mirrorPlane.constant=-mirrorY+.02;
  try{
-  probe.update(renderer,scene);
-  if(second)reflection2Ready=true;else reflectionReady=true;
-  reflectionFrames++;reflectionTurn++;
+  renderer.clippingPlanes=[mirrorPlane];renderer.localClippingEnabled=true;
+  const targetW=Math.min(mobile?640:1024,
+    Math.max(256,Math.ceil(innerWidth*(graphicsQuality==='high'?1.1:.75))));
+  const targetH=Math.min(mobile?640:768,
+    Math.max(256,Math.ceil(targetW*innerHeight/Math.max(innerWidth,1))));
+  if(planarRT.width!==targetW||planarRT.height!==targetH)
+   planarRT.setSize(targetW,targetH);
+  renderer.setRenderTarget(planarRT);renderer.clear(true,true,true);
+  renderer.render(scene,mirrorCamera);
+  reflectionFrames++;reflectionReady=true;
+  waterM.uniforms.uPlanarReady.value=1;waterM.uniforms.uReflect.value=.94;
  }catch(error){
-  console.warn('[Arcano V12.17] captura ambiental indisponível:',error);
- }
- finally{
-  [water.visible,foamMesh.visible,splashMesh.visible,halo.visible,streak.visible]=previous;
+  console.warn('[Arcano V12.27] espelho planar indisponível:',error);
+  waterM.uniforms.uPlanarReady.value=0;waterM.uniforms.uReflect.value=0;
+ }finally{
+  renderer.setRenderTarget(oldTarget);
+  renderer.clippingPlanes=oldClipping;
+  renderer.localClippingEnabled=oldClipEnabled;
+  [water.visible,foamMesh.visible,splashMesh.visible,
+   halo.visible,streak.visible]=previous;
   ripplePool.forEach((mesh,i)=>mesh.visible=ringVisibility[i]);
  }
- waterM.uniforms.uDualProbes.value=reflection2Ready?1:0;
- waterM.uniforms.uReflect.value=reflectionReady?.92:0;
 }
 function rockHeightAt(x,z){
  let top=-Infinity;
@@ -2117,8 +2157,9 @@ let last=performance.now();function loop(now){
   if(++frame%2===0)rebuild();
   waterM.uniforms.uTime.value=visualTime;
   animateClimate(dt);
-  updateReflections(dt);
   animateForest(dt);
+  setView();
+  updateReflections(dt);
   updateInfo(false);
  }
  setView();renderer.render(scene,camera);
