@@ -650,7 +650,16 @@ const slab=new T.Mesh(new T.BoxGeometry(W,.52,L),new T.MeshStandardMaterial({col
 slab.position.y=Math.min(...soil)-.55;slab.receiveShadow=true;scene.add(slab);
 // Rochas anime: silhuetas orgânicas sem faces quadradas, paleta envelhecida e musgo discreto.
 // Modelos procedurais locais: sem download externo, acessíveis também em Android/offline.
-const stones=new T.Group();stones.name='Rochas anime, seixos e musgo';scene.add(stones);
+const stones=new T.Group();stones.name='Rochas dos pacotes Quaternius';scene.add(stones);
+// Manter os volumes físicos de colisão e chuva, substituindo SÓ o visual.
+// Pedras procedurais aparecem apenas até chegarem as malhas originais.
+const proceduralStoneVisuals=new T.Group();
+proceduralStoneVisuals.name='Rochas antigas — fallback temporário';
+stones.add(proceduralStoneVisuals);
+const importedStoneVisuals=new T.Group();
+importedStoneVisuals.name='Rochas originais MegaKit + Ultimate';
+stones.add(importedStoneVisuals);
+const importedRockModels=[];
 const stonePalette=['#858a86','#8f877d','#757e7b','#998f80','#737b74','#877c6f','#919087'];
 const mossTone=new T.Color('#5d6d55');
 const stoneMaterial=new T.MeshToonMaterial({color:'#ffffff',vertexColors:true});
@@ -731,7 +740,7 @@ for(let i=0;i<rocks.length;i++){
   rock.add(outline);
   cluster.add(rock);visibleRocks++;
  }
- stones.add(cluster);
+ proceduralStoneVisuals.add(cluster);
 }
 // Seixos baixos ao redor das rochas grandes: 1 InstancedMesh em vez de muitas draw calls.
 const pebbleMax=mobile?70:115;
@@ -756,7 +765,7 @@ for(let i=0;i<rocks.length&&pebbleCount<pebbleMax;i++){
  }
 }
 pebbles.count=pebbleCount;pebbles.instanceMatrix.needsUpdate=true;
-stones.add(pebbles);
+proceduralStoneVisuals.add(pebbles);
 
 // Plantas 3D estilizadas: cada muda tem âncora no solo, biomassa e cor próprias.
 // A mesma malha instanciada responde à fertilidade local (água, N/P/K, pH, sais e oxigênio).
@@ -1435,6 +1444,10 @@ function snapForestToGround(anchor){
  obj.updateMatrixWorld(true);
 }
 function placeForestModel(item,root){
+ if(item.type==='rock'){
+  registerImportedRock(item,root);
+  return;
+ }
  const randomForest=rand(9157+item.name.split('').reduce((a,c)=>a+c.charCodeAt(0),0));
  root.updateMatrixWorld(true);
  root.traverse(mesh=>addLeafWind(mesh));
@@ -1574,6 +1587,57 @@ function modelTextureManager(Module){
   return url;
  });
  return manager;
+}
+// V12.28: usa as geometrias de pedras fornecidas, preservando os volumes
+// rockSolids já empregados por chuva, impacto, solo e escoamento.
+function registerImportedRock(item,root){
+ if(item.type!=='rock')return;
+ importedRockModels.push({item,root});
+ rebuildImportedRocks();
+}
+function rebuildImportedRocks(){
+ if(!importedRockModels.length)return;
+ importedStoneVisuals.clear();
+ const safe=new T.Box3(),size=new T.Vector3();
+ const placed=[];
+ for(let i=0;i<rocks.length;i++){
+  const [x,z,r]=rocks[i];
+  const selected=importedRockModels[i%importedRockModels.length];
+  const visual=selected.root.clone(true);
+  visual.name='Rocha original '+selected.item.name+'/'+i;
+  visual.position.set(0,0,0);
+  visual.rotation.y=(i*2.399963229728653)%6.28318530718;
+  visual.scale.setScalar(1);
+  visual.updateMatrixWorld(true);
+  safe.setFromObject(visual);safe.getSize(size);
+  const horizontal=Math.max(.0001,size.x,size.z);
+  const scalar=clamp((r*1.9)/horizontal,.03,12);
+  visual.scale.multiplyScalar(scalar);
+  visual.updateMatrixWorld(true);safe.setFromObject(visual);
+  if(!Number.isFinite(safe.min.y))continue;
+  // Contato na malha do solo; leve imersão evita aspecto de pedra suspensa.
+  visual.position.set(x,terrainContact(x,z)-safe.min.y-.045*r,z);
+  visual.traverse(obj=>{
+   if(!obj.isMesh)return;
+   obj.castShadow=!mobile;obj.receiveShadow=true;
+   const materials=Array.isArray(obj.material)?obj.material:[obj.material];
+   for(const mat of materials){
+    if(!mat)continue;
+    mat.metalness=0;mat.roughness=1;
+    mat.side=T.FrontSide;
+    mat.needsUpdate=true;
+   }
+  });
+  importedStoneVisuals.add(visual);
+  placed.push(visual);
+ }
+ if(placed.length){
+  proceduralStoneVisuals.visible=false;
+  importedStoneVisuals.visible=true;
+  if(typeof reflectionAge!=='undefined')reflectionAge=999;
+  console.info('[Arcano V12.28] Pedras dos assets originais:',placed.length,
+   'modelos:',importedRockModels.map(x=>x.item.name).join(', '));
+ }
 }
 function setForestCollection(value){
  forestCollection=['mixed','mega','ultimate'].includes(value)?value:'mixed';
