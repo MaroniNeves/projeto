@@ -3378,9 +3378,13 @@ let pinchX=0,pinchY=0;
 const target=new T.Vector3(0,-.12,0);
 let lastViewVisibilityUpdate=0;
 function setView(){
- if(game.active){applyGameCamera();return;}
- camera.position.set(target.x+radius*Math.cos(pitch)*Math.sin(yaw),target.y+radius*Math.sin(pitch),target.z+radius*Math.cos(pitch)*Math.cos(yaw));
- camera.lookAt(target);
+ if(game.active)applyGameCamera();
+ else{
+  camera.position.set(target.x+radius*Math.cos(pitch)*Math.sin(yaw),target.y+radius*Math.sin(pitch),target.z+radius*Math.cos(pitch)*Math.cos(yaw));
+  camera.lookAt(target);
+ }
+ // Atualizar a distância de visibilidade tanto no laboratório quanto
+ // durante a caminhada: o mundo não fica congelado no ponto inicial.
  // Árvores fora do alcance deixam de gerar draw calls; atualizar devagar
  // para não reconstruir o inventário de objetos a cada quadro.
  const now=performance.now();
