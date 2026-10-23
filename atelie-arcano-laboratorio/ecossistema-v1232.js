@@ -310,19 +310,24 @@ function initializeLandscape(){
 // Uma segunda escrita periódica causava a piscada observada no Android.
 function terrainTint(){/* delegated to main rebuild() */}
 function grassShape(){
+ // A mesma quantidade e malha Quaternius, mas dividida em setores
+ // com frustum culling: a GPU não processa o gramado que ficou atrás da câmera.
  const names=['grassShort1','grassMixed1','grassTall1','grassMixed2'];
- const budget=grassBudgets.high,meshes=new Map(),dummies=new Map();
+ const budget=grassBudgets.high,chunkSize=12;
+ const grassMaterials=new Map(),groups=new Map(),dummy=new T.Object3D();
  for(const name of names){
   const kind=name.startsWith('grassMixed')?'grassMixed':
    name==='grassTall1'?'grassTall':'grassShort';
-  const geo=meshLibrary[name];if(!geo)continue;
-  const mesh=new T.InstancedMesh(geo,material(kind),budget);
-  mesh.frustumCulled=false;mesh.castShadow=false;mesh.receiveShadow=true;
-  mesh.userData.planted=0;mesh.count=0;
-  mesh.name='Gramado natural denso · '+name;
-  meshes.set(name,mesh);dummies.set(name,new T.Object3D());foliage.add(mesh);
+  if(meshLibrary[name])grassMaterials.set(name,material(kind));
  }
- if(!meshes.size)return;
+ if(!grassMaterials.size)return;
+ function bucket(name,x,z){
+  const cx=Math.floor((x+W*.5)/chunkSize),cz=Math.floor((z+L*.5)/chunkSize);
+  const key=name+':'+cx+':'+cz;
+  let group=groups.get(key);
+  if(!group){group={name,instances:[]};groups.set(key,group);}
+  return group;
+ }
  const lowBudget=Math.round(budget*.34),highBudget=budget-lowBudget;
  const pool=[],color=new T.Color();
  let planted=0;
@@ -337,22 +342,19 @@ function grassShape(){
   return {x,z,k,life};
  }
  function plant(name,p,extraScale=1){
-  const m=meshes.get(name),o=dummies.get(name);
-  if(!m||m.userData.planted>=budget||planted>=budget)return false;
+  if(!grassMaterials.has(name)||planted>=budget)return false;
   const scale=(name==='grassShort1'?.46:name==='grassTall1'?.78:.67)*
    (.81+random()*.42)*extraScale;
-  o.position.set(p.x,height(p.x,p.z)-.012,p.z);
-  o.rotation.set((random()-.5)*.12,random()*Math.PI*2,(random()-.5)*.12);
-  o.scale.set(scale*(.86+random()*.36),
+  dummy.position.set(p.x,height(p.x,p.z)-.012,p.z);
+  dummy.rotation.set((random()-.5)*.12,random()*Math.PI*2,(random()-.5)*.12);
+  dummy.scale.set(scale*(.86+random()*.36),
    scale*(.97+random()*.38),scale*(.86+random()*.38));
-  o.updateMatrix();
-  const index=m.userData.planted++;
-  m.setMatrixAt(index,o.matrix);
-  // No campo aberto a grama fica levemente dourada, junto da terra verde seca.
+  dummy.updateMatrix();
   const transition=api.biomeField?.(p.x,p.z)||0;
-  color.setRGB(1,1-transition*.13,1-transition*.28);
-  m.setColorAt(index,color);
-  grassPatches.push({x:p.x,z:p.z,k:p.k,mesh:m,index,matrix:o.matrix.clone()});
+  const color=new T.Color().setRGB(1,1-transition*.13,1-transition*.28);
+  bucket(name,p.x,p.z).instances.push({
+   k:p.k,x:p.x,z:p.z,matrix:dummy.matrix.clone(),color
+  });
   planted++;return true;
  }
  // Cobertura irregular estratificada em TODA a área verde. As posições
@@ -400,13 +402,32 @@ function grassShape(){
    if(plant(name,p,.95+p.life*.19))tall++;
   }
  }
- for(const m of meshes.values()){
+ // Instância por setor: vértices/cores/texturas são exatamente os mesmos.
+ // Em cada setor, sombra e qualidade seguem o seletor do laboratório.
+ for(const group of groups.values()){
+  const entries=group.instances;
+  if(!entries.length)continue;
+  const m=new T.InstancedMesh(meshLibrary[group.name],
+    grassMaterials.get(group.name),entries.length);
+  m.frustumCulled=true;
+  m.castShadow=false;m.receiveShadow=true;
+  m.userData.planted=entries.length;
+  m.name='Grama setorizada V12.46 · '+group.name;
+  for(let i=0;i<entries.length;i++){
+   const p=entries[i];
+   m.setMatrixAt(i,p.matrix);
+   m.setColorAt(i,p.color);
+   grassPatches.push({x:p.x,z:p.z,k:p.k,mesh:m,index:i,
+    matrix:p.matrix,lastScale:NaN});
+  }
+  m.computeBoundingSphere();
   m.instanceMatrix.needsUpdate=true;
   if(m.instanceColor)m.instanceColor.needsUpdate=true;
+  foliage.add(m);
  }
  applyGrassQuality();
- console.info('[Arcano V12.43] Cobertura irregular em todo o mapa',
-  {planted,short:pool.length,tall,quality:lastGrassQuality});
+ console.info('[Arcano V12.46] Gramado Quaternius em setores visíveis',
+  {planted,chunks:groups.size,short:pool.length,tall,quality:lastGrassQuality});
 }
 // FOLHAS: pequena malha 3D low-poly de seis faces (nervura central elevada),
 // nas cores dos modelos Quaternius já carregados. O próprio MegaKit/Ultimate
@@ -1342,20 +1363,26 @@ function moveAnimals(t){
   m.scale.setComponent(axis,extension*magnify);
  }
 }function updateGrassMeshes(){
- const o=new T.Object3D();
+ // Nenhum Object3D temporário, decomposição de matrizes ou escrita no
+ // buffer quando o capim mudou menos de ~2%. É a mesma geometria visível.
+ const changed=new Set();
  for(const patch of grassPatches){
   if(patch.index>=patch.mesh.count)continue;
   const k=patch.k,wear=Math.max(traffic[k],animalTrail[k]),c=cover[k];
   const hydro=api.depth[k]>.08?0:1;
   const alive=fixedRoadMask[k]>.06?0:clamp((.26+.74*c)*(1-wear)*hydro,0,1);
-  // Evita aparência de grama aparada em solo saudável; mantém pisoteio e estrada sem capim.
   const scale=alive>.11?(.62+.38*alive):.0001;
-  o.matrix.copy(patch.matrix);
-  o.matrix.decompose(o.position,o.quaternion,o.scale);
-  o.scale.multiplyScalar(scale);o.updateMatrix();
-  patch.mesh.setMatrixAt(patch.index,o.matrix);
+  if(Math.abs(scale-patch.lastScale)<.019)continue;
+  patch.lastScale=scale;
+  const dst=patch.mesh.instanceMatrix.array,src=patch.matrix.elements;
+  const off=patch.index*16;
+  // Transformações 3x3 são escaladas; translação fica no terreno original.
+  for(let j=0;j<12;j++)dst[off+j]=src[j]*scale;
+  dst[off+12]=src[12];dst[off+13]=src[13];dst[off+14]=src[14];
+  dst[off+15]=1;
+  changed.add(patch.mesh);
  }
- for(const m of foliage.children)if(m.isInstancedMesh)m.instanceMatrix.needsUpdate=true;
+ for(const m of changed)m.instanceMatrix.needsUpdate=true;
 }
 // A estrada NÃO é um objeto gerado: é o resultado histórico de pisoteio,
 // compactação, perda de clorofila e redução dos tufos de grama.
