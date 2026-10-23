@@ -379,8 +379,15 @@ function update(dt){
  if(grassAccumulator>.7){
   grassAccumulator=0;
   if(api.getGraphicsQuality()!==lastGrassQuality)applyGrassQuality();
-  const zx=-7.1,xx=riverX(zx),k=idx(xx,zx);
-  api.depth[k]=Math.max(api.depth[k],.09);
+  // Alimentação distribuída ao longo da entrada do canal.
+  // A célula única forçada a 9 cm criava um disco azul desconectado no canto.
+  // Adiciona pequenas parcelas sem substituir a profundidade existente.
+  for(let entry=0;entry<7;entry++){
+   const z=-7.26+entry*.17,x=riverX(z),k=idx(x,z);
+   const water=(.0045-entry*.00035);
+   if(water>0&&riverMask[k]>.36&&api.depth[k]<.06)
+    api.depth[k]=Math.min(.06,api.depth[k]+water);
+  }
   for(let cell=0;cell<cells;cell++){
    const sat=api.soilMoisture[cell]/Math.max(.001,api.soilCapacity[cell]);
    const good=clamp(api.soilPlant[cell]*.57+api.soilHealth[cell]*.25+sat*.18,0,1);
