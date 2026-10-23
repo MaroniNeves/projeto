@@ -372,7 +372,7 @@ function lifeDay(days){
   const growth=clamp(api.soilPlant[k],0,1.3);
   const submersion=api.depth[k]>.065?.12:1;
   foodResources[k]=clamp(foodResources[k]+
-   days*(.001+.006*vegetation*growth)*submersion*(1-roadMask[k]),0,.24);
+   days*(.001+.012*vegetation*growth)*submersion*(1-roadMask[k]),0,.24);
  }
  const climate=api.atmosphere.getMetrics(),temp=climate.temperature;
  for(const c of [...colonies]){
@@ -388,7 +388,7 @@ function lifeDay(days){
   const decay=clamp((.13+Math.max(0,moist-.7)*.18)*days,0,.85);
   for(let i=0;i<cells;i++)c.pheromones[i]*=(1-decay);
   distributeTasks(c);
-  let gathered=0,searchBudget=days*(.014+.00085*c.foragers)*safe;
+  let gathered=0,searchBudget=days*(.014+.0014*c.foragers)*safe;
   const sites=chooseFoodSites(c);
   for(const item of sites){
    if(searchBudget<=0)break;
@@ -491,7 +491,14 @@ function lifeDay(days){
   // Alimentam-se do detrito e dos microrganismos que o colonizam.
   const litter=Math.min(api.soilLitter[k],days*w.adults*.0017*safe);
   api.soilLitter[k]-=litter;
-  const casts=litter*.80+days*w.adults*.000018*safe;
+  // As minhocas também ingerem pequenas parcelas do solo rico em detritos.
+  // Toda massa de húmus gerada vem de matéria ingerida; não surge do nada.
+  const organicIngested=Math.min(api.soilOrganic[k],
+   days*w.adults*.00014*safe);
+  api.soilOrganic[k]-=organicIngested;
+  const consumed=litter+organicIngested;
+  const nutrition=clamp(consumed/Math.max(.00001,days*w.adults*.00019),0,1);
+  const casts=consumed*.73;
   w.castings+=casts;castsReturned+=casts;
   api.soilOrganic[k]=clamp(api.soilOrganic[k]+casts*.62,0,1.8);
   api.soilN[k]=clamp(api.soilN[k]+casts*.14,0,1.3);
@@ -501,8 +508,8 @@ function lifeDay(days){
   w.burrows+=work;burrowLength+=work;
   api.permeability[k]=clamp(api.permeability[k]*(1+work*.022),.000001,.16);
   // Hermafroditas com fecundação cruzada: exigem >= 2 adultos para casulos.
-  if(w.adults>=2&&safe>.42){
-   w.pairProgress+=days*Math.min(w.adults/4,2)*.082*safe;
+  if(w.adults>=2&&safe>.42&&nutrition>.34){
+   w.pairProgress+=days*Math.min(w.adults/4,2)*.082*safe*nutrition;
    const pairings=Math.min(2,Math.floor(w.pairProgress));
    if(pairings>0){
     w.pairProgress-=pairings;
@@ -523,7 +530,7 @@ function lifeDay(days){
   const mature=Math.min(w.juveniles,Math.floor(w.matureProgress));
   w.matureProgress-=mature;w.juveniles-=mature;w.adults+=mature;
   // Mortalidade e reciclagem orgânica com pouca umidade ou inundação anóxica.
-  w.deathProgress+=w.adults*days*(safe<.13?.034:.0027);
+  w.deathProgress+=w.adults*days*(safe<.13?.034:.0027+Math.max(0,.35-nutrition)*.011);
   const deaths=Math.min(w.adults,Math.floor(w.deathProgress));
   w.deathProgress-=deaths;
   if(deaths){w.adults-=deaths;addCarcass(w.x,w.z,deaths*.003);}
