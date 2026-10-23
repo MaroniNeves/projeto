@@ -546,29 +546,56 @@ function visualizeAnimals(){
   wormDraws.push({m,w,pos,orig:Float32Array.from(pos.array),
    axis,side,span:Math.max(.0001,high-low),low,phase:random()*6.28});
  }
-}function moveAnimals(t){
- const obj=new T.Object3D(),magnify=previewMagnification;
- for(const {m,c,variant} of antDraws){
+}let wormVisualFrame=0;
+function moveAnimals(t){
+ const o=new T.Object3D(),magnify=previewMagnification;
+ for(const {m,c,max} of antDraws){
+  m.count=Math.min(max,Math.max(0,Math.ceil(c.workers*.2)));
+  const target=position(c.lastFoodSite??idx(c.x,c.z));
   for(let i=0;i<m.count;i++){
-   const theta=t*.27+i*2.399+c.id*.91+variant*1.23,dist=.25+.75*((i%7)/7);
-   const x=c.x+Math.cos(theta)*dist,z=c.z+Math.sin(theta)*dist;
-   obj.position.set(x,height(x,z)+.008,z);obj.rotation.set(0,-theta,0);
-   obj.scale.setScalar(.016*magnify);obj.updateMatrix();m.setMatrixAt(i,obj.matrix);
+   const cycle=(t*(.10+.014*(i%4))+i*.17+c.id*.13)%2;
+   const outward=cycle<1,along=outward?cycle:2-cycle;
+   const swing=.03*Math.sin(t*2.2+i*2.7);
+   const x=c.x+(target.x-c.x)*along+Math.sin(i*1.7)*swing;
+   const z=c.z+(target.z-c.z)*along+Math.cos(i*1.7)*swing;
+   o.position.set(x,height(x,z)+.008,z);
+   o.rotation.set(0,Math.atan2(target.x-c.x,target.z-c.z)+(outward?0:Math.PI),0);
+   o.scale.setScalar((api.depth[idx(x,z)]>.06?.006:.014)*magnify);
+   o.updateMatrix();m.setMatrixAt(i,o.matrix);
   }
   m.instanceMatrix.needsUpdate=true;
  }
- for(const {m,offset} of wormDraws){
-  for(let i=0;i<m.count;i++){
-   const w=worms[(i*3+offset)%worms.length],k=idx(w.x,w.z),safe=goodForWorms(k);
-   const visible=safe>.42&&Math.sin(t*.08+i)>.35;
-   obj.position.set(w.x+.12*Math.sin(t*.05+i),height(w.x,w.z)-(visible?.02:.12),w.z);
-   obj.rotation.set(0,i*2.13,0);obj.scale.setScalar(.065*magnify);
-   obj.updateMatrix();m.setMatrixAt(i,obj.matrix);
+ wormVisualFrame++;
+ for(const item of wormDraws){
+  const {m,w,pos,orig,axis,side,span,low,phase}=item;
+  const k=idx(w.x,w.z),quality=goodForWorms(k);
+  const moisture=clamp(api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]),0,1.5);
+  const emerging=w.adults>0&&moisture>.36&&moisture<1.06&&
+   quality>.24&&Math.sin(t*.13+w.locomotion)>.12;
+  m.visible=emerging||previewMagnification>1;
+  if(!m.visible)continue;
+  const phaseNow=t*2.8+phase;
+  for(let j=0;j<pos.count;j++){
+   const u=clamp((orig[j*3+axis]-low)/span,0,1);
+   const wave=Math.sin(phaseNow-u*12.6);
+   for(let component=0;component<3;component++){
+    let value=orig[j*3+component];
+    if(component===axis)value+=.032*span*wave;
+    else if(component===side)value+=.045*span*Math.sin(phaseNow-u*9.3)*Math.sin(u*Math.PI);
+    pos.array[j*3+component]=value;
+   }
   }
-  m.instanceMatrix.needsUpdate=true;
+  pos.needsUpdate=true;
+  if(wormVisualFrame%6===0)m.geometry.computeVertexNormals();
+  const cx=w.x+.036*Math.sin(t*.33+w.locomotion);
+  const cz=w.z+.026*Math.sin(t*.26+phase);
+  m.position.set(cx,height(cx,cz)-(emerging?.008:w.depth)+.009,cz);
+  m.rotation.set(0,w.locomotion+t*.032,0);
+  const extension=.068*(1+.12*Math.sin(phaseNow)),radial=.068*(1-.06*Math.sin(phaseNow));
+  m.scale.setScalar(radial*magnify);
+  m.scale.setComponent(axis,extension*magnify);
  }
-}
-function updateGrassMeshes(){
+}function updateGrassMeshes(){
  const o=new T.Object3D();
  for(const patch of grassPatches){
   if(patch.index>=patch.mesh.count)continue;
