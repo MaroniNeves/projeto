@@ -1110,11 +1110,15 @@ function visibleByQuality(a){
                  clamp(Math.round((a.z+L*.5)/dz),0,NZ-1))]>.10);
 }
 function applyForestVisibility(){
- for(const a of forestInstances)a.obj.visible=visibleByQuality(a);
- // Só exibir os triângulos provisórios se nenhum asset de capim estiver ativo.
+ const ecologyActive=!!window.arcanoEcoV1232?.active;
+ for(const a of forestInstances){
+  a.obj.visible=visibleByQuality(a)&&!(ecologyActive&&a.type==='grass');
+ }
  const originalGrass=forestInstances.some(a=>a.type==='grass'&&a.obj.visible);
- meadowMesh.visible=!originalGrass;
- meadowMesh.count=originalGrass?0:Math.floor(fullMeadowCount*QUALITY_PRESETS[graphicsQuality].meadow);
+ meadowMesh.visible=!(originalGrass||ecologyActive);
+ meadowMesh.count=(originalGrass||ecologyActive)?0:
+  Math.floor(fullMeadowCount*QUALITY_PRESETS[graphicsQuality].meadow);
+ grass.visible=!ecologyActive&&!forestGroup.visible;
  if(meadowMesh.instanceMatrix)meadowMesh.instanceMatrix.needsUpdate=true;
 }
 
@@ -1333,7 +1337,8 @@ function setFloraVisible(v){
  floraWanted=!!v;forestGroup.visible=floraWanted&&floraLoaded>0&&
   !(assetTestActor&&$('assetTestIsolate')?.checked);
  applyForestVisibility();
- grass.visible=!forestGroup.visible;sproutGroup.visible=!forestGroup.visible;
+ grass.visible=!forestGroup.visible&&!window.arcanoEcoV1232?.active;
+ sproutGroup.visible=!forestGroup.visible;
  if($('floraToggle'))$('floraToggle').checked=floraWanted;
  forestStatus(floraWanted?(floraLoaded?'ativos':'carregando'):'vegetação clássica');
 }
@@ -2778,6 +2783,20 @@ function rebuild(){
    colors[k*3+m]=base*(1-dark)+[.22,.11,.07][m]*dark;
   }
  }
+ // Densidade de grama real colore o substrato; passagem constante
+ // expõe a terra e deixa a estrada compactada, mesmo sob a chuva.
+ const eco=window.arcanoEcoV1232;
+ if(eco?.active&&eco.cover){
+  for(let k=0;k<size;k++){
+   const greenAmount=clamp(eco.cover[k]*(1-eco.traffic[k])*.56,0,.52);
+   const dirtAmount=clamp(eco.roadMask[k]*.76,0,.76);
+   for(let m=0;m<3;m++){
+    const ix=k*3+m,grassColor=[.075,.246,.06][m],pathColor=[.40,.26,.155][m];
+    const grassMix=colors[ix]*(1-greenAmount)+grassColor*greenAmount;
+    colors[ix]=grassMix*(1-dirtAmount)+pathColor*dirtAmount;
+   }
+  }
+ }
  landG.attributes.color.needsUpdate=true;
  wetted=count*area;
  // A malha visual 2-3× mais densa interpola os dados; não gera quadrados da grade antiga.
@@ -2952,6 +2971,10 @@ function tapAdd(event){
   const p=found[0].point;
   if(assetTestPlacementMode){
    placeAssetTest($('assetTestSelect')?.value,{x:p.x,z:p.z});
+   return;
+  }
+  if($('ecoWalkMode')?.checked&&window.arcanoEcoV1232?.active){
+   window.arcanoEcoV1232.trample(p.x,p.z,.32);
    return;
   }
   for(let i=0;i<25;i++){const a=random()*Math.PI*2,r=random()*.6;add(p.x+Math.cos(a)*r,p.z+Math.sin(a)*r,.105);}
