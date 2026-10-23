@@ -1149,21 +1149,24 @@ function placeForestModel(item,root){
   if(groundY<-.13)continue;
   const obj=root.clone(true),factor=.78+randomForest()*.52;
   const desired=item.height*factor;
-  const scale=desired/h,rot=randomForest()*Math.PI*2;
+  const scaleMultiplier=desired/h,rot=randomForest()*Math.PI*2;
+  // O FBX pode ter escala .01 e rotação de conversão de eixo no nó raiz.
+  // Multiplicamos a transformação importada em vez de substituí-la.
   // Calcula o Box3 da instância já rotacionada, com o pivô da malha original.
   // A base inferior é medida após transformações do FBX — não suposta em y=0.
-  obj.position.set(x,0,z);obj.rotation.set(0,rot,0);obj.scale.setScalar(scale);
+  obj.position.set(x,0,z);obj.rotation.copy(root.rotation);
+  obj.rotation.y+=rot;obj.scale.copy(root.scale).multiplyScalar(scaleMultiplier);
   obj.updateMatrixWorld(true);
   const worldBox=new T.Box3().setFromObject(obj);
   if(!Number.isFinite(worldBox.min.y)||!Number.isFinite(worldBox.max.y))continue;
   const projected=Math.max(worldBox.max.x-worldBox.min.x,worldBox.max.z-worldBox.min.z);
-  const localBottom=worldBox.min.y/scale;
+  const localBottom=worldBox.min.y/Math.max(.000001,Math.abs(obj.scale.y));
   const contactY=supportHeight(item.type,x,z,projected);
   const embed=item.type==='rock'?
    clamp(desired*.14,.045,.17):
    item.type==='tree'||item.type==='pine'?.035:.018;
   const anchor={obj,x,z,y:contactY,contactY,localBottom,embed,
-   rotation:rot,baseScale:scale,pack:item.pack||'mega',type:item.type,
+   rotation:rot,baseScale:obj.scale.y,fullScale:obj.scale.clone(),baseRx:obj.rotation.x,baseRz:obj.rotation.z,pack:item.pack||'mega',type:item.type,
    phase:randomForest()*Math.PI*2,qualityRank:randomForest(),modelName:item.name};
   snapForestToGround(anchor);
   obj.traverse(o=>{
@@ -1283,7 +1286,7 @@ function updateForestHealth(){
   const j=clamp(Math.round((a.z+L*.5)/dz),0,NZ-1),k=idx(i,j);
   const biomass=clamp(soilPlant[k],.12,1.2),health=clamp(soilHealth[k],0,1);
   const factor=.69+biomass*.30;
-  a.obj.scale.setScalar(a.baseScale*factor);
+  a.obj.scale.copy(a.fullScale).multiplyScalar(factor);
   snapForestToGround(a);
  }
  applyForestVisibility();
@@ -1306,8 +1309,8 @@ function animateForest(dt){
  for(const a of forestInstances){
   if(a.type==='rock')continue;
   const amount=trunkSway*(a.type==='tree'||a.type==='pine'?1:.80);
-  a.obj.rotation.z=amount*Math.sin(t*(.57+actualWind*.12)+a.phase);
-  a.obj.rotation.x=amount*.51*Math.cos(t*(.72+actualWind*.10)+a.phase*1.36);
+  a.obj.rotation.z=a.baseRz+amount*Math.sin(t*(.57+actualWind*.12)+a.phase);
+  a.obj.rotation.x=a.baseRx+amount*.51*Math.cos(t*(.72+actualWind*.10)+a.phase*1.36);
  }
 }
 loadPainterlyForest();
