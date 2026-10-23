@@ -171,12 +171,12 @@ function makeRoad(){
     const edge=new T.MeshStandardMaterial({color:'#4b3729',roughness:1,metalness:0});
     const midX=(left.x+right.x)*.5,midZ=(left.z+right.z)*.5;
     const course=Math.atan2(right.z-left.z,right.x-left.x);
-    const up=Math.max(left.y,right.y)+.09;
-    const beamY=up-.075;
+    const tilt=Math.atan2(right.y-left.y,length);
+    const beamY=(left.y+right.y)*.5+.022;
     // Vigas longitudinais conectam as cabeceiras e suportam todas as tábuas.
     for(const side of [-1,1]){
      const beam=new T.Mesh(new T.BoxGeometry(length+.22,.13,.10),edge);
-     beam.rotation.y=-course;
+     beam.rotation.set(0,-course,tilt);
      const lateral=side*.47;
      beam.position.set(midX-Math.sin(course)*lateral,beamY,midZ+Math.cos(course)*lateral);
      beam.castShadow=true;bridge.add(beam);
@@ -185,8 +185,8 @@ function makeRoad(){
     for(let i=0;i<planks;i++){
      const t=(i+.5)/planks;
      const plank=new T.Mesh(new T.BoxGeometry(length/planks*.92,.075,1.22),wood);
-     plank.rotation.y=-course;
-     plank.position.set(left.x+(right.x-left.x)*t,up,
+     plank.rotation.set(0,-course,tilt);
+     plank.position.set(left.x+(right.x-left.x)*t,left.y+(right.y-left.y)*t+.095,
       left.z+(right.z-left.z)*t);
      plank.castShadow=true;plank.receiveShadow=true;bridge.add(plank);
     }
@@ -198,9 +198,8 @@ function makeRoad(){
      base.castShadow=true;base.receiveShadow=true;bridge.add(base);
      for(const side of [-1,1]){
       const dx=-Math.sin(course)*side*.47,dz=Math.cos(course)*side*.47;
-      const support=new T.Mesh(new T.BoxGeometry(.095,
-       Math.max(.13,up-bank.y+.13),.095),wood);
-      support.position.set(bank.x+dx,(up+bank.y)*.5-.015,bank.z+dz);
+      const support=new T.Mesh(new T.BoxGeometry(.095,.19,.095),wood);
+      support.position.set(bank.x+dx,bank.y+.043,bank.z+dz);
       support.castShadow=true;bridge.add(support);
      }
     }
@@ -402,7 +401,7 @@ function animateLeafFall(dt){
   const kind=leaf.kind,m=leafMeshes[kind],index=counts[kind]++;
   if(index>=m.instanceMatrix.count){counts[kind]--;continue;}
   obj.position.set(leaf.x,leaf.y,leaf.z);
-  obj.rotation.set(leaf.stage==='falling'?leaf.rotX:-Math.PI/2,leaf.turn,
+  obj.rotation.set(leaf.stage==='falling'?leaf.rotX:0,leaf.turn,
    leaf.stage==='falling'?leaf.rotZ:0);
   const size=leaf.scale*(kind===3?.48:1);
   obj.scale.setScalar(size);obj.updateMatrix();m.setMatrixAt(index,obj.matrix);
