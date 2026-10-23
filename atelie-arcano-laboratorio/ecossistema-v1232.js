@@ -744,6 +744,23 @@ async function setup(){
  };
  const colonySelect=$('ecoColonySelect');if(colonySelect)colonySelect.onchange=()=>{updateColonyInspector();drawNestCutaway();};
  const cut=$('ecoBurrows');if(cut)cut.onchange=()=>{drawNestCutaway();nestCutGroup.visible=cut.checked;};
+ const feed=$('ecoFeedColony');if(feed)feed.onclick=()=>{
+  const id=Number($('ecoColonySelect')?.value||0);
+  const c=colonies.find(x=>x.id===id);if(!c)return;
+  // Resíduos orgânicos alimentam microrganismos e as forrageadoras reais.
+  for(let j=-4;j<=4;j++)for(let i=-4;i<=4;i++){
+   const x=clamp(c.x+i*dx,-9.5,9.5),z=clamp(c.z+j*dz,-7.5,7.5);
+   const k=idx(x,z),dist=Math.hypot(i,j);
+   if(dist<1||dist>5||api.depth[k]>.07)continue;
+   api.soilLitter[k]=clamp(api.soilLitter[k]+.035/(1+dist),0,1.8);
+  }
+  status();
+ };
+ const advance=$('ecoAdvance');if(advance)advance.onclick=()=>{
+  for(let d=0;d<30;d++)lifeDay(1);
+  if(nestCutGroup.visible)drawNestCutaway();
+  status();
+ };
  const organic=$('ecoCarcass');if(organic)organic.onclick=()=>{
   addCarcass(4,3,.16);addCarcass(-5,-2,.10);status();
  };
