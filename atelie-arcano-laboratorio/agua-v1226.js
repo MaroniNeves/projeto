@@ -283,6 +283,8 @@ const atmTemp=new Float32Array(ATM_N),atmHumidity=new Float32Array(ATM_N),
 let physicalWeather=true,dayClock=390,atmosAccumulator=0,lastAtmosEvap=0,lastAtmosRain=0;
 let atmRainMean=0,atmRainPeak=0,atmCloudMean=.42,atmHumMean=.70,atmTempMean=23,
  atmPressureMean=1011,atmWindMean=.4,atmWindHeading=0,atmosDayIndex=0;
+// Intensidade de 0 a 100%, preservando o cálculo atmosférico regional.
+let windUserPower=70;
 const atmId=(i,j)=>j*ATM_NX+i,atmX=i=>-W*.5+i*W/(ATM_NX-1),
  atmZ=j=>-L*.5+j*L/(ATM_NZ-1);
 const SEASON_DAYS=24;
@@ -355,20 +357,43 @@ function atmosphereStep(dt){
   const terrainI=clamp(Math.round((x+W*.5)/dx),0,NX-1);
   const terrainJ=clamp(Math.round((z+L*.5)/dz),0,NZ-1);
   const forest=cover[idx(terrainI,terrainJ)];
-  const airTempTarget=15.7+15.2*daySun+3.5*seasonShift()-2.4*forest-1.8*terrain-7.4*front;
-  atmTemp[k]+= (airTempTarget-atmTemp[k])*clamp(dt*.0075,0,.15);
+  // Água esquenta mais lentamente, solo seco aquece o ar e induz ascensão.
+  const kTerrain=idx(terrainI,terrainJ);
+  const wetCell=clamp(depth[kTerrain]/.12+
+    soilMoisture[kTerrain]/Math.max(.001,soilCapacity[kTerrain])*.42,0,1);
+  const heating=Math.max(0,daySun)*Math.max(0,1-forest*.5)*
+    (1-.76*wetCell)*4.8;
+  const airTempTarget=15.7+15.2*daySun+3.5*seasonShift()
+    -2.4*forest-1.8*terrain-7.4*front+heating;
+  atmTemp[k]+=(airTempTarget-atmTemp[k])*clamp(dt*.018,0,.17);
+  const thermalLift=clamp(Math.max(0,airTempTarget-atmTemp[k])*.10,0,1.4);
   const pressureTarget=1013.8+2.1*Math.cos(2*Math.PI*clock)
-        -7.4*front+2.0*Math.sin(z*.39+clock*5.1);
+        -7.4*front+2.0*Math.sin(z*.39+clock*5.1)-thermalLift*2.2;
   atmPressure[k]+=(pressureTarget-atmPressure[k])*clamp(dt*.009,0,.15);
   const left=atmPressure[atmId(Math.max(0,i-1),j)],
    right=atmPressure[atmId(Math.min(ATM_NX-1,i+1),j)],
    up=atmPressure[atmId(i,Math.max(0,j-1))],
    down=atmPressure[atmId(i,Math.min(ATM_NZ-1,j+1))];
-  // Ar acelera dos centros de maior pressão em direção aos de menor pressão.
-  atmWindX[k]=clamp(.29+(left-right)*.12+front*.35+(stormActive()?.75:0),-2.3,2.3);
-  atmWindZ[k]=clamp(.13+(up-down)*.12+(stormActive()?.48:.22)*Math.sin(clock*6.28+z*.19),-2.0,2.0);
+  // Pressão alta -> baixa; contraste térmico aumenta a brisa local.
+  const iL=atmId(Math.max(0,i-1),j),iR=atmId(Math.min(ATM_NX-1,i+1),j);
+  const iU=atmId(i,Math.max(0,j-1)),iD=atmId(i,Math.min(ATM_NZ-1,j+1));
+  const baseX=.18+(left-right)*.14+(atmTemp[iR]-atmTemp[iL])*.11+front*.20;
+  const baseZ=.11+(up-down)*.14+(atmTemp[iD]-atmTemp[iU])*.11+
+    (stormActive()?.33:.09)*Math.sin(clock*6.28+z*.19);
+  // Hemisfério sul: aproximação pedagógica do desvio de Coriolis à esquerda.
+  const coriolis=.085;
+  let advX=baseX-coriolis*baseZ,advZ=baseZ+coriolis*baseX;
   const slopeX=(elevation(x+.32,z)-elevation(x-.32,z))/.64;
   const slopeZ=(elevation(x,z+.32)-elevation(x,z-.32))/.64;
+  const againstSlope=Math.max(0,advX*slopeX+advZ*slopeZ);
+  const shelter=clamp(1-forest*.31-againstSlope*.19,.36,1);
+  const valley=Math.exp(-Math.pow((x-center(z))/2.6,2));
+  advZ+=valley*.08*Math.sign(advZ||1);
+  const gust=clamp(.92+.14*Math.sin(dayClock*.09+x*.30-z*.24)+
+    .11*Math.sin(dayClock*.23+x*.57+z*.31),.65,1.22);
+  const gain=windUserPower/70;
+  atmWindX[k]=clamp(advX*shelter*gust*gain,-2.7,2.7);
+  atmWindZ[k]=clamp(advZ*shelter*gust*gain,-2.7,2.7);
   const uplift=Math.max(0,atmWindX[k]*slopeX+atmWindZ[k]*slopeZ);
   // Umidade disponível cai ao aquecer e sobe com o resfriamento/evaporação.
   const cooling=Math.max(0,21-atmTemp[k])*.00016;
@@ -1388,22 +1413,26 @@ function animateForest(dt){
  const t=visualTime;
  const gust=(Math.sin(t*.83+Math.sin(t*.21)*1.7)+
              .45*Math.sin(t*2.11+.75))*.5;
- const weatherMin=climate==='storm'?1.55:climate==='overcast'?.53:.05;
- const actualWind=Math.max(atmWindMean,weatherMin);
- const strength=clamp(actualWind/2.4,0,1);
+ const weatherMin=climate==='storm'?.7:climate==='overcast'?.25:0;
+ const actualWind=Math.max(atmWindMean,weatherMin*windUserPower/70);
+ const strength=clamp(actualWind/2.4,0,1.2);
  leafWindUniforms.time.value=t;
- leafWindUniforms.power.value=.018+strength*.145;
+ leafWindUniforms.power.value=.006+strength*.13;
  leafWindUniforms.gust.value=gust*strength;
  leafWindUniforms.direction.value.set(Math.cos(atmWindHeading),0,
-  Math.sin(atmWindHeading)).normalize();
- // Copas e folhas são deformadas no shader; troncos pouco se deslocam.
+   Math.sin(atmWindHeading)).normalize();
+ waterM.uniforms.uWind.value=clamp(strength,0,1.2);
+ skyM.uniforms.uWind.value=clamp(strength,0,1.2);
  if(!forestGroup.visible)return;
- const trunkSway=(.002+.014*strength)*(.65+.35*gust);
  for(const a of forestInstances){
   if(a.type==='rock')continue;
-  const amount=trunkSway*(a.type==='tree'||a.type==='pine'?1:.80);
-  a.obj.rotation.z=a.baseRz+amount*Math.sin(t*(.57+actualWind*.12)+a.phase);
-  a.obj.rotation.x=a.baseRx+amount*.51*Math.cos(t*(.72+actualWind*.10)+a.phase*1.36);
+  const wx=fieldAt(atmWindX,a.x,a.z),wz=fieldAt(atmWindZ,a.x,a.z);
+  const localStrength=clamp(Math.hypot(wx,wz)/2.4,0,1.2);
+  const wave=.72+.28*Math.sin(t*(.84+localStrength)+a.phase);
+  const sway=(.002+.024*localStrength)*(.8+.2*gust)*wave;
+  const inv=1/Math.max(.015,Math.hypot(wx,wz));
+  a.obj.rotation.z=a.baseRz+sway*wx*inv;
+  a.obj.rotation.x=a.baseRx-sway*wz*inv;
  }
 }
 loadPainterlyForest();
