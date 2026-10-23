@@ -1406,9 +1406,16 @@ function setGraphicsQuality(next){
 
 function forestStatus(state){
  floraState=state;
+ const treeModels=FOREST_MODELS.filter(a=>a.type==='tree'||a.type==='pine');
+ const loadedSpecies=treeModels.filter(a=>!!forestModels[a.name]).length;
+ const nearRoadSpecies=new Set(forestInstances.filter(a=>
+  (a.type==='tree'||a.type==='pine')&&
+  Math.abs(a.z-(.92-.70*Math.sin(a.x*.47+.6)+.17*Math.sin(a.x*1.34)))<5.4
+ ).map(a=>a.modelName)).size;
  if($('floraStatus'))$('floraStatus').textContent=
-  '🌳 Quaternius Mega '+megaModelsLoaded+'/12 · Ultimate '+ultimateModelsLoaded+'/11 · '+state+
-  ' · solo aquarelado procedural';
+  '🌳 '+loadedSpecies+'/'+treeModels.length+' espécies de árvores carregadas · '+
+  nearRoadSpecies+' espécies perto da estrada · Mega '+megaModelsLoaded+'/12 · Ultimate '+
+  ultimateModelsLoaded+'/11 · '+state;
 }
 function setFloraVisible(v){
  floraWanted=!!v;forestGroup.visible=floraWanted&&floraLoaded>0&&
