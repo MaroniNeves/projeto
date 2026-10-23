@@ -343,14 +343,14 @@ function leafGeometry(){
  geo.computeVertexNormals();return geo;
 }
 function setupLeafVisuals(){
- const geometry=leafGeometry(),palette=[
-  '#598739','#c8ab54','#b96443','#5b7140'
- ];
+ const geometry=window.ARCANO_NATURE_MODELS_V1239?.geometry?.(T,'leaf')||leafGeometry();
+ const needles=leafGeometry();
+ const palette=['#598739','#c8ab54','#b96443','#5b7140'];
  const capacity=mobileDevice?260:520;
  for(let kind=0;kind<4;kind++){
   const material=new T.MeshStandardMaterial({color:'#ffffff',
    roughness:1,metalness:0,side:T.DoubleSide,depthWrite:true});
-  const m=new T.InstancedMesh(geometry,material,capacity);
+  const m=new T.InstancedMesh(kind===3?needles:geometry,material,capacity);
   m.name=['Folhas verdes','Folhas amarelas','Folhas outonais',
    'Agulhas de pinheiro'][kind];
   m.count=0;m.frustumCulled=false;m.castShadow=false;
@@ -446,8 +446,8 @@ function animateLeafFall(dt){
   if(index>=m.instanceMatrix.count){counts[kind]--;continue;}
   obj.position.set(leaf.x,leaf.y,leaf.z);
   obj.rotation.set(leaf.stage==='falling'?leaf.rotX:0,leaf.turn,
-   leaf.stage==='falling'?leaf.rotZ:0);
-  const size=leaf.scale*(kind===3?.48:1);
+   leaf.stage==='falling'?leaf.rotZ:-Math.PI/2);
+  const size=leaf.scale*(kind===3?.45:.16);
   obj.scale.setScalar(size);obj.updateMatrix();m.setMatrixAt(index,obj.matrix);
   const color=new T.Color(palette[kind]);
   if(leaf.stage==='ground'){
