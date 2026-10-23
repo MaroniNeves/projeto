@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Floresta V12.42 · ancoragem, reflexos e vento físico</title>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Floresta V12.43 · ancoragem, reflexos e vento físico</title>
 <style>
 :root{color-scheme:dark;--bg:#101d29;--edge:#45606b;--font:#eaf1ed;--muted:#aabfc7;--accent:#80c0bf}*{box-sizing:border-box}
 body{margin:0;background:#0b131b;color:var(--font);font:14px/1.35 system-ui,Segoe UI,sans-serif;overflow:hidden}
@@ -58,7 +58,7 @@ body.ui-hidden #showControls{display:block}
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script><script defer src="./agua-v1226.js"></script><script defer src="./arcano-assets-v1232.js"></script><script defer src="./nature-imported-v1239.js"></script><script defer src="./ecossistema-v1232.js"></script>
 </head>
 <body><canvas id="stage" aria-label="Cena tridimensional de chuva, poças e lagoas"></canvas>
-<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Floresta V12.42 · solo em camadas · chuva, aquífero e vegetação</strong><small>Grama em tufos originais · pedras texturizadas · solo granular · gotejamento das folhas</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
+<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Floresta V12.43 · solo em camadas · chuva, aquífero e vegetação</strong><small>Grama em tufos originais · pedras texturizadas · solo granular · gotejamento das folhas</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
 <nav class="pills" aria-label="Escolher efeito"><button type="button" data-mode="rain">🌧 Chuva</button><button type="button" data-mode="puddle">💧 Poças</button><button type="button" data-mode="lagoon">🌊 Lagoa</button><button type="button" data-mode="storm">⛈ Temporal</button></nav></header>
 <div class="hint" id="hint">Chuva começa no solo seco. Observe a formação das poças. Pode recolher os controles para ver a cena.</div>
 <button type="button" id="showControls" aria-controls="rainControls" aria-expanded="false">☷ Mostrar ajustes</button>
@@ -87,7 +87,14 @@ body.ui-hidden #showControls{display:block}
   </label>
 </div>
 <details class="hydro-options" id="hydroOptions">
- <summary>⚙️ Gráficos, coleção de floresta, vento, neblina e solo</summary>
+ <summary>⚙️ Gráficos, campo de visão, biomas, vento, neblina e solo</summary>
+ <div class="wind-editor" style="padding:10px;margin:8px 0;background:#162b32;border:1px solid #506b6a;border-radius:9px">
+  <label for="ecoFov" style="display:flex;justify-content:space-between;gap:10px">📐 Campo de visão (FOV) <strong id="ecoFovVal">52°</strong></label>
+  <input id="ecoFov" type="range" min="35" max="75" step="1" value="52" style="width:100%;accent-color:#91ceb0">
+  <label for="ecoViewDistance" style="display:flex;justify-content:space-between;gap:10px;margin-top:8px">🌄 Distância de renderização <strong id="ecoViewDistanceVal">98 u</strong></label>
+  <input id="ecoViewDistance" type="range" min="55" max="240" step="5" value="98" style="width:100%;accent-color:#91ceb0">
+  <small style="display:block;color:#aec8c5;font-size:11px;line-height:1.45">FOV menor enquadra menos elementos; reduzir a distância visível também corta geometria distante e ajuda o celular. A floresta termina gradualmente em campo aberto, com árvores esparsas.</small>
+ </div>
   <div class="hydro-flags">
     <label for="physicalWeather"><input id="physicalWeather" type="checkbox" checked> Chuva gerada por temperatura, umidade, pressão e vento (por regiões)</label>
   </div>
@@ -138,7 +145,7 @@ body.ui-hidden #showControls{display:block}
     <label for="fogToggle"><input id="fogToggle" type="checkbox" checked> Neblina física apenas sob condições de formação (não nas tempestades)</label>
  </div>
  <details id="ecoPanel" class="ecology-panel" style="padding:10px;margin:8px 0;border:1px solid #4c706c;border-radius:10px;background:#12272c">
- <summary style="font-weight:600;cursor:pointer">🌿 V12.42 · Rio, estrada, gramado e vida do solo</summary>
+ <summary style="font-weight:600;cursor:pointer">🌿 V12.43 · Rio, estrada, gramado e vida do solo</summary>
  <p style="font-size:11px;color:#abc9bd;line-height:1.5">
   Mapa ampliado para 128 × 100 unidades (10× a área de 40 × 32), com floresta volumosa à beira da estrada, grama Quaternius alta e baixa com tufos mais juntos e sem alinhamento e terra batida permanente, sem crescimento de grama, permanentemente livre de plantas. Pedrinhas, minerais e gravetos completam o chão. A qualidade Alta amplia a quantidade e a Econômica reduz. O solo fica verde sob o gramado, e a estrada de terra compactada atravessa a clareira central. Ponte de madeira nivelada conecta as duas margens elevadas do rio.
   As colônias procuram alimento conforme o vigor das plantas e os resíduos no solo; os animais permanecem minúsculos em escala natural.
