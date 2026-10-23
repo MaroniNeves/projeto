@@ -1755,9 +1755,10 @@ async function setup(){
   realm.visible=e.target.checked;
   window.arcanoEcoV1232.active=e.target.checked;
   api.stones.visible=!e.target.checked;
-  if(api.grass)api.grass.visible=!e.target.checked&&!api.forestGroup.visible;
+  // Desativar a ecologia não ressuscita os cones triangulares antigos.
+  if(api.grass){api.grass.visible=false;api.grass.count=0;}
  };
- const original=api.grass;if(original)original.visible=false;
+ const original=api.grass;if(original){original.visible=false;original.count=0;}
  for(const obj of targetNativeGrass)obj.obj.visible=false;
  window.arcanoEcoV1232={active:true,cover,traffic,roadMask,animalTrail,riverMask,nestBareMask,colonies,worms,
   registerAnimalFootfall,movementCost,largeAnimals,
