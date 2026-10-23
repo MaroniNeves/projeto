@@ -1001,6 +1001,47 @@ function hideDetachedAntModels(){
   if(!insideEcology)obj.visible=false;
  });
 }
+let compactAntMesh=null;
+function compactAntGeometry(){
+ if(compactAntMesh)return compactAntMesh;
+ const bodies=[
+  {x:-.43,r:.32},{x:.07,r:.23},{x:.43,r:.22}
+ ];
+ const vertices=[],indices=[];
+ const sphere=new T.SphereGeometry(1,7,5);
+ const pos=sphere.getAttribute('position');
+ const face=sphere.getIndex();
+ for(const b of bodies){
+  const offset=vertices.length/3;
+  for(let i=0;i<pos.count;i++){
+   vertices.push(pos.getX(i)*b.r+b.x,
+    pos.getY(i)*b.r*.75+.28,pos.getZ(i)*b.r*.75);
+  }
+  for(let j=0;j<face.count;j++)indices.push(offset+face.getX(j));
+ }
+ const limb=(ax,ay,az,bx,by,bz,r=.022)=>{
+  const a=new T.Vector3(ax,ay,az),b=new T.Vector3(bx,by,bz);
+  const d=b.clone().sub(a),length=d.length();
+  const g=new T.CylinderGeometry(r,r*.8,length,4);
+  g.rotateZ(Math.PI/2);g.translate(length/2,0,0);
+  const q=new T.Quaternion().setFromUnitVectors(new T.Vector3(1,0,0),d.normalize());
+  g.applyQuaternion(q);g.translate(...a.toArray());
+  const gp=g.getAttribute('position'),ix=g.getIndex(),base=vertices.length/3;
+  for(let i=0;i<gp.count;i++)vertices.push(gp.getX(i),gp.getY(i),gp.getZ(i));
+  for(let i=0;i<ix.count;i++)indices.push(base+ix.getX(i));
+  g.dispose();
+ };
+ for(const x of [-.3,0,.28])for(const sign of [-1,1]){
+  limb(x,.3,sign*.10,x+.08,.12,sign*.45);
+  limb(x+.08,.12,sign*.45,x+.14,.015,sign*.58);
+ }
+ for(const sign of [-1,1])limb(.49,.44,sign*.07,.68,.65,sign*.28,.016);
+ sphere.dispose();
+ const g=new T.BufferGeometry();
+ g.setAttribute('position',new T.Float32BufferAttribute(vertices,3));
+ g.setIndex(indices);g.computeVertexNormals();g.computeBoundingSphere();
+ compactAntMesh=g;return g;
+}
 function visualizeAnimals(){
  for(const child of [...animals.children]){
   animals.remove(child);
@@ -1010,7 +1051,10 @@ function visualizeAnimals(){
  antDraws.length=0;wormDraws.length=0;
  const variants=['ant1','ant2','ant3','antRed','ant4','ant5'];
  for(const c of colonies){
-  const geo=antGeometry(variants[c.id%6]);if(!geo)continue;
+  // Malhas OBJ antigas tinham transformações e eixos inconsistentes.
+  // Um modelo minúsculo procedural elimina definitivamente a formiga
+  // gigante e mantém colônias completas sem mutação de asset global.
+  const geo=compactAntGeometry();if(!geo)continue;
   const max=mobileDevice?10:18;
   const mesh=new T.InstancedMesh(geo,new T.MeshStandardMaterial({
    color:c.id%2?'#a3533b':'#49332b',roughness:1,metalness:0,side:T.DoubleSide}),max);
