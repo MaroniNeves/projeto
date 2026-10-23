@@ -935,6 +935,12 @@ let graphicsQuality=mobile?'balanced':'high';
 try{const saved=localStorage.getItem('arcano.graphicsQuality');if(QUALITY_PRESETS[saved])graphicsQuality=saved;}catch(_){}
 const fullMeadowCount=meadowMesh.count;
 const originalDetailMaps=new Map(),originalDetailLoading=new Set(),qualityMaterials=new Set();
+const originalDetailFailures=new Set(),originalDetailQueue=[];
+let originalDetailBusy=false;
+const arcanoBarkResolution=()=>graphicsQuality==='high'?2048:
+ graphicsQuality==='balanced'?1024:0;
+const arcanoBarkKey=(name,res)=>name+'@'+res;
+
 const originalTextureFiles={
  BirchTree_1:'BirchTree_Bark.png',BirchTree_3:'BirchTree_Bark.png',
  MapleTree_3:'MapleTree_Bark.png',NormalTree_2:'NormalTree_Bark.png',
@@ -1039,39 +1045,75 @@ function registerForestMaterial(item,root){
   }
  });
 }
+// Os mapas de casca oficiais são grandes. Download serializado para Android,
+// depois reduzidos no canvas: Equilibrada=1024, Alta=2048, Econômica=reserva leve.
+function arcanoNextBark(){
+ if(originalDetailBusy||!originalDetailQueue.length)return;
+ const job=originalDetailQueue.shift();
+ const filename=job.filename,key=job.key,res=job.res;
+ if(originalDetailMaps.has(key)||originalDetailFailures.has(key)){
+  originalDetailLoading.delete(key);arcanoNextBark();return;
+ }
+ originalDetailBusy=true;
+ const image=new Image();
+ image.crossOrigin='anonymous';image.decoding='async';
+ function finished(error){
+  originalDetailBusy=false;originalDetailLoading.delete(key);
+  if(error){
+   originalDetailFailures.add(key);originalsUnavailable++;
+   console.warn('[Arcano] Textura oficial indisponível:',filename,error);
+  }
+  updateGraphicsStatus();arcanoNextBark();
+ }
+ image.onload=()=>{
+  try{
+   const iw=image.naturalWidth,ih=image.naturalHeight;
+   if(!iw||!ih)throw new Error('Imagem original inválida');
+   const factor=Math.min(1,res/Math.max(iw,ih));
+   const w=Math.max(1,Math.round(iw*factor)),
+         h=Math.max(1,Math.round(ih*factor));
+   const canvas=document.createElement('canvas');
+   canvas.width=w;canvas.height=h;
+   const ctx=canvas.getContext('2d');
+   if(!ctx)throw new Error('Canvas indisponível');
+   ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+   ctx.drawImage(image,0,0,w,h);
+   const texture=new T.CanvasTexture(canvas);
+   texture.colorSpace=T.SRGBColorSpace;
+   texture.wrapS=texture.wrapT=T.RepeatWrapping;
+   texture.minFilter=T.LinearMipmapLinearFilter;
+   texture.magFilter=T.LinearFilter;
+   texture.anisotropy=QUALITY_PRESETS[graphicsQuality].anisotropy;
+   texture.generateMipmaps=true;texture.needsUpdate=true;
+   originalDetailMaps.set(key,texture);originalsReady++;
+   applyQualityMaterials();finished(null);
+  }catch(error){finished(error);}
+ };
+ image.onerror=()=>finished(new Error('Falha de rede ou bloqueio da imagem'));
+ image.src=originalTextureBase+encodeURIComponent(filename);
+}
 function useOriginalTexture(filename){
- if(originalDetailMaps.has(filename))return;
- if(originalDetailLoading.has(filename))return;
- originalDetailLoading.add(filename);
- const url=originalTextureBase+encodeURIComponent(filename);
- const loader=new T.TextureLoader();
- loader.load(url,texture=>{
-  originalDetailLoading.delete(filename);originalDetailMaps.set(filename,texture);
-  originalsReady++;
-  texture.colorSpace=T.SRGBColorSpace;
-  texture.anisotropy=QUALITY_PRESETS[graphicsQuality].anisotropy;
-  texture.minFilter=T.LinearMipmapLinearFilter;texture.magFilter=T.LinearFilter;
-  texture.needsUpdate=true;
-  if(graphicsQuality==='high')applyQualityMaterials();
-  updateGraphicsStatus();
- },undefined,err=>{
-  originalDetailLoading.delete(filename);originalsUnavailable++;
-  // Mantém a textura painterly local se a rede bloquear os arquivos opcionais.
-  console.warn('[Arcano V12.26] Textura original opcional indisponível',filename,err);
-  updateGraphicsStatus();
- });
+ const res=arcanoBarkResolution();
+ if(!res)return;
+ const key=arcanoBarkKey(filename,res);
+ if(originalDetailMaps.has(key)||originalDetailLoading.has(key)||
+    originalDetailFailures.has(key))return;
+ originalDetailLoading.add(key);
+ originalDetailQueue.push({filename,key,res});
+ arcanoNextBark();
 }
 function applyQualityMaterials(){
- const high=graphicsQuality==='high';
- for(const mat of qualityMaterials){
-  const original=mat.userData.arcanoOriginalTextureFile;
-  const fallback=mat.userData.arcanoFallbackMap;
-  const texture=high&&originalDetailMaps.has(original)?
-    originalDetailMaps.get(original):fallback;
-  if(mat.map!==texture){mat.map=texture;mat.needsUpdate=true;}
-  if(high&&original&&!originalDetailMaps.has(original))useOriginalTexture(original);
+ const res=arcanoBarkResolution();
+ for(const material of qualityMaterials){
+  const original=material.userData.arcanoOriginalTextureFile;
+  const fallback=material.userData.arcanoFallbackMap;
+  const key=arcanoBarkKey(original,res);
+  const texture=res&&originalDetailMaps.has(key)?
+    originalDetailMaps.get(key):fallback;
+  if(material.map!==texture){material.map=texture;material.needsUpdate=true;}
+  if(res&&original&&!originalDetailMaps.has(key))useOriginalTexture(original);
  }
- // Mantém sempre os PNGs de folhas e flores na resolução original.
+ // As folhas ficam com os mapas de cor originais, sem reduzir a resolução.
  const seenTextures=new Set();
  for(const model of Object.values(forestModels))model.traverse(obj=>{
   if(!obj.isMesh)return;
