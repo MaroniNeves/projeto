@@ -248,6 +248,7 @@ body.play-active #gameHUD #gameRun{min-width:85px;height:70px;background:#4d4937
  <label for="rainStyle" class="rain-appearance">Gotas de chuva
    <select id="rainStyle"><option value="enhanced" selected>Destacadas + respingos</option><option value="natural">Mais discretas</option></select>
  </label>
+<p style="font:11px system-ui;color:#b3c8bd">Modo Jogar: manequim Xbot do Three.js, animações Idle/Walk/Run. O arquivo é carregado sob demanda; há modelo simplificado offline. O botão Jogar oculta os controles do laboratório, com direcional no celular e WASD no teclado.</p>
 </details>
 <div class="hydro-metrics" aria-live="off">
   <div id="dayCycleStats">☀ Dia 1 · 06:30 · 1 dia = 24 min reais</div>
@@ -281,7 +282,7 @@ body.play-active #gameHUD #gameRun{min-width:85px;height:70px;background:#4d4937
  }
  hide.addEventListener('click',()=>setHidden(true));
  show.addEventListener('click',()=>setHidden(false));
- window.addEventListener('keydown',e=>{if(e.key==='Escape')setHidden(true);});
+ window.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.body.classList.contains('play-active'))setHidden(true);});
 })();
 </script>
 </body></html>
