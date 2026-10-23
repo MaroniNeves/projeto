@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.24 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.25 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.24]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.25]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -812,16 +812,30 @@ updateSprouts();
 // copiadas e hospedadas no próprio repositório. A textura de chão é original.
 // Falhas de GPU, WebGL, rede ou GLTFLoader mantêm as mudas antigas como fallback.
 const forestGroup=new T.Group();forestGroup.name='Floresta Quaternius CC0 — painterly';scene.add(forestGroup);
-const forestInstances=[],forestModels={};let floraWanted=true,floraLoaded=0,floraState='Preparando';
+const forestInstances=[],forestModels={};let floraWanted=true,floraLoaded=0,floraState='Preparando',forestCollection='mixed';
+let ultimateModelsLoaded=0,megaModelsLoaded=0;
 const FOREST_MODELS=[
- {name:'CommonTree_1',type:'tree',mobile:5,desktop:9,height:4.4},
- {name:'CommonTree_2',type:'tree',mobile:3,desktop:7,height:4.0},
- {name:'Pine_2',type:'pine',mobile:2,desktop:4,height:4.7},
- {name:'Bush_Common_Flowers',type:'bush',mobile:8,desktop:17,height:.95},
- {name:'Flower_3_Group',type:'flower',mobile:13,desktop:33,height:.47},
- {name:'Grass_Common_Short',type:'grass',mobile:14,desktop:35,height:.29},
- {name:'Fern_1',type:'fern',mobile:5,desktop:12,height:.61},
- {name:'Rock_Medium_2',type:'rock',mobile:5,desktop:8,height:.70}
+ {name:'CommonTree_1',type:'tree',pack:'mega',mobile:4,desktop:8,height:4.4},
+ {name:'CommonTree_2',type:'tree',pack:'mega',mobile:3,desktop:5,height:4.0},
+ {name:'Pine_2',type:'pine',pack:'mega',mobile:2,desktop:3,height:4.7},
+ {name:'Bush_Common_Flowers',type:'bush',pack:'mega',mobile:5,desktop:13,height:.95},
+ {name:'Flower_3_Group',type:'flower',pack:'mega',mobile:8,desktop:23,height:.47},
+ {name:'Grass_Common_Short',type:'grass',pack:'mega',mobile:10,desktop:25,height:.29},
+ {name:'Fern_1',type:'fern',pack:'mega',mobile:5,desktop:11,height:.61},
+ {name:'Rock_Medium_2',type:'rock',pack:'mega',mobile:5,desktop:8,height:.70},
+ // Quaternius Ultimate: mesmos modelos do pacote agrupado enviado pelo usuário,
+ // extraídos como malhas FBX individuais para controlar densidade/performance.
+ {name:'BirchTree_1',type:'tree',pack:'ultimate',mobile:2,desktop:5,height:4.9},
+ {name:'BirchTree_3',type:'tree',pack:'ultimate',mobile:1,desktop:3,height:4.5},
+ {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:2,desktop:5,height:4.4},
+ {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:2,desktop:4,height:4.8},
+ {name:'PineTree_2',type:'pine',pack:'ultimate',mobile:1,desktop:3,height:5.0},
+ {name:'Bush_Large_Flowers',type:'bush',pack:'ultimate',mobile:5,desktop:11,height:1.10},
+ {name:'Flower_1_Clump',type:'flower',pack:'ultimate',mobile:9,desktop:20,height:.46},
+ {name:'Plant_Flowers',type:'flower',pack:'ultimate',mobile:6,desktop:14,height:.51},
+ {name:'Grass_Large_Extruded',type:'grass',pack:'ultimate',mobile:8,desktop:20,height:.35},
+ {name:'Rock_3',type:'rock',pack:'ultimate',mobile:3,desktop:7,height:.83},
+ {name:'Rock_5',type:'rock',pack:'ultimate',mobile:3,desktop:6,height:.62}
 ];
 // Gramado fino instanciado: 2 lâminas cruzadas por tufo, com degradê de cor.
 function makeMeadowBlade(){
@@ -882,7 +896,7 @@ function updateMeadowHealth(){
 function forestStatus(state){
  floraState=state;
  if($('floraStatus'))$('floraStatus').textContent=
-  '🌳 Modelos Quaternius: '+floraLoaded+'/8 · '+state+
+  '🌳 Quaternius Mega '+megaModelsLoaded+'/8 · Ultimate '+ultimateModelsLoaded+'/11 · '+state+
   ' · solo aquarelado procedural';
 }
 function setFloraVisible(v){
@@ -901,7 +915,10 @@ function addLeafWind(mesh){
  if(!mesh.isMesh)return;
  const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];
  for(const mat of materials){
-  if(!mat||!/(leaf|leaves|grass|flower|fern|plant)/i.test(mat.name||''))continue;
+  if(!mat)continue;
+  const materialName=(mat.name||'')+' '+(mesh.name||'')+' '+(mat.map?.name||'');
+  if(!/(leaf|leaves|grass|flower|fern|plant|bush|foliage|canopy)/i.test(materialName)||
+      /(bark|trunk|rock|stone|stem)/i.test(materialName))continue;
   if(mat.userData.arcanoWindReady)continue;
   const geo=mesh.geometry;
   if(!geo.boundingBox)geo.computeBoundingBox();
@@ -983,33 +1000,110 @@ function placeForestModel(item,root){
    if(mat){mat.side=T.DoubleSide;mat.roughness=.92;mat.metalness=0;}
   });
   forestGroup.add(obj);
-  forestInstances.push({obj,x,z,y,rotation:rot,baseScale:scale,type:item.type,
+  forestInstances.push({obj,x,z,y,rotation:rot,baseScale:scale,pack:item.pack||'mega',type:item.type,
    phase:randomForest()*Math.PI*2});
   created++;
  }
 }
+// Texturas de troncos, cascas e rochas são pintadas procedurais compactas.
+// O Ultimate original usa mapas de casca muito pesados (até ~23MB cada),
+// evitados aqui para manter o navegador Android responsivo.
+function materialCanvas(base,accent){
+ const c=document.createElement('canvas');c.width=c.height=128;
+ const ctx=c.getContext('2d'),rng=rand(base=== '#79624b'?3916:4721);
+ ctx.fillStyle=base;ctx.fillRect(0,0,128,128);
+ for(let i=0;i<160;i++){
+  const x=rng()*128,y=rng()*128;
+  ctx.globalAlpha=.045+rng()*.18;
+  ctx.strokeStyle=accent;ctx.lineWidth=.6+rng()*3.5;
+  ctx.beginPath();ctx.moveTo(x,y);
+  if(base==='#79624b')ctx.lineTo(x+(rng()-.5)*4,y+4+rng()*33);
+  else ctx.lineTo(x+1+rng()*16,y+2+rng()*4);
+  ctx.stroke();
+ }
+ ctx.globalAlpha=1;return c.toDataURL('image/png');
+}
+function modelTextureManager(Module){
+ const manager=new Module.LoadingManager();
+ const bark=materialCanvas('#79624b','#b19a78');
+ const stone=materialCanvas('#898e83','#bdc4b5');
+ const textures={
+  birchtree_leaves:'BirchTree_Leaves.png',
+  mapletree_leaves:'MapleTree_Leaves.png',
+  normaltree_leaves:'NormalTree_Leaves.png',
+  pinetree_leaves:'PineTree_Leaves.png',
+  bush_leaves:'Bush_Leaves.png',
+  flowers:'Flowers.png',grass:'Grass.png'
+ };
+ manager.setURLModifier(url=>{
+  const file=decodeURIComponent(url.split('?')[0]).replace(/\\/g,'/').split('/').pop()||'';
+  const key=file.replace(/\.(png|jpg|jpeg|tga|bmp)$/i,'').toLowerCase();
+  if(/(bark|trunk|wood|rock|stone)/.test(key))return /(rock|stone)/.test(key)?stone:bark;
+  const filename=textures[key];
+  if(filename)return new URL('./assets/ultimate/'+filename,document.baseURI).href;
+  return url;
+ });
+ return manager;
+}
+function setForestCollection(value){
+ forestCollection=['mixed','mega','ultimate'].includes(value)?value:'mixed';
+ for(const a of forestInstances){
+  const allowed=forestCollection==='mixed'||a.pack===forestCollection;
+  if(a.type==='rock'||a.type==='tree'||a.type==='pine')a.obj.visible=allowed;
+  else{
+   const k=idx(clamp(Math.round((a.x+W*.5)/dx),0,NX-1),
+    clamp(Math.round((a.z+L*.5)/dz),0,NZ-1));
+   a.obj.visible=allowed&&soilHealth[k]>.1;
+  }
+ }
+ if($('forestPack'))$('forestPack').value=forestCollection;
+ if(typeof reflectionAge!=='undefined')reflectionAge=999;
+ forestStatus('visual '+(forestCollection==='mixed'?'combinado':forestCollection));
+}
 async function loadPainterlyForest(){
  if($('floraToggle'))$('floraToggle').checked=true;
  try{
+  const Module=await import('https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js');
   const api=await import('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js');
   const loader=new api.GLTFLoader();
+  let fbxLoader=null;
+  try{
+   const fb=await import('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/FBXLoader.js');
+   fbxLoader=new fb.FBXLoader(modelTextureManager(Module));
+  }catch(err){
+   console.warn('[Arcano] FBXLoader indisponível. MegaKit continua ativo:',err);
+  }
   let ok=0;
   for(const item of FOREST_MODELS){
+   if(!floraWanted&&mobile)break; // usuário pode desistir no celular
    try{
-    const doc=await loader.loadAsync('./assets/quaternius/'+item.name+'.gltf');
-    forestModels[item.name]=doc.scene;
-    placeForestModel(item,doc.scene);ok++;floraLoaded=ok;
-    forestStatus('carregando flora '+ok+'/8');
-   }catch(err){console.warn('[Arcano] Modelo não carregado',item.name,err);}
+    let model;
+    if(item.pack==='ultimate'){
+     if(!fbxLoader)continue;
+     model=await fbxLoader.loadAsync('./assets/ultimate/'+item.name+'.fbx');
+    }else{
+     const doc=await loader.loadAsync('./assets/quaternius/'+item.name+'.gltf');
+     model=doc.scene;
+    }
+    forestModels[item.name]=model;
+    placeForestModel(item,model);
+    ok++;floraLoaded=ok;
+    if(item.pack==='ultimate')ultimateModelsLoaded++;else megaModelsLoaded++;
+    forestStatus('carregando '+ok+'/'+FOREST_MODELS.length);
+   }catch(err){console.warn('[Arcano] Modelo indisponível:',item.name,err);}
+   // Cede processamento ao navegador para a interface continuar acessível.
+   if(ok%3===0)await new Promise(resolve=>requestAnimationFrame(resolve));
   }
-  if(ok===0)throw new Error('Nenhum modelo glTF carregou');
+  if(ok===0)throw new Error('Nenhum modelo de vegetação foi carregado');
   setFloraVisible(floraWanted);
+  setForestCollection(forestCollection);
   updateForestHealth();
-  forestStatus('floresta 3D carregada');
+  if(typeof reflectionAge!=='undefined')reflectionAge=999;
+  forestStatus('floresta carregada ('+forestInstances.length+' objetos)');
  }catch(err){
-  console.warn('[Arcano] Mantendo vegetação original; importação glTF indisponível:',err);
+  console.warn('[Arcano] Usando a vegetação original:',err);
   forestGroup.visible=false;grass.visible=true;sproutGroup.visible=true;
-  floraWanted=false;forestStatus('fallback: vegetação original');
+  floraWanted=false;forestStatus('fallback: vegetação clássica');
  }
 }
 function updateForestHealth(){
@@ -1021,7 +1115,7 @@ function updateForestHealth(){
   const biomass=clamp(soilPlant[k],.12,1.2),health=clamp(soilHealth[k],0,1);
   const factor=.69+biomass*.30;
   a.obj.scale.setScalar(a.baseScale*factor);
-  a.obj.visible=health>.10;
+  a.obj.visible=health>.10&&(forestCollection==='mixed'||forestCollection===a.pack);
  }
 }
 function animateForest(dt){
@@ -1627,6 +1721,7 @@ $('physicalWeather').addEventListener('change',e=>{
 });
 $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo(true);});
 $('floraToggle').addEventListener('change',e=>setFloraVisible(e.target.checked));
+$('forestPack').addEventListener('change',e=>setForestCollection(e.target.value));
 $('fogToggle').addEventListener('change',e=>{
  fogEnabled=e.target.checked;
  if(!fogEnabled)fogStrength=fogTarget=0;
@@ -1763,7 +1858,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1224'))fail(e.error||e.message);});
-window.arcanoWaterV1224={scene,renderer,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1225'))fail(e.error||e.message);});
+window.arcanoWaterV1225={scene,renderer,setForestCollection,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
