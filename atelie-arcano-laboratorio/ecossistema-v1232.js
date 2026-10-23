@@ -69,7 +69,8 @@ function height(x,z){
  return A*(1-a)*(1-b)+B*a*(1-b)+C*(1-a)*b+D*a*b;
 }
 const mobileDevice=innerWidth<680;
-const grassBudgets=mobileDevice?{high:150000,balanced:115000,low:35000}:{high:240000,balanced:175000,low:54000};
+// Orçamento alto igual no modo Equilibrado: vegetação fechada por TODO o mapa.
+const grassBudgets=mobileDevice?{high:1150000,balanced:1150000,low:470000}:{high:1500000,balanced:1500000,low:620000};
 let grassDrawn=0,lastGrassQuality='';
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
@@ -331,95 +332,116 @@ function initializeLandscape(){
 // Um só renderizador aplica verde, barro e chuva a cada quadro.
 // Uma segunda escrita periódica causava a piscada observada no Android.
 function terrainTint(){/* delegated to main rebuild() */}
-function grassShape(){
+async function grassShape(){
+ // V12.50: aplica a DENSIDADE VISUAL da V12.42 em todo solo verde.
+ // A V12.42 punha 89% dos tufos somente num corredor ~12m de largura.
+ // Agora há pontos regulares apenas como estratificação subjacente; cada
+ // posição sofre deslocamento aleatório completo, e os altos formam pares
+ // V12.42 (68% de chance). Grama, rio, estrada e ninhos permanecem reais.
  const names=['grassShort1','grassMixed1','grassTall1','grassMixed2'];
- const budget=grassBudgets.high;
- const meshes=new Map(),dummies=new Map();
+ const materials=new Map(),obj=new T.Object3D();
  for(const name of names){
   const kind=name.startsWith('grassMixed')?'grassMixed':
    name==='grassTall1'?'grassTall':'grassShort';
-  const geo=meshLibrary[name];if(!geo)continue;
-  const mesh=new T.InstancedMesh(geo,material(kind),budget);
-  mesh.frustumCulled=false;mesh.castShadow=false;mesh.receiveShadow=true;
-  mesh.userData.planted=0;mesh.count=0;
-  mesh.name='Grama volumosa irregular Quaternius · '+name;
-  meshes.set(name,mesh);dummies.set(name,new T.Object3D());foliage.add(mesh);
+  if(meshLibrary[name])materials.set(name,material(kind));
  }
- if(!meshes.size)return;
- // Aproximar moitas do trajeto visível: a expansão 10x havia espalhado
- // a mesma grama por 12.800 m², deixando espaços enormes na cena.
- // Dois terços de tufos volumosos; o restante cobre os intervalos em camada baixa.
- const lowBudget=Math.floor(budget*.37),highBudget=budget-lowBudget;
- let planted=0;
- function plant(name,x,z,k,multiplier=1){
-  const mesh=meshes.get(name),dummy=dummies.get(name);
-  if(!mesh||planted>=budget||mesh.userData.planted>=budget)return false;
-  if(fixedRoadMask[k]>.055||nestBareMask[idx(x,z)]>20||Math.abs(z-roadZ(x))<1.11||riverMask[k]>.74||
-     api.depth[k]>.068||cover[k]<.11)return false;
-  const scale=(name==='grassShort1'?.43:name==='grassTall1'?.72:.63)*
-   (.73+random()*.58)*multiplier;
-  dummy.position.set(x,height(x,z)-.018,z);
-  dummy.rotation.set((random()-.5)*.08,random()*Math.PI*2,(random()-.5)*.08);
-  dummy.scale.set(scale*(.74+random()*.50),scale*(.93+random()*.38),
-   scale*(.78+random()*.44));
-  dummy.updateMatrix();
-  const index=mesh.userData.planted++;
-  mesh.setMatrixAt(index,dummy.matrix);
-  grassPatches.push({x,z,k,mesh,index,matrix:dummy.matrix.clone(),lastScale:NaN});
-  planted++;return true;
- }
- // Amostragem sem grade. Cerca de 78% dos tufos crescem nas faixas verdes
- // ao redor da estrada e nas clareiras próximas, para a câmera no celular
- // mostrar uma MATA FECHADA. O restante povoa a área expandida.
- function site(favorTrail){
-  const x=(random()-.5)*W*.96;
-  let z;
-  if(favorTrail){
-   const side=random()<.5?-1:1;
-   z=roadZ(x)+side*(1.17+Math.pow(random(),1.40)*6.2);
-   z+=(random()-.5)*.21;
-  }else z=(random()-.5)*L*.96;
-  if(Math.abs(z)>L*.48)return null;
+ if(!materials.size)return;
+ const step=mobileDevice?.140:.125,chunkSize=10;
+ const nxChunk=Math.ceil(W/chunkSize),nzChunk=Math.ceil(L/chunkSize);
+ let planted=0,available=0,nearRoad=0,farRoad=0,chunkCount=0;
+ const matColor=new T.Color();
+ function suitable(x,z){
+  if(Math.abs(x)>W*.49||Math.abs(z)>L*.49)return -1;
   const k=idx(x,z);
-  if(fixedRoadMask[k]>.055||nestBareMask[k]>20||riverMask[k]>.76||
-     api.depth[k]>.068||Math.abs(z-roadZ(x))<1.11)return null;
-  const growth=clamp(cover[k]*(1-traffic[k])*
-   (.55+.45*clamp(api.soilPlant[k],0,1)),0,1);
-  if(growth<.13)return null;
-  return {x,z,k,growth};
+  if(fixedRoadMask[k]>.045||Math.abs(z-roadZ(x))<1.11||
+    nestBareMask[k]>20||riverMask[k]>.74||api.depth[k]>.068||
+    cover[k]<.105)return -1;
+  return k;
  }
- function scatterTall(p){
-  const kind=random();
-  const name=kind<.45?'grassTall1':kind<.82?'grassMixed1':'grassMixed2';
-  return plant(name,p.x+(random()-.5)*.17,
-   p.z+(random()-.5)*.28,p.k,1.04+p.growth*.30);
- }
- function pass(target,tall){
-  let attempts=0,added=0;
-  while(added<target&&attempts<target*7){
-   attempts++;
-   const p=site(random()<.89);
-   if(!p||random()>clamp(.46+p.growth*.50,.25,.97))continue;
-   const ok=tall?scatterTall(p):
-    plant(random()<.16?'grassMixed1':'grassShort1',p.x,p.z,p.k,
-      .88+p.growth*.26);
-   if(!ok)continue;
-   added++;
-   // Pares e trios próximos quebram o espaçamento artificial sem adicionar
-   // geometria gerada; usam apenas as gramíneas reais do pacote.
-   if(tall&&added<target&&random()<.68){
-    const p2={...p,x:p.x+(random()-.5)*.42,z:p.z+(random()-.5)*.42};
-    if(scatterTall(p2))added++;
+ for(let cz=0;cz<nzChunk;cz++)for(let cx=0;cx<nxChunk;cx++){
+  const minX=-W*.48+cx*chunkSize,maxX=Math.min(W*.48,minX+chunkSize);
+  const minZ=-L*.48+cz*chunkSize,maxZ=Math.min(L*.48,minZ+chunkSize);
+  if(maxX<=minX||maxZ<=minZ)continue;
+  const cols=Math.ceil((maxX-minX)/step),rows=Math.ceil((maxZ-minZ)/step);
+  const groups=new Map(names.map(name=>[name,[]]));
+  function plant(name,x,z,multiplier=1){
+   const geo=meshLibrary[name],out=groups.get(name);
+   if(!geo||planted>=grassBudgets.high)return false;
+   const k=suitable(x,z);if(k<0)return false;
+   const growth=clamp(cover[k]*(1-traffic[k])*
+     (.55+.45*clamp(api.soilPlant[k],0,1)),0,1);
+   if(growth<.10)return false;
+   const scale=(name==='grassShort1'?.43:name==='grassTall1'?.72:.63)*
+     (.73+random()*.58)*multiplier;
+   obj.position.set(x,height(x,z)-.018,z);
+   obj.rotation.set((random()-.5)*.08,random()*Math.PI*2,(random()-.5)*.08);
+   obj.scale.set(scale*(.74+random()*.50),scale*(.93+random()*.38),
+     scale*(.78+random()*.44));
+   obj.updateMatrix();
+   const color=api.biomeField?.(x,z)||0;
+   out.push({matrix:obj.matrix.clone(),k,biome:color});
+   planted++;
+   if(Math.abs(z-roadZ(x))<7.5)nearRoad++;else farRoad++;
+   return true;
+  }
+  // Espalhamento equilibrado: mesmo espaçamento estatístico de touceiras
+  // em clareiras, no fundo da floresta, junto a árvores e ao lado da pista.
+  for(let iz=0;iz<rows;iz++)for(let ix=0;ix<cols;ix++){
+   const x=minX+(ix+random())/cols*(maxX-minX);
+   const z=minZ+(iz+random())/rows*(maxZ-minZ);
+   const k=suitable(x,z);if(k<0)continue;
+   available++;
+   const growth=clamp(cover[k]*(1-traffic[k])*
+     (.55+.45*clamp(api.soilPlant[k],0,1)),0,1);
+   if(growth<.10)continue;
+   const tall=random()>=.37;
+   if(tall){
+    const chance=random(),name=chance<.45?'grassTall1':
+      chance<.82?'grassMixed1':'grassMixed2';
+    if(!plant(name,x,z,1.04+growth*.30))continue;
+    if(random()<.68){
+     // Segundo tufo sem alinhamento, como nas manchas altas da V12.42.
+     const px=x+(random()-.5)*.42,pz=z+(random()-.5)*.42;
+     if(px>minX&&px<maxX&&pz>minZ&&pz<maxZ){
+      const other=random(),secondary=other<.45?'grassTall1':
+       other<.82?'grassMixed1':'grassMixed2';
+      plant(secondary,px,pz,1.04+growth*.30);
+     }
+    }
+   }else{
+    plant(random()<.16?'grassMixed1':'grassShort1',
+      x,z,.88+growth*.26);
    }
   }
+  // Cada setor vira apenas 4 meshes instanciados. O GPU não recebe
+  // os milhões de vértices dos setores fora da câmera.
+  for(const name of names){
+   const entries=groups.get(name);if(!entries.length)continue;
+   const mesh=new T.InstancedMesh(meshLibrary[name],materials.get(name),entries.length);
+   mesh.name='Capim fechado V12.50 · '+name+' · '+cx+','+cz;
+   mesh.frustumCulled=true;mesh.castShadow=false;mesh.receiveShadow=true;
+   mesh.userData.planted=entries.length;
+   mesh.userData.grassKeys=new Uint32Array(entries.length);
+   mesh.userData.lastScale=new Float32Array(entries.length);
+   mesh.userData.lastScale.fill(1);
+   for(let i=0;i<entries.length;i++){
+    const a=entries[i];mesh.setMatrixAt(i,a.matrix);
+    mesh.userData.grassKeys[i]=a.k;
+    matColor.setRGB(1,1-a.biome*.13,1-a.biome*.28);
+    mesh.setColorAt(i,matColor);
+   }
+   mesh.computeBoundingSphere();
+   mesh.instanceMatrix.needsUpdate=true;
+   if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
+   foliage.add(mesh);chunkCount++;
+  }
+  // Libera o navegador entre partes do mapa, em especial no Android.
+  if((cz*nxChunk+cx)%3===2)
+   await new Promise(resolve=>requestAnimationFrame(resolve));
  }
- // Alternar a ordem dos tipos mantém ambos distribuídos em todos os
- // níveis de qualidade: o primeiro N de cada InstancedMesh cobre o mapa.
- pass(lowBudget,false);pass(highBudget,true);
- for(const mesh of meshes.values())mesh.instanceMatrix.needsUpdate=true;
  applyGrassQuality();
- console.info('[Arcano V12.49] Plantio idêntico ao V12.42 (exceto proteção dos formigueiros)',planted,
-  'estrada fixa sem vegetação',lastGrassQuality);
+ console.info('[Arcano V12.50] Grama muito densa em TODO o mapa',
+   {planted,eligibleSites:available,chunks:chunkCount,nearRoad,farRoad,quality:lastGrassQuality});
 }
 // FOLHAS: pequena malha 3D low-poly de seis faces (nervura central elevada),
 // nas cores dos modelos Quaternius já carregados. O próprio MegaKit/Ultimate
@@ -861,7 +883,7 @@ function lifeDay(days){
   else if(desired>cover[k])cover[k]=clamp(cover[k]+days*.014*growth,0,desired);
   if(!permanent)api.soilPlant[k]=clamp(api.soilPlant[k]+days*.003*growth,.025,1.25);
  }
- if(days>=1)updateGrassMeshes();
+ if(days>=1)updateGrassMeshes(true);
  // Fotossíntese e desenvolvimento da vegetação renovam sementes/néctar;
  // não surgem novas fontes sobre estrada, área alagada ou gramado morto.
  for(let k=0;k<cells;k++){
@@ -1355,27 +1377,34 @@ function moveAnimals(t){
   m.scale.setScalar(radial*magnify);
   m.scale.setComponent(axis,extension*magnify);
  }
-}function updateGrassMeshes(){
- // Nenhum Object3D temporário, decomposição de matrizes ou escrita no
- // buffer quando o capim mudou menos de ~2%. É a mesma geometria visível.
- const changed=new Set();
- for(const patch of grassPatches){
-  if(patch.index>=patch.mesh.count)continue;
-  const k=patch.k,wear=Math.max(traffic[k],animalTrail[k]),c=cover[k];
-  const hydro=api.depth[k]>.08?0:1;
-  const alive=fixedRoadMask[k]>.06?0:clamp(c*(1-wear)*hydro*(1-nestBareMask[k]/255),0,1);
-  const scale=alive>.11?(.47+.53*alive):.0001;
-  if(Math.abs(scale-patch.lastScale)<.019)continue;
-  patch.lastScale=scale;
-  const dst=patch.mesh.instanceMatrix.array,src=patch.matrix.elements;
-  const off=patch.index*16;
-  // Transformações 3x3 são escaladas; translação fica no terreno original.
-  for(let j=0;j<12;j++)dst[off+j]=src[j]*scale;
-  dst[off+12]=src[12];dst[off+13]=src[13];dst[off+14]=src[14];
-  dst[off+15]=1;
-  changed.add(patch.mesh);
+}let grassSectorRefresh=0;
+function updateGrassMeshes(force=false){
+ // Manter a escala ecológica da V12.42; trabalhar apenas parte dos setores
+ // por ciclo evita travar a CPU com toda a cobertura de uma só vez.
+ const batches=foliage.children.filter(m=>m.isInstancedMesh&&m.userData.grassKeys);
+ const length=batches.length;
+ if(!length)return;
+ const n=force?length:Math.max(1,Math.ceil(length/12));
+ for(let z=0;z<n;z++){
+  const mesh=batches[(grassSectorRefresh+z)%length];
+  const keys=mesh.userData.grassKeys,previous=mesh.userData.lastScale;
+  const buffer=mesh.instanceMatrix.array;
+  let changed=false;
+  for(let i=0;i<mesh.count;i++){
+   const k=keys[i],wear=Math.max(traffic[k],animalTrail[k]),c=cover[k];
+   const hydro=api.depth[k]>.08?0:1;
+   const alive=fixedRoadMask[k]>.06?0:
+     clamp(c*(1-wear)*hydro*(1-nestBareMask[k]/255),0,1);
+   const scale=alive>.11?(.47+.53*alive):.0001;
+   const last=previous[i]||1;
+   if(Math.abs(scale-last)<.018)continue;
+   const ratio=scale/last,off=i*16;
+   for(let j=0;j<12;j++)buffer[off+j]*=ratio;
+   previous[i]=scale;changed=true;
+  }
+  if(changed)mesh.instanceMatrix.needsUpdate=true;
  }
- for(const m of changed)m.instanceMatrix.needsUpdate=true;
+ grassSectorRefresh=(grassSectorRefresh+n)%length;
 }
 // A estrada NÃO é um objeto gerado: é o resultado histórico de pisoteio,
 // compactação, perda de clorofila e redução dos tufos de grama.
@@ -1649,7 +1678,7 @@ function updateColonyInspector(){
  ' · feromônios '+c.pheromones.reduce((a,v)=>a+v,0).toFixed(1);
 }
 async function setup(){
- await loadMeshes();initializeLandscape();initialColonies();grassShape();rockShape();setupLeafVisuals();setupFruits();visualizeAnimals();initializeLargeAnimalRoutes();
+ await loadMeshes();initializeLandscape();initialColonies();await grassShape();rockShape();setupLeafVisuals();setupFruits();visualizeAnimals();initializeLargeAnimalRoutes();
  drawNestCutaway();hideDetachedAntModels();
  const board=$('ecoStatus');if(board)board.textContent='Pacotes enviados integrados: '+Object.keys(meshLibrary).length+' malhas · '+colonies.length+' colônias.';
  const s=$('ecoSpeed');if(s){s.oninput=e=>{biologicalSpeed=clamp(+e.target.value,1,200);$('ecoSpeedVal').textContent=biologicalSpeed+'×';};}
