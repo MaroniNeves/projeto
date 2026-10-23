@@ -717,6 +717,20 @@ for(let k=0;k<size;k++)permeability[k]=basePermeability[k]*1.45;
 // A paleta inicial é substituída pelo mosaico de solos depois que o terreno existe.
 landG.setAttribute('color',new T.BufferAttribute(colors,3));landG.computeVertexNormals();
 const land=new T.Mesh(landG,new T.MeshStandardMaterial({map:groundTexture(),vertexColors:true,roughness:1,side:T.DoubleSide}));
+// O mapa de terra original é multiplicativo e deixa o gramado marrom.
+// Nos pixels vivos, preservar a cor verde da superfície e apenas parte
+// da textura de solo. Estrada, barro, margens e solo morto mantêm a terra.
+land.material.onBeforeCompile=shader=>{
+ shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',
+  `#include <map_fragment>
+  #ifdef USE_COLOR
+   float lushGrass=smoothstep(0.045,0.22,vColor.g-max(vColor.r,vColor.b));
+   vec3 grassDapple=vColor.rgb*vec3(.83,1.00,.80);
+   diffuseColor.rgb=mix(diffuseColor.rgb,grassDapple,lushGrass*.82);
+  #endif
+  `);
+};
+land.material.customProgramCacheKey=()=> 'arcano-green-soil-v1238';
 land.receiveShadow=true;land.name='Terra absorvente e barro V12.12';scene.add(land);
 // Estratos demonstrativos sob o relevo; sem malhas caras ou superfícies expostas.
 // V12.30 — HORIZONTES CONFORMES: nenhuma caixa/plataforma plana.
@@ -2855,7 +2869,7 @@ function rebuild(){
    const dirtAmount=clamp(road*(.99+.08*abrasion),0,.99);
    // O mapa do chão é multiplicativo (tons ocres); verde vivo para que
    // o substrato sob a grama curta realmente PAREÇA um gramado contínuo.
-   const grassRGB=[.245,.49,.16];
+   const grassRGB=[.30,.76,.19];
    const dryPath=[.66,.49,.31],mudPath=[.27,.18,.12];
    for(let m=0;m<3;m++){
     const ix=k*3+m;
