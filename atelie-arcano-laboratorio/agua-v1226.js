@@ -1372,75 +1372,147 @@ const arcanoOrientationCandidates=[
  [0,0,Math.PI*.5],[0,0,-Math.PI*.5],
  [Math.PI,0,0],[0,0,Math.PI]
 ];
+// V12.28 — inspeciona cada espécie carregada, não só árvores grandes.
+// Uma copa larga é normal em arbustos; a rotação só muda quando a postura
+// original é anormal e há evidência de tronco/caule acima do solo.
+const arcanoModelAudit=[];
 function arcanoBestOrientation(item,root){
  const key=item.pack+'/'+item.name;
  if(arcanoOrientationCache.has(key))return arcanoOrientationCache.get(key);
- const probe=new T.Group();
- probe.add(root.clone(true));
+ if(item.type==='rock')return {quaternion:new T.Quaternion(),height:1};
+ const probe=new T.Group();probe.add(root.clone(true));
  const results=[];
  for(let n=0;n<arcanoOrientationCandidates.length;n++){
   const xyz=arcanoOrientationCandidates[n];
   probe.quaternion.setFromEuler(new T.Euler(xyz[0],xyz[1],xyz[2]));
   probe.updateMatrixWorld(true);
-  const all=new T.Box3().setFromObject(probe);
-  if(all.isEmpty())continue;
-  const size=new T.Vector3();all.getSize(size);
+  const full=new T.Box3().setFromObject(probe);
+  if(full.isEmpty())continue;
+  const size=new T.Vector3();full.getSize(size);
   if(!Number.isFinite(size.y)||size.y<.000001)continue;
   const wood=arcanoWorldPartBox(probe,'wood');
   const leaves=arcanoWorldPartBox(probe,'leaf');
-  let woodRatio=0,leafAbove=0;
-  if(wood){
-   const w=new T.Vector3(),center=new T.Vector3();
-   wood.getSize(w);wood.getCenter(center);
-   woodRatio=w.y/Math.max(.0001,w.x,w.z);
-   if(leaves){
-    const leafCenter=new T.Vector3();leaves.getCenter(leafCenter);
-    leafAbove=(leafCenter.y-center.y)/Math.max(.001,size.y);
-   }
+  const woodSize=new T.Vector3(),woodCenter=new T.Vector3(),leafCenter=new T.Vector3();
+  const stemRatio=wood?(
+    wood.getSize(woodSize),
+    woodSize.y/Math.max(.0001,woodSize.x,woodSize.z)
+  ):0;
+  const overall=size.y/Math.max(.0001,size.x,size.z);
+  let canopyRise=0;
+  if(wood&&leaves){
+   wood.getCenter(woodCenter);leaves.getCenter(leafCenter);
+   canopyRise=(leafCenter.y-woodCenter.y)/Math.max(.0001,size.y);
+  }else if(leaves){
+   leaves.getCenter(leafCenter);
+   canopyRise=(leafCenter.y-full.min.y)/Math.max(.0001,size.y)-.48;
   }
-  const overallRatio=size.y/Math.max(.0001,size.x,size.z);
-  const score=(wood?woodRatio*1.9:0)+overallRatio*.34+
-    Math.max(-.7,Math.min(.7,leafAbove))*1.2;
+  const upright=stemRatio>0?stemRatio:overall;
+  const tree=item.type==='tree'||item.type==='pine';
+  const grounded=clamp(canopyRise,-.7,.7);
+  const score=(tree?1.6:1.25)*Math.min(upright,3.4)+
+   overall*(tree?.32:.36)+grounded*(wood?1.15:.25);
   results.push({quaternion:probe.quaternion.clone(),height:size.y,
-   woodRatio,overallRatio,score,hasWood:!!wood,leafAbove,index:n});
+   woodRatio:stemRatio,overallRatio:overall,hasWood:!!wood,
+   canopyRise,score,index:n});
  }
- if(!results.length)return null;
+ if(!results.length){
+  console.warn('[Arcano] Modelo sem geometria válida:',item.name);
+  arcanoOrientationCache.set(key,null);return null;
+ }
  const normal=results[0];
- let chosen=normal;
+ const best=results.reduce((a,b)=>b.score>a.score?b:a,normal);
  const isTree=item.type==='tree'||item.type==='pine';
- if(isTree){
-  const best=results.reduce((a,b)=>b.score>a.score?b:a,normal);
-  // Conservar toda árvore cuja madeira já esteja de pé. Uma copa larga
-  // NÃO é razão para girar uma árvore correta de lado.
-  const obviouslyWrong=normal.hasWood?
-    normal.woodRatio<.82:normal.overallRatio<.72;
-  const better=best.score>normal.score+.38 &&
-    (best.hasWood?best.woodRatio>normal.woodRatio*1.38:
-      best.overallRatio>normal.overallRatio*1.38);
-  if(obviouslyWrong&&better)chosen=best;
-  // Rejeitar apenas os casos claramente horizontais e irrecuperáveis.
-  if(chosen.hasWood && chosen.woodRatio<.53 && chosen.overallRatio<.69){
-   console.warn('[Arcano] Asset de árvore horizontal ignorado:',item.name);
-   arcanoOrientationCache.set(key,null);return null;
-  }
-  if(!chosen.hasWood && chosen.overallRatio<.54){
-   console.warn('[Arcano] Asset sem eixo vertical identificável:',item.name);
-   arcanoOrientationCache.set(key,null);return null;
-  }
-  if(chosen.index!==0)console.info('[Arcano] Orientação corrigida:',item.name,chosen.index);
+ const isGrass=item.type==='grass';
+ const isBroad=item.type==='bush'||item.type==='fern';
+ const normalRatio=normal.hasWood?normal.woodRatio:normal.overallRatio;
+ const bestRatio=best.hasWood?best.woodRatio:best.overallRatio;
+ // Arbustos/ramalhetes são naturalmente largos: nunca girar apenas porque
+ // a copa é maior que a altura, ao contrário de uma árvore com tronco.
+ const needsCorrection=isTree
+  ? normalRatio<.9 || normal.canopyRise<-.1
+  : isGrass ? normalRatio<.32
+  : isBroad ? normalRatio<.23
+  : normalRatio<.38;
+ const materiallyBetter=best.index!==0 && best.score>normal.score+
+  (isTree?.26:.36) && bestRatio>normalRatio*(isTree?1.27:1.55);
+ const chosen=needsCorrection&&materiallyBetter?best:normal;
+ const invalid=isTree?
+  (chosen.hasWood&&chosen.woodRatio<.38&&chosen.overallRatio<.53):
+  (chosen.overallRatio<.105);
+ if(invalid){
+  console.warn('[Arcano] Espécie ignorada: orientação não confiável',item.name);
+  arcanoOrientationCache.set(key,null);
+  arcanoModelAudit.push({model:item.name,status:'ignorado',kind:item.type});
+  return null;
  }
  const result={quaternion:chosen.quaternion,height:chosen.height,
-   woodRatio:chosen.woodRatio,overallRatio:chosen.overallRatio};
+   woodRatio:chosen.woodRatio,overallRatio:chosen.overallRatio,
+   selected:chosen.index};
+ arcanoModelAudit.push({model:item.name,kind:item.type,
+   orientation:chosen.index,status:chosen.index?'corrigido':'mantido'});
+ if(chosen.index)console.info('[Arcano] Corrigido eixo original:',item.name,
+  'variante',chosen.index,'tipo',item.type);
  arcanoOrientationCache.set(key,result);
  return result;
 }
+// Preferência pelo caule central para flores e arbustos, nunca pela
+// pétala/ramo com menor Y em uma malha inclinada.
+const arcanoPlantPoint=new T.Vector3();
+function arcanoPlantBaseY(obj,anchor){
+ obj.updateMatrixWorld(true);
+ const wood=arcanoWorldPartBox(obj,'wood');
+ const bounds=new T.Box3().setFromObject(obj);
+ const basis=wood||bounds;
+ if(basis.isEmpty())return Infinity;
+ const c=new T.Vector3(),d=new T.Vector3();
+ basis.getCenter(c);bounds.getSize(d);
+ const radius=clamp(Math.min(d.x,d.z)*.28,.11,.80);
+ const radius2=radius*radius;
+ const candidates=[];
+ const seekWood=!!wood;
+ obj.traverse(mesh=>{
+  if(!mesh.isMesh||!mesh.visible)return;
+  const geo=mesh.geometry,p=geo?.getAttribute('position');
+  if(!p)return;
+  const index=geo.getIndex();
+  const mats=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+  const groups=geo.groups.length?geo.groups:
+   [{start:0,count:index?index.count:p.count,materialIndex:0}];
+  for(const g of groups){
+   const name=(mats[g.materialIndex]?.name||mesh.name||'');
+   if(seekWood&&(!arcanoBarkRE.test(name)||arcanoLeafRE.test(name)))continue;
+   const end=Math.min(g.start+g.count,index?index.count:p.count);
+   const step=Math.max(1,Math.floor((end-g.start)/600));
+   for(let k=g.start;k<end;k+=step){
+    arcanoPlantPoint.fromBufferAttribute(p,index?index.getX(k):k)
+     .applyMatrix4(mesh.matrixWorld);
+    const dx=arcanoPlantPoint.x-c.x,dz=arcanoPlantPoint.z-c.z;
+    if(dx*dx+dz*dz<radius2)candidates.push(arcanoPlantPoint.y);
+   }
+  }
+ });
+ if(candidates.length>=5){
+  candidates.sort((a,b)=>a-b);
+  // Quantil inferior suprime uma pétala/folha isolada apontando para baixo.
+  return candidates[Math.min(candidates.length-1,
+   Math.floor(candidates.length*.06))];
+ }
+ return seekWood?wood.min.y:bounds.min.y;
+}
 function snapForestToGround(anchor){
  const a=anchor,obj=a.obj;
- const foot=solidForestFootY(obj,a);
+ let foot=solidForestFootY(obj,a);
+ if(a.type==='flower'||a.type==='bush'||a.type==='fern'||a.type==='grass'){
+  foot=arcanoPlantBaseY(obj,a);
+ }
  if(!Number.isFinite(foot))return;
- // Pivô no terreno: mesmo após crescimento e inclinação do vento, sem soma
- // incorreta da escala duas vezes e sem assumir o pivô FBX em y=0.
- obj.position.y+=a.contactY-a.embed-foot;
+ // O pivô PAI permanece no solo; inclinar pelo vento não desloca o pé.
+ // Ajustar a posição LOCAL da correção, sem alterar o eixo original do asset.
+ const delta=a.contactY-a.embed-foot;
+ if(a.orientationNode){
+  a.orientationNode.position.y+=delta/Math.max(.000001,obj.scale.y);
+  obj.position.y=a.contactY-a.embed;
+ }else obj.position.y+=delta;
  obj.updateMatrixWorld(true);
 }
 function placeForestModel(item,root){
@@ -1512,7 +1584,7 @@ function placeForestModel(item,root){
   const embed=item.type==='rock'?
    clamp(desired*.14,.045,.17):
    item.type==='tree'||item.type==='pine'?.065:.023;
-  const anchor={obj,x,z,y:contactY,contactY,localBottom:0,embed,
+  const anchor={obj,x,z,y:contactY,contactY,localBottom:0,embed,orientationNode:correction,
    rotation:rot,baseScale:obj.scale.y,fullScale:obj.scale.clone(),baseRx:0,baseRz:0,
    pack:item.pack||'mega',type:item.type,phase:randomForest()*Math.PI*2,
    qualityRank:randomForest(),modelName:item.name,crownWidth:projected};
