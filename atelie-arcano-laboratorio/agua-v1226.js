@@ -1108,18 +1108,21 @@ function applyForestVisibility(){
 // sob demanda; os arquivos completos são grandes e carregam apenas nesse modo.
 // Se indisponíveis, usamos uma pintura procedural mais detalhada como fallback.
 const ULTIMATE_ORIGINAL_TEXTURES='https://raw.githubusercontent.com/walterpalladino/godot-quaternius-ultimate-stylized-nature/main/ultimate-stylized-nature/sources/Textures/';
+const MEGA_ORIGINAL_TEXTURES='https://raw.githubusercontent.com/Julien-Turcotte/BongBongAdventure/master/textures/stylizednature/Stylized%20Nature%20MegaKit%5BStandard%5D/glTF/';
 const surfaceSources={
  birch:'BirchTree_Bark.png',maple:'MapleTree_Bark.png',
- normal:'NormalTree_Bark.png',pine:'PineTree_Bark.png',rock:'Rocks.png'
+ normal:'NormalTree_Bark.png',pine:'PineTree_Bark.png',rock:'Rocks.png',
+ megabark:'Bark_NormalTree.png',megarock:'Rocks_Diffuse.png'
 };
 const surfaceTextureCache=new Map();
 const surfaceTextureLoader=new T.TextureLoader();
 function surfaceKind(item,mesh,material){
- const mat=((material.name||'')+' '+(mesh.name||'')).toLowerCase();
- if(item.type==='rock'||/(rock|stone)/.test(mat))return 'rock';
+ const mat=((material.name||'')+' '+(mesh.name||'')+' '+(material.map?.name||'')).toLowerCase();
+ if(item.type==='rock'||/(rock|stone)/.test(mat))return item.pack==='mega'?'megarock':'rock';
  if(/(leaves|leaf|foliage|flower|petal|grass|fern|canopy)/.test(mat))return null;
  if(/(bark|trunk|wood|stem)/.test(mat) ||
     (item.type==='tree'||item.type==='pine')) {
+  if(item.pack==='mega')return 'megabark';
   if(item.name.startsWith('Birch'))return 'birch';
   if(item.name.startsWith('Maple'))return 'maple';
   if(item.name.startsWith('Pine'))return 'pine';
@@ -1130,7 +1133,7 @@ function surfaceKind(item,mesh,material){
 function getPaintedSurface(kind,resolution){
  const key='paint-'+kind+'-'+resolution;
  if(surfaceTextureCache.has(key))return surfaceTextureCache.get(key);
- const isStone=kind==='rock';
+ const isStone=kind==='rock'||kind==='megarock';
  const data=materialCanvas(isStone?'#898f86':'#745d47',isStone?'#b8c0b4':'#b69c7d',resolution);
  const tex=surfaceTextureLoader.load(data);
  tex.colorSpace=T.SRGBColorSpace;tex.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
@@ -1145,7 +1148,7 @@ function getOriginalSurface(kind){
  if(pendingOriginals.has(kind))return pendingOriginals.get(kind);
  const state={ready:false,failed:false,texture:null};
  pendingOriginals.set(kind,state);
- state.texture=surfaceTextureLoader.load(ULTIMATE_ORIGINAL_TEXTURES+name,
+ state.texture=surfaceTextureLoader.load((kind.startsWith('mega')?MEGA_ORIGINAL_TEXTURES:ULTIMATE_ORIGINAL_TEXTURES)+name,
   tex=>{
    tex.colorSpace=T.SRGBColorSpace;
    tex.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
@@ -1177,7 +1180,7 @@ function updateForestMaterialQuality(){
      continue;
     }
     let texture=getPaintedSurface(kind,fallbackRes);
-    if(graphicsQuality==='high'&&item.pack==='ultimate'){
+    if(graphicsQuality==='high'){
      const orig=getOriginalSurface(kind);
      if(orig&&!orig.failed&&orig.ready)texture=orig.texture;
     }
