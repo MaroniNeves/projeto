@@ -227,7 +227,11 @@ function initializeLandscape(){
   // A estrada recebe a compactação histórica; rio rebaixa o leito local.
   if(riverMask[k]>.05){
    // Profundidade física só nasce na fonte; impedir poças azuis geradas em todas as células.
-   api.soil[k]-=Math.pow(riverMask[k],1.5)*.13;
+   // Sob a travessia o leito é um pouco mais profundo que as duas
+   // cabeceiras. A ponte cruza um VÃO real e não repousa no fundo do rio.
+   const nearBridge=Math.exp(-Math.pow((x+1.5)/1.35,2)-
+     Math.pow((z-.84)/1.15,2));
+   api.soil[k]-=Math.pow(riverMask[k],1.5)*(.13+.15*nearBridge);
   }
   if(roadMask[k]>.1){traffic[k]=.68+roadMask[k]*.23;
    api.permeability[k]*=(1-roadMask[k]*.44);}
