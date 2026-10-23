@@ -920,7 +920,9 @@ function lifeDay(days){
   else if(desired>cover[k])cover[k]=clamp(cover[k]+days*.014*growth,0,desired);
   if(!permanent)api.soilPlant[k]=clamp(api.soilPlant[k]+days*.003*growth,.025,1.25);
  }
- if(days>=1)updateGrassMeshes(true);
+ // A recuperação ecológica altera só as células necessárias: o cache
+ // identifica os setores afetados sem reprocessar milhões de tufos.
+ if(days>=1)updateGrassMeshes();
  // Fotossíntese e desenvolvimento da vegetação renovam sementes/néctar;
  // não surgem novas fontes sobre estrada, área alagada ou gramado morto.
  for(let k=0;k<cells;k++){
