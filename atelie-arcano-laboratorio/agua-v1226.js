@@ -1888,7 +1888,7 @@ function placeForestModel(item,root){
  // Florestas em manchas densas, mas com seleção de qualidade no render.
  // Crescimento do número de árvores fica separado de pedras e flores.
  const count=(item.type==='tree'||item.type==='pine')?
-  Math.ceil((mobile?item.mobile:item.desktop)*2.06):
+  Math.ceil((mobile?item.mobile:item.desktop)*2.18):
   (mobile?item.mobile:item.desktop);
  let created=0;
  for(let attempt=0;attempt<count*26&&created<count;attempt++){
@@ -1905,10 +1905,10 @@ function placeForestModel(item,root){
    }
    // Grupos ciliares e bordas do caminho. Troncos crescem FORA da terra
    // batida; as copas e ramos tornam o corredor visualmente fechado.
-   if(randomForest()<.46){
+   if(randomForest()<.63){
     x=(randomForest()-.5)*W*.93;
     const center=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
-    z=center+(randomForest()<.5?-1:1)*(1.22+Math.pow(randomForest(),1.25)*5.2);
+    z=center+(randomForest()<.5?-1:1)*(1.22+Math.pow(randomForest(),1.12)*3.75);
    }
   }
   const edge=Math.max(Math.abs(x)/(W*.5),Math.abs(z)/(L*.5));
