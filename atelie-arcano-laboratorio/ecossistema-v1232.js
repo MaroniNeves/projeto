@@ -881,7 +881,7 @@ function checkAntTrampling(x,z,weight){
 let wormVisualFrame=0;
 function moveAnimals(t){
  const o=new T.Object3D(),magnify=previewMagnification;
- const rainLevel=api.getRainLevel?.()||0,heavy=rainLevel>=3,storm=rainLevel>=4;
+ const rainLevel=api.getRainLevel?.()||0,heavy=rainLevel>0,storm=rainLevel>=4;
  for(const {m,c,max,agents,cargo} of antDraws){
   cargo.count=0;
   m.count=Math.min(max,Math.max(0,Math.ceil(c.workers*.2)));
@@ -919,7 +919,7 @@ function moveAnimals(t){
      agent.x=c.x;agent.z=c.z;continue;
     }
     if(api.depth[idx(x,z)]>.052||
-       (storm&&pct>.70&&random()<.0015)){
+       (storm&&(t-agent.retreatAt>13||pct>.70&&random()<.0015))){
      killSurfaceAnt({m,c},agent,x,z,'chuva');
      o.position.set(x,-100,z);o.scale.setScalar(.0000001);
      o.updateMatrix();m.setMatrixAt(i,o.matrix);continue;
@@ -1040,6 +1040,12 @@ function status(){
   grassDrawn+' tufos de grama ('+lastGrassQuality+') · '+colonies.length+' colônias · '+workers+' operárias · '+eggs+' ovos · '+larva+' larvas · '+adults+' minhocas adultas · '+cocoons+' casulos · galerias '+burrowLength.toFixed(1)+' m simulados · resíduos '+castsReturned.toFixed(2)+' u. '+
   'É uma simulação ecológica simplificada; rainhas e crias ficam nos ninhos. Quase invisíveis fora da lupa.';
  const eventPanel=$('ecoEvents');if(eventPanel)eventPanel.textContent=ecoEvents.join('\n');
+ const leaves=$('ecoLeafStatus');
+ if(leaves)leaves.textContent=
+  '🍂 '+fallingLeaves.length+' folhas 3D na cena · '+leafCollected.toFixed(3)+
+  ' u recolhidas por formigas · '+leafDeposited.toFixed(3)+
+  ' u transformadas em nutrientes · '+antsCrushed+' formigas esmagadas · '+
+  antsDrowned+' perdidas na chuva · '+worms.length+' grupos de minhocas';
 }
 const nestCutGroup=new T.Group();
 nestCutGroup.name='Raio-X das galerias do formigueiro';
@@ -1136,6 +1142,12 @@ async function setup(){
  const advance=$('ecoAdvance');if(advance)advance.onclick=()=>{
   for(let d=0;d<30;d++)lifeDay(1);
   if(nestCutGroup.visible)drawNestCutaway();
+  status();
+ };
+ const leafTest=$('ecoLeafTest');
+ if(leafTest)leafTest.onclick=()=>{
+  for(let i=0;i<24;i++)spawnFallingLeaf();
+  recordEcoEvent('Folhas soltas no experimento para observar queda e decomposição.');
   status();
  };
  const organic=$('ecoCarcass');if(organic)organic.onclick=()=>{
