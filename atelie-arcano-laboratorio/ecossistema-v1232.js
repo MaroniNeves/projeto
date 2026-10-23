@@ -250,68 +250,76 @@ function initializeLandscape(){
 function terrainTint(){/* delegated to main rebuild() */}
 function grassShape(){
  const names=['grassShort1','grassMixed1','grassTall1','grassMixed2'];
- const maxTotal=grassBudgets.high;
+ const budget=grassBudgets.high;
  const meshes=new Map(),dummies=new Map();
  for(const name of names){
   const kind=name.startsWith('grassMixed')?'grassMixed':
    name==='grassTall1'?'grassTall':'grassShort';
   const geo=meshLibrary[name];if(!geo)continue;
-  const mesh=new T.InstancedMesh(geo,material(kind),maxTotal);
+  const mesh=new T.InstancedMesh(geo,material(kind),budget);
   mesh.frustumCulled=false;mesh.castShadow=false;mesh.receiveShadow=true;
-  mesh.userData.planted=0;mesh.count=0;mesh.name='Gramado Quaternius · '+name;
+  mesh.userData.planted=0;mesh.count=0;
+  mesh.name='Grama Quaternius de baixa e alta altura · '+name;
   meshes.set(name,mesh);dummies.set(name,new T.Object3D());foliage.add(mesh);
  }
  if(!meshes.size)return;
- // Gramado baixo como matriz CONTÍNUA. Áreas férteis recebem grama alta por
- // cima, em manchas conectadas — não apenas tufos sorteados e espaçados.
- const cols=mobileDevice?146:192,rows=mobileDevice?118:158,sites=[];
- for(let j=0;j<rows;j++)for(let i=0;i<cols;i++)sites.push([i,j]);
- // Ordens embaralhadas mantêm cobertura em TODO o terreno mesmo em Baixa.
- for(let i=sites.length-1;i>0;i--){
-  const j=Math.floor(random()*(i+1)),temp=sites[i];sites[i]=sites[j];sites[j]=temp;
- }
+ const lowBudget=Math.floor(budget*.67),tallBudget=budget-lowBudget;
  let planted=0;
- function plant(name,x,z,k,multiplier=1){
-  if(planted>=maxTotal)return;
-  const mesh=meshes.get(name),o=dummies.get(name);
-  if(!mesh)return;
-  const scale=(name==='grassTall1'?.39:name==='grassShort1'?.27:.32)*
-   (.73+random()*.49)*multiplier;
-  o.position.set(x,height(x,z)-.018,z);
-  o.rotation.set(0,random()*Math.PI*2,0);
-  o.scale.set(scale*(.80+random()*.30),scale*(.84+random()*.38),
-   scale*(.82+random()*.30));o.updateMatrix();
+ function plant(name,x,z,k,size=1){
+  if(planted>=budget)return false;
+  const mesh=meshes.get(name),dummy=dummies.get(name);
+  if(!mesh)return false;
+  const scale=(name==='grassTall1'?.43:name==='grassShort1'?.27:.35)*
+   (.74+random()*.48)*size;
+  dummy.position.set(x,height(x,z)-.012,z);
+  dummy.rotation.set(0,random()*6.283,0);
+  dummy.scale.set(scale*(.86+random()*.20),scale*(.90+random()*.28),
+   scale*(.86+random()*.20));
+  dummy.updateMatrix();
   const index=mesh.userData.planted++;
-  mesh.setMatrixAt(index,o.matrix);
-  grassPatches.push({x,z,k,mesh,index,matrix:o.matrix.clone()});planted++;
+  mesh.setMatrixAt(index,dummy.matrix);
+  grassPatches.push({x,z,k,mesh,index,matrix:dummy.matrix.clone()});
+  planted++;return true;
  }
- for(const [i,j] of sites){
-  if(planted>=maxTotal)break;
-  const x=-9.55+(i+.5)/cols*19.1+(random()-.5)*.05;
-  const z=-7.55+(j+.5)/rows*15.1+(random()-.5)*.05;
-  const k=idx(x,z),live=clamp(cover[k]*(1-traffic[k]),0,1);
-  if(live<.16||roadMask[k]>.17||riverMask[k]>.61||api.depth[k]>.028)continue;
-  // Umidade e luz influenciam o crescimento; a vegetação persiste em
-  // torno das árvores, sem criar milhares de folgas artificiais.
-  const meadow=.5+.5*Math.sin(x*.88+Math.sin(z*.41)*1.25)*
-   Math.cos(z*.92-x*.13);
-  const tallChance=clamp((live-.40)*.92+meadow*.26,0,.70);
-  // Grama baixa sempre preenche primeiro as clareiras entre as altas.
-  if(random()<.88+live*.11)plant('grassShort1',x,z,k,.86+random()*.22);
-  if(planted>=maxTotal)break;
-  if(random()<tallChance){
-   const roll=random();
-   const name=roll<.40?'grassTall1':roll<.72?'grassMixed1':'grassMixed2';
-   plant(name,x+(random()-.5)*.12,z+(random()-.5)*.12,k);
-   if(live>.73&&meadow>.63&&random()<.42&&planted<maxTotal)
-    plant(random()<.5?'grassTall1':'grassMixed1',
-     x+(random()-.5)*.20,z+(random()-.5)*.20,k,.88);
-  }
+ // Passada 1: CAMADA BAIXA distribuída uniformemente por toda a área viva,
+ // inclusive clareiras entre tufos altos. A cobertura não é sorteada em
+ // grandes blocos vazios (erro da versão anterior).
+ const cols=mobileDevice?142:190,rows=mobileDevice?112:152;
+ const positions=[];
+ for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
+  const x=-9.45+(i+.5)/cols*18.9;
+  const z=-7.40+(j+.5)/rows*14.8,k=idx(x,z);
+  if(roadMask[k]>.18||riverMask[k]>.66||api.depth[k]>.038)continue;
+  const health=clamp(cover[k]*(1-traffic[k]),0,1);
+  if(health<.16)continue;
+  positions.push({x,z,k,health});
+ }
+ // Índices sobre toda a malha (e não sorteio com parada prematura).
+ const step=positions.length/Math.max(1,lowBudget);
+ for(let n=0;n<Math.min(lowBudget,positions.length);n++){
+  const p=positions[Math.min(positions.length-1,Math.floor((n+.5)*step))];
+  const dx=(random()-.5)*.06,dz=(random()-.5)*.06;
+  plant(n%5===0?'grassMixed1':'grassShort1',p.x+dx,p.z+dz,p.k,
+   .76+p.health*.36);
+ }
+ // Passada 2: GRAMA ALTA em colônias densas e naturalizadas. Os tufos se
+ // agrupam por microclima e luz, acima do verde do solo e da grama curta.
+ const tallSites=positions.filter(p=>{
+  const patch=.5+.5*Math.sin(p.x*1.12+Math.sin(p.z*.55)*1.4)*
+   Math.cos(p.z*.84-p.x*.20);
+  return p.health>.42&&patch>.40&&random()<clamp(p.health*.66+patch*.32,.1,.93);
+ });
+ const tallStep=tallSites.length/Math.max(1,tallBudget);
+ for(let n=0;n<tallBudget&&tallSites.length;n++){
+  const p=tallSites[Math.min(tallSites.length-1,Math.floor((n+.5)*tallStep))];
+  const name=n%4===0?'grassTall1':n%3===0?'grassMixed2':'grassMixed1';
+  plant(name,p.x+(random()-.5)*.16,p.z+(random()-.5)*.16,p.k,
+   .90+p.health*.25);
  }
  for(const mesh of meshes.values())mesh.instanceMatrix.needsUpdate=true;
  applyGrassQuality();
- console.info('[Arcano V12.37] Cobertura Quaternius densa',
-  planted,'tufos | limite',maxTotal,'qualidade',lastGrassQuality);
+ console.info('[Arcano V12.38] Tapete de grama',
+  {planted,lowBudget,tallBudget,quality:lastGrassQuality});
 }
 // FOLHAS: pequena malha 3D low-poly de seis faces (nervura central elevada),
 // nas cores dos modelos Quaternius já carregados. O próprio MegaKit/Ultimate
