@@ -11,6 +11,9 @@ const NX=innerWidth<680?68:96,NZ=innerWidth<680?56:78,W=20,L=16,dx=W/(NX-1),dz=L
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),rand=(seed)=>()=>((seed=(seed*1664525+1013904223)>>>0)/4294967296);
 const random=rand(6232026),cells=NX*NZ,cover=new Float32Array(cells),traffic=new Float32Array(cells),roadMask=new Float32Array(cells),riverMask=new Float32Array(cells);
 const green=new T.Color('#477e3d'),roadColor=new T.Color('#9e7954');
+// Pequenas fontes renováveis de sementes e néctar das plantas; se esgotam
+// localmente quando as operárias forrageiam e se recuperam com vegetação viva.
+const foodResources=new Float32Array(cells);
 const realm=new T.Group();realm.name='V12.32 | Rio estrada grama e fauna do solo';api.scene.add(realm);
 const foliage=new T.Group(),rocks=new T.Group(),animals=new T.Group(),roads=new T.Group();
 foliage.name='Tufos reais de grama Quaternius';rocks.name='Cinco geometrias de pedras Rocks.fbx';
@@ -160,6 +163,7 @@ function initializeLandscape(){
   const shade=.5+.5*Math.sin(x*.85+z*.34)*Math.cos(z*.6);
   const moist=api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]);
   cover[k]=clamp(.77+.17*shade+.15*moist-roadMask[k]*.96-riverMask[k]*.91,0,1);
+  foodResources[k]=Math.max(0,cover[k]*(1-roadMask[k])*.12);
  }
  const geom=api.terrain.geometry,positionAttribute=geom.getAttribute('position');
  for(let k=0;k<cells;k++)positionAttribute.setY(k,api.soil[k]);
@@ -251,7 +255,7 @@ function chooseFoodSites(c){
   const x=clamp(Math.round((c.x+W*.5)/dx)+ix,0,NX-1);
   const z=clamp(Math.round((c.z+L*.5)/dz)+iz,0,NZ-1),k=z*NX+x;
   const site=position(k),distance=Math.hypot(o.x-site.x,o.z-site.z);
-  const food=api.soilLitter[k]+.35*api.soilOrganic[k];
+  const food=foodResources[k]+api.soilLitter[k]*.55;
   const pheromone=c.pheromones[k];
   const submerged=api.depth[k]>.06;
   sites.push({k,score:(food*1.85+pheromone*.26)/(1+distance*.27)
@@ -361,6 +365,15 @@ function addCarcass(x,z,mass=.03){
 // e dependem de espécies/condições reais, não constituem previsão de campo.
 function lifeDay(days){
  ecologicalDays+=days;
+ // Fotossíntese e desenvolvimento da vegetação renovam sementes/néctar;
+ // não surgem novas fontes sobre estrada, área alagada ou gramado morto.
+ for(let k=0;k<cells;k++){
+  const vegetation=clamp(cover[k]*(1-traffic[k]),0,1);
+  const growth=clamp(api.soilPlant[k],0,1.3);
+  const submersion=api.depth[k]>.065?.12:1;
+  foodResources[k]=clamp(foodResources[k]+
+   days*(.001+.006*vegetation*growth)*submersion*(1-roadMask[k]),0,.24);
+ }
  const climate=api.atmosphere.getMetrics(),temp=climate.temperature;
  for(const c of [...colonies]){
   if(!c.pheromones)c.pheromones=new Float32Array(cells);
@@ -380,10 +393,14 @@ function lifeDay(days){
   for(const item of sites){
    if(searchBudget<=0)break;
    const site=item.k;
-   const possible=Math.min(api.soilLitter[site],searchBudget);
+   const available=foodResources[site]+api.soilLitter[site]*.70;
+   const possible=Math.min(available,searchBudget);
    if(possible<.000015)continue;
    const take=possible*Math.min(1,.55+.35*c.pheromones[site]);
-   api.soilLitter[site]-=take;searchBudget-=take;
+   const plantFood=Math.min(foodResources[site],take);
+   foodResources[site]-=plantFood;
+   const litterFood=Math.min(api.soilLitter[site],(take-plantFood));
+   api.soilLitter[site]-=litterFood;searchBudget-=take;
    gathered+=take;
    reinforceTrail(c,site,Math.min(1,take*30));
   }
@@ -395,7 +412,10 @@ function lifeDay(days){
   api.soilLitter[k]=clamp(api.soilLitter[k]+detritus*.25,0,1.8);
   castsReturned+=detritus;
   const broodFood=c.brood.reduce((sum,g)=>sum+(g.stage==='larva'?g.count:0),0)*.004;
-  const need=days*(.19+.015*c.workers+broodFood);
+  // Rainha fundadora claustral utiliza reservas durante os primeiros ovos.
+  // Ao surgir a primeira operária, o consumo comum da colônia é retomado.
+  const founding=c.founder&&c.workers===0;
+  const need=days*(founding?.078:(.19+.015*c.workers+broodFood));
   const ration=Math.min(c.food,need);c.food-=ration;
   const fed=need>0?ration/need:1;
   c.daysWithoutFood=fed<.38?c.daysWithoutFood+days:Math.max(0,c.daysWithoutFood-days*.25);
@@ -434,6 +454,7 @@ function lifeDay(days){
   }
   c.brood=next.slice(-96);
   c.workers=clamp(c.workers+born,0,240);
+  if(c.workers>0)c.founder=false;
   c.queenAge+=days;
   if(c.queen&&c.queenAge>365*9){
    c.queen=false;c.queenFertile=false;
