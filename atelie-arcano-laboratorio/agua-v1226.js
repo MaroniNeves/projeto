@@ -1168,9 +1168,11 @@ async function arcanoRepairForestMaterials(item,root){
      (!name&&/(flower|petal|blossom)/.test(obj.name||'')&&item.type==='flower');
    let map=old.map||null;
    if(foliage&&item.pack==='ultimate'){
-    // Respeitar mapas vinculados pelo importador. Forçar o atlas de folhas
-    // sobre pétalas claras removia pedaços e criava recortes imprecisos.
-    if(!map)map=petal?(flowersMap||leafMap):leafMap;
+    // Árvores usam suas folhas oficiais. Em arbustos não se pode aplicar a
+    // textura das folhas às pétalas claras, nem descartar materiais importados.
+    if(item.type==='tree'||item.type==='pine'){
+     if(leafMap)map=leafMap;
+    }else if(!map)map=petal?(flowersMap||leafMap):leafMap;
    }
    if(item.type==='rock')map=arcanoRockFallback;
    const tint=item.type==='rock'?new T.Color('#d6d3ca'):
