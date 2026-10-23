@@ -1002,10 +1002,16 @@ updateSprouts();
 const forestGroup=new T.Group();forestGroup.name='Floresta Quaternius CC0 — painterly';scene.add(forestGroup);
 const forestInstances=[],forestModels={};let floraWanted=true,floraLoaded=0,floraState='Preparando',forestCollection='mixed';
 let ultimateModelsLoaded=0,megaModelsLoaded=0;
+// Região oeste / central: mata fechada. Leste: transição gradual para
+// campo aberto com gramíneas e poucas árvores isoladas, sem borda abrupta.
+function biomeField(x,z){
+ const edge=(x-W*.10-Math.sin(z*.065)*W*.035)/(W*.29);
+ const u=clamp(edge,0,1);return u*u*(3-2*u);
+}
 const FOREST_MODELS=[
- {name:'CommonTree_1',type:'tree',pack:'mega',mobile:97,desktop:169,height:4.4},
- {name:'CommonTree_2',type:'tree',pack:'mega',mobile:78,desktop:118,height:4.0},
- {name:'Pine_2',type:'pine',pack:'mega',mobile:19,desktop:26,height:4.7},
+ {name:'CommonTree_1',type:'tree',pack:'mega',mobile:55,desktop:97,height:4.4},
+ {name:'CommonTree_2',type:'tree',pack:'mega',mobile:50,desktop:87,height:4.0},
+ {name:'Pine_2',type:'pine',pack:'mega',mobile:19,desktop:31,height:4.7},
  {name:'Bush_Common_Flowers',type:'bush',pack:'mega',mobile:76,desktop:212,height:.95},
  {name:'Flower_3_Group',type:'flower',pack:'mega',mobile:83,desktop:200,height:.47},
  {name:'Grass_Common_Short',type:'grass',pack:'mega',mobile:10,desktop:25,height:.29},
@@ -1013,11 +1019,11 @@ const FOREST_MODELS=[
  {name:'Rock_Medium_2',type:'rock',pack:'mega',mobile:5,desktop:8,height:.70},
  // Quaternius Ultimate: mesmos modelos do pacote agrupado enviado pelo usuário,
  // extraídos como malhas FBX individuais para controlar densidade/performance.
- {name:'BirchTree_1',type:'tree',pack:'ultimate',mobile:29,desktop:52,height:4.9},
- {name:'BirchTree_3',type:'tree',pack:'ultimate',mobile:11,desktop:26,height:4.5},
- {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:29,desktop:52,height:4.4},
- {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:29,desktop:52,height:4.8},
- {name:'PineTree_2',type:'pine',pack:'ultimate',mobile:11,desktop:26,height:5.0},
+ {name:'BirchTree_1',type:'tree',pack:'ultimate',mobile:46,desktop:80,height:4.9},
+ {name:'BirchTree_3',type:'tree',pack:'ultimate',mobile:38,desktop:66,height:4.5},
+ {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:49,desktop:82,height:4.4},
+ {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:50,desktop:88,height:4.8},
+ {name:'PineTree_2',type:'pine',pack:'ultimate',mobile:28,desktop:52,height:5.0},
  {name:'Bush_Large_Flowers',type:'bush',pack:'ultimate',mobile:76,desktop:188,height:1.10},
  {name:'Flower_1_Clump',type:'flower',pack:'ultimate',mobile:83,desktop:180,height:.46},
  {name:'Plant_Flowers',type:'flower',pack:'ultimate',mobile:62,desktop:140,height:.51},
@@ -1095,6 +1101,13 @@ const QUALITY_PRESETS={
   reflectMobile:6.0,reflectDesktop:4.0}
 };
 let graphicsQuality=mobile?'balanced':'high';
+let viewFov=mobile?52:58,viewDistance=mobile?98:170;
+try{
+ const fov=Number(localStorage.getItem('arcano.viewFov'));
+ const distance=Number(localStorage.getItem('arcano.viewDistance'));
+ if(fov>=35&&fov<=75)viewFov=fov;
+ if(distance>=55&&distance<=240)viewDistance=distance;
+}catch(_){} 
 try{const saved=localStorage.getItem('arcano.graphicsQuality');if(QUALITY_PRESETS[saved])graphicsQuality=saved;}catch(_){}
 const fullMeadowCount=meadowMesh.count;
 const originalDetailMaps=new Map(),originalDetailLoading=new Set(),qualityMaterials=new Set();
@@ -1130,7 +1143,7 @@ function visibleByQuality(a){
  const q=QUALITY_PRESETS[graphicsQuality];
  const density=(a.type==='tree'||a.type==='pine'||a.type==='rock')?q.tree:q.small;
  return (forestCollection==='mixed'||forestCollection===a.pack)&&
-  a.qualityRank<=density&&(a.type==='tree'||a.type==='pine'||a.type==='rock'||
+  a.qualityRank<=density&&a.obj.position.distanceToSquared(camera.position)<Math.pow(viewDistance+8,2)&&(a.type==='tree'||a.type==='pine'||a.type==='rock'||
   soilHealth[idx(clamp(Math.round((a.x+W*.5)/dx),0,NX-1),
                  clamp(Math.round((a.z+L*.5)/dz),0,NZ-1))]>.10);
 }
@@ -1343,6 +1356,22 @@ function updateGraphicsStatus(){
   (originalDetailLoading.size?' · baixando':'')+
   (originalsUnavailable?' · algumas indisponíveis':'')+
   ' · madeira fosca, metalness 0';
+}
+function setViewSettings(fov=viewFov,distance=viewDistance){
+ viewFov=clamp(Number(fov)||52,35,75);
+ viewDistance=clamp(Number(distance)||98,55,240);
+ camera.fov=viewFov;camera.far=viewDistance;
+ camera.updateProjectionMatrix();
+ if($('ecoFov'))$('ecoFov').value=String(viewFov);
+ if($('ecoFovVal'))$('ecoFovVal').textContent=viewFov+'°';
+ if($('ecoViewDistance'))$('ecoViewDistance').value=String(viewDistance);
+ if($('ecoViewDistanceVal'))$('ecoViewDistanceVal').textContent=viewDistance+' u';
+ try{
+  localStorage.setItem('arcano.viewFov',String(viewFov));
+  localStorage.setItem('arcano.viewDistance',String(viewDistance));
+ }catch(_){}
+ applyForestVisibility();
+ if(typeof reflectionAge!=='undefined')reflectionAge=999;
 }
 function setGraphicsQuality(next){
  graphicsQuality=QUALITY_PRESETS[next]?next:'balanced';
@@ -1899,13 +1928,13 @@ function placeForestModel(item,root){
    const patchSeed=attempt%9;
    const ax=Math.sin((patchSeed+2.3)*2.31)*W*.38;
    const az=Math.cos((patchSeed+4.1)*1.77)*L*.36;
-   if(randomForest()<.76){
+   if(randomForest()<.74){
     x=clamp(ax+(randomForest()+randomForest()-1)*W*.115,-W*.48,W*.48);
     z=clamp(az+(randomForest()+randomForest()-1)*L*.125,-L*.48,L*.48);
    }
    // Grupos ciliares e bordas do caminho. Troncos crescem FORA da terra
    // batida; as copas e ramos tornam o corredor visualmente fechado.
-   if(randomForest()<.63){
+   if(randomForest()<.54){
     x=(randomForest()-.5)*W*.93;
     const center=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
     z=center+(randomForest()<.5?-1:1)*(1.22+Math.pow(randomForest(),1.12)*3.75);
@@ -1913,8 +1942,12 @@ function placeForestModel(item,root){
   }
   const edge=Math.max(Math.abs(x)/(W*.5),Math.abs(z)/(L*.5));
   if(item.type==='tree'||item.type==='pine'){
-   // A mata forma manchas mais fechadas; o centro também recebe árvores.
-   if(edge>.97&&randomForest()<.50)continue;
+   // Ecótono: menos indivíduos à medida que o terreno vira campo aberto.
+   // Pinheiros e bétulas podem sobreviver como árvores esparsas.
+   const transition=biomeField(x,z);
+   const edgeTolerance=/Pine|Birch/.test(item.name)?.83:.965;
+   if(randomForest()<transition*edgeTolerance)continue;
+   if(edge>.985&&randomForest()<.35)continue;
   }
   if(rockAt(x,z))continue;
   let basinBlocked=false;
@@ -2920,7 +2953,9 @@ function rebuild(){
    const dirtAmount=clamp(road*(.99+.08*abrasion),0,.99);
    // O mapa do chão é multiplicativo (tons ocres); verde vivo para que
    // o substrato sob a grama curta realmente PAREÇA um gramado contínuo.
-   const grassRGB=[.30,.76,.19];
+   const meadow=biomeField(x,z);
+   // Campo aberto é verde mais seco e dourado, sem cortar a grama de repente.
+   const grassRGB=[.30+meadow*.18,.76-meadow*.16,.19+meadow*.065];
    const dryPath=[.66,.49,.31],mudPath=[.27,.18,.12];
    for(let m=0;m<3;m++){
     const ix=k*3+m;
@@ -3097,7 +3132,17 @@ function resize(){
 let yaw=.83,pitch=.79,radius=39,drag=false,moved=false,prevX=0,prevY=0,pinch=0;
 let pinchX=0,pinchY=0;
 const target=new T.Vector3(0,-.12,0);
-function setView(){camera.position.set(target.x+radius*Math.cos(pitch)*Math.sin(yaw),target.y+radius*Math.sin(pitch),target.z+radius*Math.cos(pitch)*Math.cos(yaw));camera.lookAt(target);}
+let lastViewVisibilityUpdate=0;
+function setView(){
+ camera.position.set(target.x+radius*Math.cos(pitch)*Math.sin(yaw),target.y+radius*Math.sin(pitch),target.z+radius*Math.cos(pitch)*Math.cos(yaw));
+ camera.lookAt(target);
+ // Árvores fora do alcance deixam de gerar draw calls; atualizar devagar
+ // para não reconstruir o inventário de objetos a cada quadro.
+ const now=performance.now();
+ if(now-lastViewVisibilityUpdate>1400&&forestInstances.length){
+  lastViewVisibilityUpdate=now;applyForestVisibility();
+ }
+}
 function tapAdd(event){
  const rect=stage.getBoundingClientRect(),mouse=new T.Vector2((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
  const ray=new T.Raycaster();ray.setFromCamera(mouse,camera);const found=ray.intersectObject(land);
@@ -3218,6 +3263,10 @@ $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo
 $('floraToggle').addEventListener('change',e=>setFloraVisible(e.target.checked));
 $('forestPack').addEventListener('change',e=>setForestCollection(e.target.value));
 $('graphicsQuality').addEventListener('change',e=>setGraphicsQuality(e.target.value));
+if($('ecoFov'))$('ecoFov').addEventListener('input',e=>
+ setViewSettings(e.target.value,viewDistance));
+if($('ecoViewDistance'))$('ecoViewDistance').addEventListener('input',e=>
+ setViewSettings(viewFov,e.target.value));
 if($('windIntensity')){
  $('windIntensity').value=String(windUserPower);
  $('windIntensity').addEventListener('input',e=>{
@@ -3370,6 +3419,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1226'))fail(e.error||e.message);});
-window.arcanoWaterV1226={scene,renderer,setGraphicsQuality,getGraphicsQuality:()=>graphicsQuality,QUALITY_PRESETS,snapForestToGround,setForestCollection,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilBiota,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,getRainLevel:()=>level,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
-try{resize();setMode('puddle');setGraphicsQuality(graphicsQuality);requestAnimationFrame(loop);}catch(e){fail(e);}
+window.arcanoWaterV1226={scene,renderer,setGraphicsQuality,getGraphicsQuality:()=>graphicsQuality,getViewDistance:()=>viewDistance,getViewFov:()=>viewFov,setViewSettings,biomeField,QUALITY_PRESETS,snapForestToGround,setForestCollection,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilBiota,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,getRainLevel:()=>level,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+try{resize();setMode('puddle');setGraphicsQuality(graphicsQuality);setViewSettings(viewFov,viewDistance);requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
