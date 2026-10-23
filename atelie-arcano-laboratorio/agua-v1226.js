@@ -1422,6 +1422,19 @@ function placeForestModel(item,root){
   // Importações com conversão de eixo inadequada geram toras horizontais
   // gigantes no lugar de árvores: não as espalhar pela cena.
   if((item.type==='tree'||item.type==='pine')&&projected>desired*2.35)continue;
+  // Evita que troncos, galhos compridos e árvores de espécies distintas sejam
+  // distribuídos no mesmo ponto, parecendo madeira suspensa/desconectada.
+  // Só afeta a escolha do local das árvores: nenhum modelo é modificado.
+  if(item.type==='tree'||item.type==='pine'){
+   const minimumGap=clamp(projected*.42,1.15,2.45);
+   const collision=forestInstances.some(a=>{
+    if(a.type!=='tree'&&a.type!=='pine')return false;
+    const otherGap=clamp((a.crownWidth||2.8)*.42,1.15,2.45);
+    const d2=(a.x-x)*(a.x-x)+(a.z-z)*(a.z-z);
+    return d2<Math.pow(Math.max(minimumGap,otherGap),2);
+   });
+   if(collision)continue;
+  }
   const contactY=supportHeight(item.type,x,z,projected);
   const embed=item.type==='rock'?
    clamp(desired*.14,.045,.17):
@@ -1429,11 +1442,8 @@ function placeForestModel(item,root){
   const anchor={obj,x,z,y:contactY,contactY,localBottom:0,embed,
    rotation:rot,baseScale:obj.scale.y,fullScale:obj.scale.clone(),baseRx:0,baseRz:0,
    pack:item.pack||'mega',type:item.type,phase:randomForest()*Math.PI*2,
-   qualityRank:randomForest(),modelName:item.name};
+   qualityRank:randomForest(),modelName:item.name,crownWidth:projected};
   snapForestToGround(anchor);
-  // Uma segunda amostragem após posicionar no mundo mantém a base central
-  // aderida ao terreno mesmo em árvores secas com galhos descendentes.
-  if(item.type==='tree'||item.type==='pine')snapForestToGround(anchor);
   obj.traverse(o=>{
    if(!o.isMesh)return;
    o.castShadow=!mobile&&(item.type==='tree'||item.type==='pine')&&created<4;
