@@ -1003,22 +1003,22 @@ const forestGroup=new T.Group();forestGroup.name='Floresta Quaternius CC0 — pa
 const forestInstances=[],forestModels={};let floraWanted=true,floraLoaded=0,floraState='Preparando',forestCollection='mixed';
 let ultimateModelsLoaded=0,megaModelsLoaded=0;
 const FOREST_MODELS=[
- {name:'CommonTree_1',type:'tree',pack:'mega',mobile:46,desktop:72,height:4.4},
- {name:'CommonTree_2',type:'tree',pack:'mega',mobile:37,desktop:50,height:4.0},
- {name:'Pine_2',type:'pine',pack:'mega',mobile:9,desktop:11,height:4.7},
- {name:'Bush_Common_Flowers',type:'bush',pack:'mega',mobile:36,desktop:90,height:.95},
+ {name:'CommonTree_1',type:'tree',pack:'mega',mobile:97,desktop:169,height:4.4},
+ {name:'CommonTree_2',type:'tree',pack:'mega',mobile:78,desktop:118,height:4.0},
+ {name:'Pine_2',type:'pine',pack:'mega',mobile:19,desktop:26,height:4.7},
+ {name:'Bush_Common_Flowers',type:'bush',pack:'mega',mobile:76,desktop:212,height:.95},
  {name:'Flower_3_Group',type:'flower',pack:'mega',mobile:83,desktop:200,height:.47},
  {name:'Grass_Common_Short',type:'grass',pack:'mega',mobile:10,desktop:25,height:.29},
  {name:'Fern_1',type:'fern',pack:'mega',mobile:13,desktop:28,height:.61},
  {name:'Rock_Medium_2',type:'rock',pack:'mega',mobile:5,desktop:8,height:.70},
  // Quaternius Ultimate: mesmos modelos do pacote agrupado enviado pelo usuário,
  // extraídos como malhas FBX individuais para controlar densidade/performance.
- {name:'BirchTree_1',type:'tree',pack:'ultimate',mobile:14,desktop:22,height:4.9},
- {name:'BirchTree_3',type:'tree',pack:'ultimate',mobile:5,desktop:11,height:4.5},
- {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:14,desktop:22,height:4.4},
- {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:14,desktop:22,height:4.8},
- {name:'PineTree_2',type:'pine',pack:'ultimate',mobile:5,desktop:11,height:5.0},
- {name:'Bush_Large_Flowers',type:'bush',pack:'ultimate',mobile:36,desktop:80,height:1.10},
+ {name:'BirchTree_1',type:'tree',pack:'ultimate',mobile:29,desktop:52,height:4.9},
+ {name:'BirchTree_3',type:'tree',pack:'ultimate',mobile:11,desktop:26,height:4.5},
+ {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:29,desktop:52,height:4.4},
+ {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:29,desktop:52,height:4.8},
+ {name:'PineTree_2',type:'pine',pack:'ultimate',mobile:11,desktop:26,height:5.0},
+ {name:'Bush_Large_Flowers',type:'bush',pack:'ultimate',mobile:76,desktop:188,height:1.10},
  {name:'Flower_1_Clump',type:'flower',pack:'ultimate',mobile:83,desktop:180,height:.46},
  {name:'Plant_Flowers',type:'flower',pack:'ultimate',mobile:62,desktop:140,height:.51},
  {name:'Grass_Large_Extruded',type:'grass',pack:'ultimate',mobile:8,desktop:20,height:.35},
@@ -1924,7 +1924,7 @@ function placeForestModel(item,root){
   // após carregar todos os FBX, sem árvores/arbustos crescendo no traçado.
   const roadCenter=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
   const pathDistance=Math.abs(z-roadCenter);
-  if((item.type==='tree'||item.type==='pine')&&pathDistance<1.55)continue;
+  if((item.type==='tree'||item.type==='pine')&&pathDistance<1.29)continue;
   if((item.type==='bush'||item.type==='flower'||item.type==='fern')&&
      pathDistance<(item.type==='bush'?1.13:.78))continue;
   if(item.type==='bush'||item.type==='flower'||item.type==='fern'){
@@ -1981,10 +1981,10 @@ function placeForestModel(item,root){
   // distribuídos no mesmo ponto, parecendo madeira suspensa/desconectada.
   // Só afeta a escolha do local das árvores: nenhum modelo é modificado.
   if(item.type==='tree'||item.type==='pine'){
-   const radius=clamp(projected*.39,1.05,1.95);
+   const radius=clamp(projected*.32,.90,1.70);
    const collision=forestInstances.some(a=>{
     if(a.type!=='tree'&&a.type!=='pine')return false;
-    const otherRadius=clamp((a.crownWidth||2.8)*.39,1.05,1.95);
+    const otherRadius=clamp((a.crownWidth||2.8)*.32,.90,1.70);
     const gap=(a.x-x)*(a.x-x)+(a.z-z)*(a.z-z);
     // Somar os raios das duas copas impede interpenetração visual.
     // Copas podem tocar as bordas, mas não ocupar o mesmo tronco.
