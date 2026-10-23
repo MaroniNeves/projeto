@@ -1191,23 +1191,132 @@ function supportHeight(type,x,z,extent){
 }
 // V12.27: troncos sustentam o modelo, não a extremidade de uma folha ou cartão alpha.
 // Calcula o ponto mais baixo de tronco/galho após TODAS as rotações herdadas do FBX.
-const arcanoBBoxScratch=new T.Box3();
-function solidForestFootY(obj){
- obj.updateMatrixWorld(true);
- let woodMin=Infinity,allMin=Infinity;
- obj.traverse(mesh=>{
-  if(!mesh.isMesh||!mesh.visible)return;
-  arcanoBBoxScratch.setFromObject(mesh);
-  if(!Number.isFinite(arcanoBBoxScratch.min.y))return;
-  allMin=Math.min(allMin,arcanoBBoxScratch.min.y);
-  const mats=Array.isArray(mesh.material)?mesh.material:[mesh.material];
-  const label=((mesh.name||'')+' '+mats.map(m=>m?.name||'').join(' ')).toLowerCase();
-  if(/(trunk|bark|wood|stem|branch|log|treebase)/.test(label) &&
-     !/(leaves|leaf|canopy|foliage)/.test(label)){
-   woodMin=Math.min(woodMin,arcanoBBoxScratch.min.y);
+// V12.27.1 — Corrige a origem dos assets sem afetar vento/água/reflexos.
+// Vários glTFs contêm bark e leaves na MESMA malha com grupos de material.
+// A base do tronco exige medir só os triângulos do material de madeira.
+const arcanoPartCache=new WeakMap();
+const arcanoBarkRE=/(bark|trunk|wood|stem|branch|log|treebase)/i;
+const arcanoLeafRE=/(leaf|leaves|foliage|canopy|pine.?needles)/i;
+function arcanoLocalPartBox(mesh,kind){
+ const geo=mesh.geometry,pos=geo?.getAttribute('position');
+ if(!pos)return null;
+ const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+ const signature=kind+'|'+materials.map(m=>m?.name||'').join('|')+'|'+mesh.name;
+ let perGeo=arcanoPartCache.get(geo);
+ if(!perGeo){perGeo=new Map();arcanoPartCache.set(geo,perGeo);}
+ if(perGeo.has(signature))return perGeo.get(signature);
+ const box=new T.Box3().makeEmpty(),point=new T.Vector3();
+ const index=geo.getIndex(),groups=geo.groups.length?
+  geo.groups:[{start:0,count:index?index.count:pos.count,materialIndex:0}];
+ let matched=false;
+ for(const part of groups){
+  const matName=(materials[part.materialIndex]?.name||'');
+  const name=matName||mesh.name||'';
+  const good=kind==='wood'?
+   (arcanoBarkRE.test(name)&&!arcanoLeafRE.test(name)):
+   arcanoLeafRE.test(name);
+  if(!good)continue;
+  matched=true;
+  const end=Math.min(part.start+part.count,index?index.count:pos.count);
+  for(let i=part.start;i<end;i++){
+   const p=index?index.getX(i):i;
+   point.fromBufferAttribute(pos,p);
+   box.expandByPoint(point);
   }
+ }
+ const result=matched&&!box.isEmpty()?box:null;
+ perGeo.set(signature,result);
+ return result;
+}
+function arcanoWorldPartBox(root,kind){
+ root.updateMatrixWorld(true);
+ const result=new T.Box3().makeEmpty(),tmp=new T.Box3();
+ root.traverse(mesh=>{
+  if(!mesh.isMesh||!mesh.visible)return;
+  const local=arcanoLocalPartBox(mesh,kind);
+  if(!local)return;
+  tmp.copy(local).applyMatrix4(mesh.matrixWorld);
+  result.union(tmp);
  });
- return Number.isFinite(woodMin)?woodMin:allMin;
+ return result.isEmpty()?null:result;
+}
+function solidForestFootY(obj){
+ const wood=arcanoWorldPartBox(obj,'wood');
+ if(wood)return wood.min.y;
+ obj.updateMatrixWorld(true);
+ const whole=new T.Box3().setFromObject(obj);
+ return whole.min.y;
+}
+// Escolha por espécie, computada uma única vez antes da distribuição.
+// A rotação corretiva fica em um nó separado: não modifica as transformações
+// internas do FBX nem os movimentos de troncos e copas já implementados.
+const arcanoOrientationCache=new Map();
+const arcanoOrientationCandidates=[
+ [0,0,0],[Math.PI*.5,0,0],[-Math.PI*.5,0,0],
+ [0,0,Math.PI*.5],[0,0,-Math.PI*.5],
+ [Math.PI,0,0],[0,0,Math.PI]
+];
+function arcanoBestOrientation(item,root){
+ const key=item.pack+'/'+item.name;
+ if(arcanoOrientationCache.has(key))return arcanoOrientationCache.get(key);
+ const probe=new T.Group();
+ probe.add(root.clone(true));
+ const results=[];
+ for(let n=0;n<arcanoOrientationCandidates.length;n++){
+  const xyz=arcanoOrientationCandidates[n];
+  probe.quaternion.setFromEuler(new T.Euler(xyz[0],xyz[1],xyz[2]));
+  probe.updateMatrixWorld(true);
+  const all=new T.Box3().setFromObject(probe);
+  if(all.isEmpty())continue;
+  const size=new T.Vector3();all.getSize(size);
+  if(!Number.isFinite(size.y)||size.y<.000001)continue;
+  const wood=arcanoWorldPartBox(probe,'wood');
+  const leaves=arcanoWorldPartBox(probe,'leaf');
+  let woodRatio=0,leafAbove=0;
+  if(wood){
+   const w=new T.Vector3(),center=new T.Vector3();
+   wood.getSize(w);wood.getCenter(center);
+   woodRatio=w.y/Math.max(.0001,w.x,w.z);
+   if(leaves){
+    const leafCenter=new T.Vector3();leaves.getCenter(leafCenter);
+    leafAbove=(leafCenter.y-center.y)/Math.max(.001,size.y);
+   }
+  }
+  const overallRatio=size.y/Math.max(.0001,size.x,size.z);
+  const score=(wood?woodRatio*1.9:0)+overallRatio*.34+
+    Math.max(-.7,Math.min(.7,leafAbove))*1.2;
+  results.push({quaternion:probe.quaternion.clone(),height:size.y,
+   woodRatio,overallRatio,score,hasWood:!!wood,leafAbove,index:n});
+ }
+ if(!results.length)return null;
+ const normal=results[0];
+ let chosen=normal;
+ const isTree=item.type==='tree'||item.type==='pine';
+ if(isTree){
+  const best=results.reduce((a,b)=>b.score>a.score?b:a,normal);
+  // Conservar toda árvore cuja madeira já esteja de pé. Uma copa larga
+  // NÃO é razão para girar uma árvore correta de lado.
+  const obviouslyWrong=normal.hasWood?
+    normal.woodRatio<.82:normal.overallRatio<.72;
+  const better=best.score>normal.score+.38 &&
+    (best.hasWood?best.woodRatio>normal.woodRatio*1.38:
+      best.overallRatio>normal.overallRatio*1.38);
+  if(obviouslyWrong&&better)chosen=best;
+  // Rejeitar apenas os casos claramente horizontais e irrecuperáveis.
+  if(chosen.hasWood && chosen.woodRatio<.53 && chosen.overallRatio<.69){
+   console.warn('[Arcano] Asset de árvore horizontal ignorado:',item.name);
+   arcanoOrientationCache.set(key,null);return null;
+  }
+  if(!chosen.hasWood && chosen.overallRatio<.54){
+   console.warn('[Arcano] Asset sem eixo vertical identificável:',item.name);
+   arcanoOrientationCache.set(key,null);return null;
+  }
+  if(chosen.index!==0)console.info('[Arcano] Orientação corrigida:',item.name,chosen.index);
+ }
+ const result={quaternion:chosen.quaternion,height:chosen.height,
+   woodRatio:chosen.woodRatio,overallRatio:chosen.overallRatio};
+ arcanoOrientationCache.set(key,result);
+ return result;
 }
 function snapForestToGround(anchor){
  const a=anchor,obj=a.obj;
@@ -1222,8 +1331,9 @@ function placeForestModel(item,root){
  const randomForest=rand(9157+item.name.split('').reduce((a,c)=>a+c.charCodeAt(0),0));
  root.updateMatrixWorld(true);
  root.traverse(mesh=>addLeafWind(mesh));
- const originalBox=new T.Box3().setFromObject(root);
- const h=Math.max(.001,originalBox.max.y-originalBox.min.y);
+ const orientation=arcanoBestOrientation(item,root);
+ if(!orientation)return;
+ const h=Math.max(.001,orientation.height);
  const count=mobile?item.mobile:item.desktop;
  let created=0;
  for(let attempt=0;attempt<count*26&&created<count;attempt++){
@@ -1249,9 +1359,12 @@ function placeForestModel(item,root){
   // O FBX já inclui sua conversão de eixo e sua escala no nó original.
   // Inserir a raiz sob um pivô de chão impede que a rotação de vento
   // transforme uma origem deslocada em uma árvore flutuando.
-  const obj=new T.Group(),visualRoot=root.clone(true);
+  const obj=new T.Group(),correction=new T.Group(),visualRoot=root.clone(true);
   obj.name='Raiz no chão '+item.name;
-  obj.add(visualRoot);
+  correction.name='Correção de orientação '+item.name;
+  correction.quaternion.copy(orientation.quaternion);
+  correction.add(visualRoot);
+  obj.add(correction);
   obj.position.set(x,0,z);
   obj.rotation.y=rot;
   obj.scale.setScalar(scaleMultiplier);
