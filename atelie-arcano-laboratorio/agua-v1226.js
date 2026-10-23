@@ -952,10 +952,25 @@ const arcanoBarkResolution=()=>graphicsQuality==='high'?2048:
  graphicsQuality==='balanced'?1024:0;
 const arcanoBarkKey=(name,res)=>name+'@'+res;
 
+// Fallback mineral granulado somente quando o PNG da rocha não está hospedado.
+// Conserva sempre a malha original do Quaternius.
+const arcanoRockFallback=(()=>{
+ const canvas=document.createElement('canvas');canvas.width=canvas.height=384;
+ const ctx=canvas.getContext('2d'),r=rand(39512);
+ ctx.fillStyle='#838278';ctx.fillRect(0,0,384,384);
+ for(let i=0;i<4300;i++){
+  const v=Math.floor(55+r()*105);
+  ctx.fillStyle='rgba('+v+','+(v+3)+','+(v-5)+','+(.09+r()*.24)+')';
+  const x=r()*384,y=r()*384,rad=.8+r()*8.3;
+  ctx.beginPath();ctx.ellipse(x,y,rad*(.6+r()),rad*(.4+r()),r()*6.28,0,6.28);ctx.fill();
+ }
+ const t=new T.CanvasTexture(canvas);t.colorSpace=T.SRGBColorSpace;
+ t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=4;return t;
+})();
 const originalTextureFiles={
  BirchTree_1:'BirchTree_Bark.png',BirchTree_3:'BirchTree_Bark.png',
  MapleTree_3:'MapleTree_Bark.png',NormalTree_2:'NormalTree_Bark.png',
- PineTree_2:'PineTree_Bark.png',Rock_3:'Rocks.png',Rock_5:'Rocks.png'
+ PineTree_2:'PineTree_Bark.png',Rock_3:'Rocks.png',Rock_5:'Rocks.png',Rock_Medium_2:'Rocks.png'
 };
 const originalTextureBase='https://raw.githubusercontent.com/walterpalladino/godot-quaternius-ultimate-stylized-nature/main/ultimate-stylized-nature/sources/Textures/';
 let originalsReady=0,originalsUnavailable=0;
@@ -1015,8 +1030,10 @@ async function arcanoRepairForestMaterials(item,root){
    const rock=/(rock|stone)/.test(name);
    let map=old.map||null;
    if(foliage&&leafMap&&item.pack==='ultimate')map=leafMap;
-   const tint=map&&item.pack==='ultimate'?
-    new T.Color('#ffffff'):(old.color?.clone?.()||new T.Color('#ffffff'));
+   if(item.type==='rock')map=arcanoRockFallback;
+   const tint=item.type==='rock'?new T.Color('#d6d3ca'):
+     map&&item.pack==='ultimate'?
+     new T.Color('#ffffff'):(old.color?.clone?.()||new T.Color('#ffffff'));
    const material=new T.MeshStandardMaterial({
     name:old.name||'',color:tint,map:map,
     roughness:1,metalness:0,
@@ -1040,7 +1057,7 @@ async function arcanoRepairForestMaterials(item,root){
 }
 
 function registerForestMaterial(item,root){
- if(item.pack!=='ultimate')return;
+ if(item.pack!=='ultimate'&&item.type!=='rock')return;
  root.traverse(o=>{
   if(!o.isMesh)return;
   const materials=Array.isArray(o.material)?o.material:[o.material];
@@ -1053,7 +1070,7 @@ function registerForestMaterial(item,root){
    const source=mat.map?.image?.currentSrc||mat.map?.image?.src||'';
    const isProcedural=typeof source==='string'&&source.startsWith('data:image/');
    const materialName=(mat.name||'')+' '+(o.name||'');
-   if(!original||!/(bark|trunk|wood|rock|stone)/i.test(mat.name||''))continue;
+   if(!original||!(item.type==='rock'||/(bark|trunk|wood|rock|stone)/i.test(mat.name||'')))continue;
    mat.userData.arcanoFallbackMap=mat.map||null;
    mat.userData.arcanoOriginalTextureFile=original;
    qualityMaterials.add(mat);
