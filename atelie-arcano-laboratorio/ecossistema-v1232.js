@@ -348,7 +348,7 @@ function setupLeafVisuals(){
  ];
  const capacity=mobileDevice?260:520;
  for(let kind=0;kind<4;kind++){
-  const material=new T.MeshStandardMaterial({color:palette[kind],
+  const material=new T.MeshStandardMaterial({color:'#ffffff',
    roughness:1,metalness:0,side:T.DoubleSide,depthWrite:true});
   const m=new T.InstancedMesh(geometry,material,capacity);
   m.name=['Folhas verdes','Folhas amarelas','Folhas outonais',
@@ -384,6 +384,7 @@ function collectLeafFragments(k,limit){
  let remaining=Math.min(limit,leafLitterField[k]),picked=0;
  for(const leaf of fallingLeaves){
   if(leaf.stage!=='ground'||idx(leaf.x,leaf.z)!==k||leaf.mass<=0)continue;
+  if(leaf.age>42)continue;
   const take=Math.min(leaf.mass,remaining);
   leaf.mass-=take;picked+=take;remaining-=take;
   if(leaf.mass<.000008)leaf.stage='picked';
@@ -397,16 +398,18 @@ function animateLeafFall(dt){
  const atm=api.atmosphere.getMetrics();
  const rain=api.getRainLevel?.()||0;
  const wind=clamp((atm.wind||0)/3,0,1.4);
- leafClock+=dt*(1+wind*.7+(rain>=3?.45:0));
+ // Queda ocasional: probabilidade baixa em calmaria, maior com ventania.
+ leafClock+=dt*(.22+wind*wind*1.4+(rain>=3?.56:0));
  while(leafClock>1.0){
-  leafClock-=1.0;spawnFallingLeaf();
+  leafClock-=1.0;
+  if(random()<.35+clamp(wind*.38,0,.50))spawnFallingLeaf();
  }
  const compostMult=1+(rain>0?.45:0)+
   clamp((atm.humidity||.5),0,1)*.5;
  for(let i=fallingLeaves.length-1;i>=0;i--){
   const leaf=fallingLeaves[i];
   if(leaf.stage==='picked'){fallingLeaves.splice(i,1);continue;}
-  leaf.age+=dt;
+  leaf.age+=dt*clamp(.75+biologicalSpeed*.09,1,5);
   if(leaf.stage==='falling'){
    leaf.y-=dt*(.38+wind*.18);
    leaf.x=clamp(leaf.x+dt*(wind*.06+Math.sin(leaf.phase+leaf.age*2)*.06),-W*.49,W*.49);
@@ -436,6 +439,8 @@ function animateLeafFall(dt){
  if(leafVisualClock<.055)return;
  leafVisualClock=0;
  const counts=[0,0,0,0],obj=new T.Object3D();
+ const palette=['#579640','#caba48','#c06c42','#66834c'];
+ const brown=new T.Color('#77502e'),black=new T.Color('#221c17');
  for(const leaf of fallingLeaves){
   const kind=leaf.kind,m=leafMeshes[kind],index=counts[kind]++;
   if(index>=m.instanceMatrix.count){counts[kind]--;continue;}
@@ -444,10 +449,18 @@ function animateLeafFall(dt){
    leaf.stage==='falling'?leaf.rotZ:0);
   const size=leaf.scale*(kind===3?.48:1);
   obj.scale.setScalar(size);obj.updateMatrix();m.setMatrixAt(index,obj.matrix);
+  const color=new T.Color(palette[kind]);
+  if(leaf.stage==='ground'){
+   const age=clamp(leaf.age/80,0,1);
+   color.lerp(brown,clamp(age*2,0,1));
+   if(age>.52)color.lerp(black,clamp((age-.52)*2.08,0,1));
+  }
+  m.setColorAt(index,color);
  }
  for(let kind=0;kind<4;kind++){
   const m=leafMeshes[kind];m.count=counts[kind];
   m.instanceMatrix.needsUpdate=true;
+  if(m.instanceColor)m.instanceColor.needsUpdate=true;
  }
 }
 function rockShape(){
