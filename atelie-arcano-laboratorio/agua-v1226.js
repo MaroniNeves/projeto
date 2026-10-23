@@ -1169,7 +1169,9 @@ async function arcanoRepairForestMaterials(item,root){
     name:old.name||'',color:tint,map:map,
     roughness:1,metalness:0,
     transparent:false,opacity:1,depthWrite:true,
-    alphaTest:foliage?0.42:0,
+    // Arbustos/florais têm muitos cartões alpha finos: o recorte forte
+    // removia quase toda a copa em Android, parecendo faltar pedaços.
+    alphaTest:foliage?((item.type==='bush'||item.type==='flower'||item.type==='fern')?.12:.31):0,
     side:foliage?T.DoubleSide:T.FrontSide,
     fog:true,toneMapped:true,
     vertexColors:!!old.vertexColors,flatShading:!!old.flatShading
@@ -1559,6 +1561,23 @@ function arcanoBestOrientation(item,root){
   return fixed;
  }
  if(item.type==='rock')return {quaternion:new T.Quaternion(),height:1};
+ // FBX e glTF da coleção já são Y-up depois do carregador. Arbustos,
+ // flores e samambaias possuem copas MAIS LARGAS que altas naturalmente;
+ // girá-los para maximizar altura deixava ramos/folhas deitados ou vazados.
+ if(item.type==='bush'||item.type==='flower'||item.type==='fern'){
+  root.updateMatrixWorld(true);
+  const box=new T.Box3().setFromObject(root),span=new T.Vector3();
+  box.getSize(span);
+  if(!box.isEmpty()&&span.y>.00001){
+   const fixed={quaternion:new T.Quaternion(),height:span.y,
+    woodRatio:0,overallRatio:span.y/Math.max(.0001,span.x,span.z),
+    selected:0,sourcePreserved:true};
+   arcanoOrientationCache.set(key,fixed);
+   arcanoModelAudit.push({model:item.name,kind:item.type,
+    status:'arbusto/flor com eixo original conservado',orientation:0});
+   return fixed;
+  }
+ }
  const probe=new T.Group();probe.add(root.clone(true));
  const results=[];
  for(let n=0;n<arcanoOrientationCandidates.length;n++){
@@ -1844,6 +1863,17 @@ function placeForestModel(item,root){
   if(basinBlocked)continue;
   const groundY=terrainContact(x,z);
   if(groundY<-.13)continue;
+  if(item.type==='bush'||item.type==='flower'||item.type==='fern'){
+   // Evitar que a base da planta afunde em barrancos de grande inclinação.
+   const rr=item.type==='bush'?.24:.12;
+   const slopes=[[rr,0],[-rr,0],[0,rr],[0,-rr]]
+    .map(([u,v])=>terrainContact(x+u,z+v));
+   if(Math.max(...slopes)-Math.min(...slopes)>.31)continue;
+   const tooClose=forestInstances.some(a=>
+    (a.type==='bush'||a.type==='flower'||a.type==='fern')&&
+    Math.hypot(a.x-x,a.z-z)<(item.type==='bush'?.50:.23));
+   if(tooClose)continue;
+  }
   const factor=.78+randomForest()*.52;
   const desired=item.height*factor;
   const scaleMultiplier=desired/h,rot=randomForest()*Math.PI*2;
