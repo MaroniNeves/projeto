@@ -3073,10 +3073,10 @@ function rebuild(){
  }
  // Atualização LOCALIZADA das cores de terreno. Nenhuma interpolação ou
  // cor foi alterada: linhas intactas mantêm seus buffers anteriores.
- let terrainColorsChanged=false;
+ let terrainColorsChanged=false,firstDirtyRow=NZ,lastDirtyRow=-1;
  for(let j=0;j<NZ;j++){
   if(!terrainDirtyRows[j])continue;
-  terrainColorsChanged=true;
+  terrainColorsChanged=true;firstDirtyRow=Math.min(firstDirtyRow,j);lastDirtyRow=j;
   for(let i=0;i<NX;i++){
    const k=idx(i,j),o=k*3;
    const sat=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
@@ -3103,7 +3103,14 @@ function rebuild(){
    }
   }
  }
- if(terrainColorsChanged)landG.attributes.color.needsUpdate=true;
+ if(terrainColorsChanged){
+  // A WebGLBuffer subdata cobre apenas o intervalo de linhas que mudou.
+  // Quando muitas linhas mudam, o intervalo naturalmente vira a grade inteira.
+  const attr=landG.attributes.color;
+  attr.updateRange.offset=firstDirtyRow*NX*3;
+  attr.updateRange.count=(lastDirtyRow-firstDirtyRow+1)*NX*3;
+  attr.needsUpdate=true;
+ }
  wetted=count*area;
  // A malha visual 2-3× mais densa interpola os dados; não gera quadrados da grade antiga.
  for(let j=0;j<VIS_NZ;j++)for(let i=0;i<VIS_NX;i++){
