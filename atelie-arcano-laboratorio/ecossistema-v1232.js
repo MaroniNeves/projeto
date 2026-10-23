@@ -47,7 +47,7 @@ function height(x,z){
  return A*(1-a)*(1-b)+B*a*(1-b)+C*(1-a)*b+D*a*b;
 }
 const mobileDevice=innerWidth<680;
-const grassBudgets=mobileDevice?{high:150000,balanced:90000,low:23000}:{high:240000,balanced:135000,low:38000};
+const grassBudgets=mobileDevice?{high:150000,balanced:115000,low:35000}:{high:240000,balanced:175000,low:54000};
 let grassDrawn=0,lastGrassQuality='';
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
@@ -156,7 +156,7 @@ function makeRoadSurfaceDetails(){
  const group=new T.Group();
  group.name='Terra batida · grãos, seixos e gravetos sobre a estrada fixa';
  roads.add(group);
- const rng=rand(27821),total=mobileDevice?2100:4200;
+ const rng=rand(27821),total=mobileDevice?3600:6500;
  const kinds=[
   {geometry:new T.IcosahedronGeometry(.050,0),color:'#a8906f'},
   {geometry:new T.IcosahedronGeometry(.034,0),color:'#574332'},
@@ -326,14 +326,15 @@ function grassShape(){
  if(!meshes.size)return;
  // Aproximar moitas do trajeto visível: a expansão 10x havia espalhado
  // a mesma grama por 12.800 m², deixando espaços enormes na cena.
- const lowBudget=Math.floor(budget*.52),highBudget=budget-lowBudget;
+ // Dois terços de tufos volumosos; o restante cobre os intervalos em camada baixa.
+ const lowBudget=Math.floor(budget*.37),highBudget=budget-lowBudget;
  let planted=0;
  function plant(name,x,z,k,multiplier=1){
   const mesh=meshes.get(name),dummy=dummies.get(name);
   if(!mesh||planted>=budget||mesh.userData.planted>=budget)return false;
   if(fixedRoadMask[k]>.055||Math.abs(z-roadZ(x))<1.11||riverMask[k]>.74||
      api.depth[k]>.068||cover[k]<.11)return false;
-  const scale=(name==='grassShort1'?.36:name==='grassTall1'?.57:.51)*
+  const scale=(name==='grassShort1'?.43:name==='grassTall1'?.72:.63)*
    (.73+random()*.58)*multiplier;
   dummy.position.set(x,height(x,z)-.018,z);
   dummy.rotation.set((random()-.5)*.08,random()*Math.PI*2,(random()-.5)*.08);
@@ -353,7 +354,7 @@ function grassShape(){
   let z;
   if(favorTrail){
    const side=random()<.5?-1:1;
-   z=roadZ(x)+side*(1.17+Math.pow(random(),1.55)*13.0);
+   z=roadZ(x)+side*(1.17+Math.pow(random(),1.40)*6.2);
    z+=(random()-.5)*.21;
   }else z=(random()-.5)*L*.96;
   if(Math.abs(z)>L*.48)return null;
@@ -369,13 +370,13 @@ function grassShape(){
   const kind=random();
   const name=kind<.45?'grassTall1':kind<.82?'grassMixed1':'grassMixed2';
   return plant(name,p.x+(random()-.5)*.17,
-   p.z+(random()-.5)*.17,p.k,.92+p.growth*.24);
+   p.z+(random()-.5)*.28,p.k,1.04+p.growth*.30);
  }
  function pass(target,tall){
   let attempts=0,added=0;
   while(added<target&&attempts<target*7){
    attempts++;
-   const p=site(random()<.78);
+   const p=site(random()<.89);
    if(!p||random()>clamp(.46+p.growth*.50,.25,.97))continue;
    const ok=tall?scatterTall(p):
     plant(random()<.16?'grassMixed1':'grassShort1',p.x,p.z,p.k,
@@ -384,8 +385,8 @@ function grassShape(){
    added++;
    // Pares e trios próximos quebram o espaçamento artificial sem adicionar
    // geometria gerada; usam apenas as gramíneas reais do pacote.
-   if(tall&&added<target&&random()<.40){
-    const p2={...p,x:p.x+(random()-.5)*.25,z:p.z+(random()-.5)*.25};
+   if(tall&&added<target&&random()<.68){
+    const p2={...p,x:p.x+(random()-.5)*.42,z:p.z+(random()-.5)*.42};
     if(scatterTall(p2))added++;
    }
   }
@@ -1338,7 +1339,8 @@ function moveAnimals(t){
   const k=patch.k,wear=Math.max(traffic[k],animalTrail[k]),c=cover[k];
   const hydro=api.depth[k]>.08?0:1;
   const alive=fixedRoadMask[k]>.06?0:clamp(c*(1-wear)*hydro,0,1);
-  const scale=alive>.045?(.13+.87*alive):.0001;
+  // Evita aparência de grama aparada em solo saudável; mantém pisoteio e estrada sem capim.
+  const scale=alive>.11?(.47+.53*alive):.0001;
   o.matrix.copy(patch.matrix);
   o.matrix.decompose(o.position,o.quaternion,o.scale);
   o.scale.multiplyScalar(scale);o.updateMatrix();
