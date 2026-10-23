@@ -72,6 +72,17 @@ const mobileDevice=innerWidth<680;
 // Orçamento alto igual no modo Equilibrado: vegetação fechada por TODO o mapa.
 const grassBudgets=mobileDevice?{high:1900000,balanced:1900000,low:800000}:{high:2400000,balanced:2400000,low:1000000};
 let grassDrawn=0,lastGrassQuality='';
+const grassChunkMeshes=new Map();
+const grassCellLastScale=new Float32Array(cells);
+grassCellLastScale.fill(NaN);
+let grassForceRefresh=true;
+function grassAliveScale(k){
+ const wear=Math.max(traffic[k],animalTrail[k]),c=cover[k];
+ const hydro=api.depth[k]>.08?0:1;
+ const alive=fixedRoadMask[k]>.06?0:
+  clamp(c*(1-wear)*hydro*(1-nestBareMask[k]/255),0,1);
+ return alive>.11?(.47+.53*alive):.0001;
+}
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
  const ratio=Math.min(1,(grassBudgets[quality]||grassBudgets.balanced)/grassBudgets.high);
@@ -80,6 +91,7 @@ function applyGrassQuality(){
   m.count=Math.min(m.userData.planted||0,Math.round((m.userData.planted||0)*ratio));
   grassDrawn+=m.count;m.instanceMatrix.needsUpdate=true;
  }
+ if(lastGrassQuality!==quality)grassForceRefresh=true;
  lastGrassQuality=quality;
 }
 async function loadMeshes(){
@@ -451,6 +463,9 @@ async function grassShape(){
    mesh.instanceMatrix.needsUpdate=true;
    if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
    foliage.add(mesh);chunkCount++;
+   const sectorId=cz*nxChunk+cx;
+   if(!grassChunkMeshes.has(sectorId))grassChunkMeshes.set(sectorId,[]);
+   grassChunkMeshes.get(sectorId).push(mesh);
   }
   // Libera o navegador entre partes do mapa, em especial no Android.
   sectorIndex++;
@@ -1399,34 +1414,57 @@ function moveAnimals(t){
   m.scale.setScalar(radial*magnify);
   m.scale.setComponent(axis,extension*magnify);
  }
-}let grassSectorRefresh=0;
+}// V12.53: uma só leitura dos índices ecológicos por célula, em vez de
+// percorrer as ~2 milhões de instâncias a cada 0,7 s. Os setores que
+// realmente mudaram são os únicos cujos buffers são revisitados.
 function updateGrassMeshes(force=false){
- // Manter a escala ecológica da V12.42; trabalhar apenas parte dos setores
- // por ciclo evita travar a CPU com toda a cobertura de uma só vez.
- const batches=foliage.children.filter(m=>m.isInstancedMesh&&m.userData.grassKeys);
- const length=batches.length;
- if(!length)return;
- const n=force?length:Math.max(1,Math.ceil(length/12));
- for(let z=0;z<n;z++){
-  const mesh=batches[(grassSectorRefresh+z)%length];
-  const keys=mesh.userData.grassKeys,previous=mesh.userData.lastScale;
-  const buffer=mesh.instanceMatrix.array;
-  let changed=false;
-  for(let i=0;i<mesh.count;i++){
-   const k=keys[i],wear=Math.max(traffic[k],animalTrail[k]),c=cover[k];
-   const hydro=api.depth[k]>.08?0:1;
-   const alive=fixedRoadMask[k]>.06?0:
-     clamp(c*(1-wear)*hydro*(1-nestBareMask[k]/255),0,1);
-   const scale=alive>.11?(.47+.53*alive):.0001;
-   const last=previous[i]||1;
-   if(Math.abs(scale-last)<.018)continue;
-   const ratio=scale/last,off=i*16;
-   for(let j=0;j<12;j++)buffer[off+j]*=ratio;
-   previous[i]=scale;changed=true;
+ if(!grassChunkMeshes.size)return;
+ const dirty=new Set();
+ if(force||grassForceRefresh){
+  for(const id of grassChunkMeshes.keys())dirty.add(id);
+  for(let k=0;k<cells;k++)grassCellLastScale[k]=grassAliveScale(k);
+  grassForceRefresh=false;
+ }else{
+  const chunkSize=10,nxChunk=Math.ceil(W/chunkSize),nzChunk=Math.ceil(L/chunkSize);
+  const xMargin=dx*1.05,zMargin=dz*1.05;
+  for(let k=0;k<cells;k++){
+   const scale=grassAliveScale(k),prev=grassCellLastScale[k];
+   if(Math.abs(scale-prev)<.018)continue;
+   grassCellLastScale[k]=scale;
+   const x=-W*.5+(k%NX)*dx,z=-L*.5+Math.floor(k/NX)*dz;
+   const ux=(x+W*.48)/chunkSize,uz=(z+L*.48)/chunkSize;
+   const cx=Math.floor(ux),cz=Math.floor(uz);
+   // Amostragem da célula arredonda o centro em até meio dx/dz.
+   // Incluir os setores vizinhos apenas perto de suas fronteiras.
+   const xs=[cx],zs=[cz];
+   if(ux-cx<xMargin/chunkSize)xs.push(cx-1);
+   if(cx+1-ux<xMargin/chunkSize)xs.push(cx+1);
+   if(uz-cz<zMargin/chunkSize)zs.push(cz-1);
+   if(cz+1-uz<zMargin/chunkSize)zs.push(cz+1);
+   for(const ax of xs)for(const az of zs)
+    if(ax>=0&&az>=0&&ax<nxChunk&&az<nzChunk)
+     dirty.add(az*nxChunk+ax);
   }
-  if(changed)mesh.instanceMatrix.needsUpdate=true;
  }
- grassSectorRefresh=(grassSectorRefresh+n)%length;
+ if(!dirty.size)return;
+ for(const id of dirty){
+  const sector=grassChunkMeshes.get(id);
+  if(!sector)continue;
+  for(const mesh of sector){
+   const keys=mesh.userData.grassKeys,previous=mesh.userData.lastScale;
+   const buffer=mesh.instanceMatrix.array;
+   let changed=false;
+   for(let i=0;i<mesh.count;i++){
+    const scale=grassAliveScale(keys[i]);
+    const last=previous[i]||1;
+    if(Math.abs(scale-last)<.018)continue;
+    const ratio=scale/last,off=i*16;
+    for(let j=0;j<12;j++)buffer[off+j]*=ratio;
+    previous[i]=scale;changed=true;
+   }
+   if(changed)mesh.instanceMatrix.needsUpdate=true;
+  }
+ }
 }
 // A estrada NÃO é um objeto gerado: é o resultado histórico de pisoteio,
 // compactação, perda de clorofila e redução dos tufos de grama.
