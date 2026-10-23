@@ -625,6 +625,49 @@ function groundTexture(){
  const t=new T.CanvasTexture(canvas);t.wrapS=t.wrapT=T.RepeatWrapping;
  t.repeat.set(4.2,3.35);t.colorSpace=T.SRGBColorSpace;t.anisotropy=mobile?2:6;return t;
 }
+// Agregados minerais por classe de solo: detalhes em alta e textura antiga na baixa.
+const soilImageCache=new Map();
+function soilGranularTexture(profile,quality){
+ const key=profile+'/'+quality;
+ if(soilImageCache.has(key))return soilImageCache.get(key);
+ if(quality==='low'){
+  const basic=groundTexture();soilImageCache.set(key,basic);return basic;
+ }
+ const n=quality==='high'?768:384,canvas=document.createElement('canvas');
+ canvas.width=canvas.height=n;
+ const ctx=canvas.getContext('2d'),r=rand(19841+profile.length*131);
+ const sand=['arenoso','aluvial','pedregoso'].includes(profile);
+ const dark=['humoso','aluvial'].includes(profile);
+ const clay=['argiloso','lateritico','compactado'].includes(profile);
+ const palette=sand?['#bdb69b','#e5d4ae','#827e6f','#ede2c5']:
+  clay?['#a47d68','#d1a185','#885f4e','#b58b70']:
+  dark?['#615d51','#9b8b76','#433e37','#b0a28a']:
+  ['#a79b86','#d1bf9e','#806d57','#ece1c9'];
+ ctx.fillStyle=palette[0];ctx.fillRect(0,0,n,n);
+ for(let i=0;i<(quality==='high'?11500:3900);i++){
+  const x=r()*n,y=r()*n;
+  const dot=sand?.7+r()*2.2:clay?.3+r()*1.6:.5+r()*2.5;
+  ctx.globalAlpha=.13+r()*.40;ctx.fillStyle=palette[Math.floor(r()*palette.length)];
+  ctx.beginPath();ctx.ellipse(x,y,dot*2,dot*(sand?.67:.38),r()*6.283,0,6.283);ctx.fill();
+ }
+ for(let i=0;i<(quality==='high'?850:280);i++){
+  const x=r()*n,y=r()*n,length=2+r()*(dark?21:10);
+  ctx.strokeStyle=palette[Math.floor(r()*palette.length)];
+  ctx.globalAlpha=.18+r()*.20;ctx.lineWidth=.3+r()*1.15;
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+length,y+(r()-.5)*4);ctx.stroke();
+ }
+ ctx.globalAlpha=1;
+ const tex=new T.CanvasTexture(canvas);
+ tex.wrapS=tex.wrapT=T.RepeatWrapping;tex.repeat.set(5.2,4.1);
+ tex.colorSpace=T.SRGBColorSpace;tex.anisotropy=quality==='high'?8:4;
+ soilImageCache.set(key,tex);return tex;
+}
+function applySoilTexture(){
+ if(!land?.material)return;
+ const key=soilType==='mosaico'?'franco':soilType;
+ const mapped=soilGranularTexture(key,graphicsQuality);
+ if(land.material.map!==mapped){land.material.map=mapped;land.material.needsUpdate=true;}
+}
 const landG=grid(),landP=landG.attributes.position.array,colors=new Float32Array(size*3),dry=new Float32Array(size*3);
 for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
  const k=idx(i,j),x=nx(i),z=nz(j),h=elevation(x,z);soil[k]=h;landP[k*3+1]=h;
@@ -1211,6 +1254,7 @@ function setGraphicsQuality(next){
  });
  applyForestVisibility();
  applyQualityMaterials();
+ applySoilTexture();
  updateGraphicsStatus();
  if(typeof reflectionAge!=='undefined')reflectionAge=999;
 }
@@ -2063,7 +2107,7 @@ function setSoilType(next){
  configureSoilCells(true);
  for(let k=0;k<size;k++)soilHealth[k]=minNutrientAt(k);
  updatePlantVisuals();updateSprouts();updateForestHealth();
- rebuild();updateInfo(true);
+ applySoilTexture();rebuild();updateInfo(true);
 }
 function addSoilOrganic(){
  for(let k=0;k<size;k++){
