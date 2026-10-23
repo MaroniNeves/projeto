@@ -2547,11 +2547,40 @@ foamMesh.count=0;foamMesh.frustumCulled=false;foamMesh.renderOrder=5;scene.add(f
 const foamClean=new T.Color('#c6f3e9'),foamDirty=new T.Color('#a48a69');
 let reflectionAge=999,reflectionFrames=0,reflectionsOn=true,reflectionReady=false,reflection2Ready=false;
 let reflectionTurn=0;
+// V12.53: consultar apenas os blocos onde a água realmente existe.
+// AABB propositalmente folgada evita descartar um reflexo visível.
+const REFLECT_CELL_BLOCK=10;
+const reflectCols=Math.ceil(NX/REFLECT_CELL_BLOCK);
+const reflectRows=Math.ceil(NZ/REFLECT_CELL_BLOCK);
+const reflectWetBlocks=new Uint8Array(reflectCols*reflectRows);
+const reflectFrustum=new T.Frustum(),reflectMatrix=new T.Matrix4();
+const reflectBox=new T.Box3();
+function anyVisibleReflectiveWater(){
+ if(!water.visible)return false;
+ camera.updateMatrixWorld(true);
+ reflectFrustum.setFromProjectionMatrix(
+  reflectMatrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+ for(let bz=0;bz<reflectRows;bz++)for(let bx=0;bx<reflectCols;bx++){
+  if(!reflectWetBlocks[bz*reflectCols+bx])continue;
+  const minX=-W*.5+bx*REFLECT_CELL_BLOCK*dx-.7;
+  const maxX=-W*.5+Math.min(NX-1,(bx+1)*REFLECT_CELL_BLOCK)*dx+.7;
+  const minZ=-L*.5+bz*REFLECT_CELL_BLOCK*dz-.7;
+  const maxZ=-L*.5+Math.min(NZ-1,(bz+1)*REFLECT_CELL_BLOCK)*dz+.7;
+  reflectBox.min.set(minX,-12,minZ);
+  reflectBox.max.set(maxX,15,maxZ);
+  if(reflectFrustum.intersectsBox(reflectBox))return true;
+ }
+ return false;
+}
 function updateReflections(dt){
  if(!reflectionsOn){waterM.uniforms.uReflect.value=0;return;}
  reflectionAge+=dt;
  const interval=mobile?(graphicsQuality==='low'?.42:.22):(graphicsQuality==='high'?.095:.18);
  if(reflectionAge<interval&&reflectionReady)return;
+ // Reflexo planar custa mais uma renderização completa da cena.
+ // Se nenhum pixel com água pode estar na vista atual, manter o último
+ // mapa até a próxima vez que uma superfície refletora voltar ao quadro.
+ if(!anyVisibleReflectiveWater())return;
  reflectionAge=0;
  camera.updateMatrixWorld(true);
  const basin=basins[1];
