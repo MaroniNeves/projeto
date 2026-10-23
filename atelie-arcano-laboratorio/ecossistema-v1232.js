@@ -963,9 +963,10 @@ function antGeometry(name){
 function hideDetachedAntModels(){
  const pattern=/(^|[_\s-])(ant|formiga|leafcutter)([_\s-]|$)/i;
  api.scene.traverse(obj=>{
-  if(obj===realm||realm.getObjectById(obj.id))return;
-  if(obj.isMesh&&pattern.test(obj.name||'')&&
-     !obj.userData.arcanoRetainAnt) obj.visible=false;
+  if(!obj.isMesh||!pattern.test(obj.name||'')||obj.userData.arcanoRetainAnt)return;
+  let parent=obj.parent,insideEcology=false;
+  while(parent){if(parent===realm){insideEcology=true;break;}parent=parent.parent;}
+  if(!insideEcology)obj.visible=false;
  });
 }
 function visualizeAnimals(){
