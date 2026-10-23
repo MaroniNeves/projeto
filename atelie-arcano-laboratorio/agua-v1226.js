@@ -1009,21 +1009,26 @@ function biomeField(x,z){
  const u=clamp(edge,0,1);return u*u*(3-2*u);
 }
 const FOREST_MODELS=[
- {name:'CommonTree_1',type:'tree',pack:'mega',mobile:55,desktop:97,height:4.4},
- {name:'CommonTree_2',type:'tree',pack:'mega',mobile:50,desktop:87,height:4.0},
- {name:'Pine_2',type:'pine',pack:'mega',mobile:19,desktop:31,height:4.7},
+ // Árvores carregadas em ordem intercalada: espécies diferentes aparecem
+ // desde o início, mesmo em aparelhos onde os modelos demoram a carregar.
+ {name:'CommonTree_1',type:'tree',pack:'mega',mobile:33,desktop:60,height:4.4},
+ {name:'BirchTree_1',type:'tree',pack:'ultimate',mobile:29,desktop:53,height:4.9},
+ {name:'CommonTree_3',type:'tree',pack:'mega',mobile:29,desktop:50,height:4.3},
+ {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:30,desktop:54,height:4.4},
+ {name:'Pine_2',type:'pine',pack:'mega',mobile:20,desktop:34,height:4.7},
+ {name:'CommonTree_2',type:'tree',pack:'mega',mobile:30,desktop:54,height:4.0},
+ {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:29,desktop:54,height:4.8},
+ {name:'CommonTree_4',type:'tree',pack:'mega',mobile:26,desktop:47,height:4.6},
+ {name:'BirchTree_3',type:'tree',pack:'ultimate',mobile:27,desktop:49,height:4.5},
+ {name:'Pine_4',type:'pine',pack:'mega',mobile:19,desktop:33,height:5.0},
+ {name:'CommonTree_5',type:'tree',pack:'mega',mobile:26,desktop:45,height:4.6},
+ {name:'PineTree_2',type:'pine',pack:'ultimate',mobile:24,desktop:43,height:5.0},
+ // Sub-bosque, flores e rochas dos mesmos pacotes existentes.
  {name:'Bush_Common_Flowers',type:'bush',pack:'mega',mobile:76,desktop:212,height:.95},
  {name:'Flower_3_Group',type:'flower',pack:'mega',mobile:83,desktop:200,height:.47},
  {name:'Grass_Common_Short',type:'grass',pack:'mega',mobile:10,desktop:25,height:.29},
  {name:'Fern_1',type:'fern',pack:'mega',mobile:13,desktop:28,height:.61},
  {name:'Rock_Medium_2',type:'rock',pack:'mega',mobile:5,desktop:8,height:.70},
- // Quaternius Ultimate: mesmos modelos do pacote agrupado enviado pelo usuário,
- // extraídos como malhas FBX individuais para controlar densidade/performance.
- {name:'BirchTree_1',type:'tree',pack:'ultimate',mobile:46,desktop:80,height:4.9},
- {name:'BirchTree_3',type:'tree',pack:'ultimate',mobile:38,desktop:66,height:4.5},
- {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:49,desktop:82,height:4.4},
- {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:50,desktop:88,height:4.8},
- {name:'PineTree_2',type:'pine',pack:'ultimate',mobile:28,desktop:52,height:5.0},
  {name:'Bush_Large_Flowers',type:'bush',pack:'ultimate',mobile:76,desktop:188,height:1.10},
  {name:'Flower_1_Clump',type:'flower',pack:'ultimate',mobile:83,desktop:180,height:.46},
  {name:'Plant_Flowers',type:'flower',pack:'ultimate',mobile:62,desktop:140,height:.51},
@@ -1402,7 +1407,7 @@ function setGraphicsQuality(next){
 function forestStatus(state){
  floraState=state;
  if($('floraStatus'))$('floraStatus').textContent=
-  '🌳 Quaternius Mega '+megaModelsLoaded+'/8 · Ultimate '+ultimateModelsLoaded+'/11 · '+state+
+  '🌳 Quaternius Mega '+megaModelsLoaded+'/12 · Ultimate '+ultimateModelsLoaded+'/11 · '+state+
   ' · solo aquarelado procedural';
 }
 function setFloraVisible(v){
@@ -1903,6 +1908,14 @@ function snapForestToGround(anchor){
  }else obj.position.y+=desiredY-foot;
  obj.updateMatrixWorld(true);
 }
+// Alternância espacial evita monoculturas nas duas margens. Todos estes
+// modelos 3D foram conferidos no diretório assets/ do próprio repositório.
+const roadsideTreeSpecies=[
+ 'CommonTree_1','BirchTree_1','CommonTree_3','MapleTree_3',
+ 'Pine_2','CommonTree_2','NormalTree_2','CommonTree_4',
+ 'BirchTree_3','Pine_4','CommonTree_5','PineTree_2'
+];
+const treeRoadSeed=3;
 function placeForestModel(item,root){
  if(item.type==='rock'){
   registerImportedRock(item,root);
@@ -1965,14 +1978,15 @@ function placeForestModel(item,root){
   const roadCenter=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
   const pathDistance=Math.abs(z-roadCenter);
   if((item.type==='tree'||item.type==='pine')&&pathDistance<1.16)continue;
-  // Cada trecho curto da estrada reserva espaço para OUTRA espécie.
-  // Isso impede que CommonTree (carregada primeiro) ocupe todos os
-  // pontos visíveis antes da chegada dos bordos, bétulas e pinheiros.
-  if((item.type==='tree'||item.type==='pine')&&pathDistance<5.0){
-   const roadsideSpecies=['CommonTree_1','BirchTree_1','MapleTree_3',
-    'CommonTree_2','NormalTree_2','BirchTree_3','PineTree_2','Pine_2'];
-   const slot=(Math.floor((x+W*.49)/3.6)+(z>roadCenter?3:0))%roadsideSpecies.length;
-   if(roadsideSpecies[slot]!==item.name&&randomForest()<.96)continue;
+  // Cada trecho de 4-5 m recebe DUAS espécies características distintas,
+  // com alguns indivíduos misturados. Não bloquear espécies por um slot rígido:
+  // caso um FBX demore ou falhe, as árvores MegaKit ainda cobrem a margem.
+  if((item.type==='tree'||item.type==='pine')&&pathDistance<5.4){
+   const seg=Math.floor((x+W*.49)/4.8),side=z>roadCenter?1:0;
+   const choice=(seg*7+side*5+treeRoadSeed)%roadsideTreeSpecies.length;
+   const first=roadsideTreeSpecies[choice];
+   const second=roadsideTreeSpecies[(choice+5)%roadsideTreeSpecies.length];
+   if(item.name!==first&&item.name!==second&&randomForest()<.82)continue;
   }
   if((item.type==='bush'||item.type==='flower'||item.type==='fern'||item.type==='grass')&&
      pathDistance<(item.type==='bush'?1.10:item.type==='grass'?1.11:.72))continue;
