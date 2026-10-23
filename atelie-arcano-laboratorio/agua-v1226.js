@@ -1164,11 +1164,34 @@ function supportHeight(type,x,z,extent){
   low=Math.min(low,terrainContact(x+u,z+v));
  return low;
 }
+// V12.27: troncos sustentam o modelo, não a extremidade de uma folha ou cartão alpha.
+// Calcula o ponto mais baixo de tronco/galho após TODAS as rotações herdadas do FBX.
+const arcanoBBoxScratch=new T.Box3();
+function solidForestFootY(obj){
+ obj.updateMatrixWorld(true);
+ let woodMin=Infinity,allMin=Infinity;
+ obj.traverse(mesh=>{
+  if(!mesh.isMesh||!mesh.visible)return;
+  arcanoBBoxScratch.setFromObject(mesh);
+  if(!Number.isFinite(arcanoBBoxScratch.min.y))return;
+  allMin=Math.min(allMin,arcanoBBoxScratch.min.y);
+  const mats=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+  const label=((mesh.name||'')+' '+mats.map(m=>m?.name||'').join(' ')).toLowerCase();
+  if(/(trunk|bark|wood|stem|branch|log|treebase)/.test(label) &&
+     !/(leaves|leaf|canopy|foliage)/.test(label)){
+   woodMin=Math.min(woodMin,arcanoBBoxScratch.min.y);
+  }
+ });
+ return Number.isFinite(woodMin)?woodMin:allMin;
+}
 function snapForestToGround(anchor){
- const a=anchor,scale=a.obj.scale.y;
- const y=a.contactY-a.localBottom*scale-a.embed;
- a.obj.position.y=y;
- a.obj.updateMatrixWorld(true);
+ const a=anchor,obj=a.obj;
+ const foot=solidForestFootY(obj);
+ if(!Number.isFinite(foot))return;
+ // Pivô no terreno: mesmo após crescimento e inclinação do vento, sem soma
+ // incorreta da escala duas vezes e sem assumir o pivô FBX em y=0.
+ obj.position.y+=a.contactY-a.embed-foot;
+ obj.updateMatrixWorld(true);
 }
 function placeForestModel(item,root){
  const randomForest=rand(9157+item.name.split('').reduce((a,c)=>a+c.charCodeAt(0),0));
@@ -1195,27 +1218,33 @@ function placeForestModel(item,root){
   if(basinBlocked)continue;
   const groundY=terrainContact(x,z);
   if(groundY<-.13)continue;
-  const obj=root.clone(true),factor=.78+randomForest()*.52;
+  const factor=.78+randomForest()*.52;
   const desired=item.height*factor;
   const scaleMultiplier=desired/h,rot=randomForest()*Math.PI*2;
-  // O FBX pode ter escala .01 e rotação de conversão de eixo no nó raiz.
-  // Multiplicamos a transformação importada em vez de substituí-la.
-  // Calcula o Box3 da instância já rotacionada, com o pivô da malha original.
-  // A base inferior é medida após transformações do FBX — não suposta em y=0.
-  obj.position.set(x,0,z);obj.rotation.copy(root.rotation);
-  obj.rotation.y+=rot;obj.scale.copy(root.scale).multiplyScalar(scaleMultiplier);
+  // O FBX já inclui sua conversão de eixo e sua escala no nó original.
+  // Inserir a raiz sob um pivô de chão impede que a rotação de vento
+  // transforme uma origem deslocada em uma árvore flutuando.
+  const obj=new T.Group(),visualRoot=root.clone(true);
+  obj.name='Raiz no chão '+item.name;
+  obj.add(visualRoot);
+  obj.position.set(x,0,z);
+  obj.rotation.y=rot;
+  obj.scale.setScalar(scaleMultiplier);
   obj.updateMatrixWorld(true);
   const worldBox=new T.Box3().setFromObject(obj);
   if(!Number.isFinite(worldBox.min.y)||!Number.isFinite(worldBox.max.y))continue;
   const projected=Math.max(worldBox.max.x-worldBox.min.x,worldBox.max.z-worldBox.min.z);
-  const localBottom=worldBox.min.y/Math.max(.000001,Math.abs(obj.scale.y));
+  // Importações com conversão de eixo inadequada geram toras horizontais
+  // gigantes no lugar de árvores: não as espalhar pela cena.
+  if((item.type==='tree'||item.type==='pine')&&projected>desired*2.35)continue;
   const contactY=supportHeight(item.type,x,z,projected);
   const embed=item.type==='rock'?
    clamp(desired*.14,.045,.17):
-   item.type==='tree'||item.type==='pine'?.035:.018;
-  const anchor={obj,x,z,y:contactY,contactY,localBottom,embed,
-   rotation:rot,baseScale:obj.scale.y,fullScale:obj.scale.clone(),baseRx:obj.rotation.x,baseRz:obj.rotation.z,pack:item.pack||'mega',type:item.type,
-   phase:randomForest()*Math.PI*2,qualityRank:randomForest(),modelName:item.name};
+   item.type==='tree'||item.type==='pine'?.065:.023;
+  const anchor={obj,x,z,y:contactY,contactY,localBottom:0,embed,
+   rotation:rot,baseScale:obj.scale.y,fullScale:obj.scale.clone(),baseRx:0,baseRz:0,
+   pack:item.pack||'mega',type:item.type,phase:randomForest()*Math.PI*2,
+   qualityRank:randomForest(),modelName:item.name};
   snapForestToGround(anchor);
   obj.traverse(o=>{
    if(!o.isMesh)return;
