@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Floresta V12.35 · ancoragem, reflexos e vento físico</title>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Floresta V12.36 · ancoragem, reflexos e vento físico</title>
 <style>
 :root{color-scheme:dark;--bg:#101d29;--edge:#45606b;--font:#eaf1ed;--muted:#aabfc7;--accent:#80c0bf}*{box-sizing:border-box}
 body{margin:0;background:#0b131b;color:var(--font);font:14px/1.35 system-ui,Segoe UI,sans-serif;overflow:hidden}
@@ -58,7 +58,7 @@ body.ui-hidden #showControls{display:block}
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script><script defer src="./agua-v1226.js"></script><script defer src="./arcano-assets-v1232.js"></script><script defer src="./ecossistema-v1232.js"></script>
 </head>
 <body><canvas id="stage" aria-label="Cena tridimensional de chuva, poças e lagoas"></canvas>
-<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Floresta V12.35 · solo em camadas · chuva, aquífero e vegetação</strong><small>Grama em tufos originais · pedras texturizadas · solo granular · gotejamento das folhas</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
+<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Floresta V12.36 · solo em camadas · chuva, aquífero e vegetação</strong><small>Grama em tufos originais · pedras texturizadas · solo granular · gotejamento das folhas</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
 <nav class="pills" aria-label="Escolher efeito"><button type="button" data-mode="rain">🌧 Chuva</button><button type="button" data-mode="puddle">💧 Poças</button><button type="button" data-mode="lagoon">🌊 Lagoa</button><button type="button" data-mode="storm">⛈ Temporal</button></nav></header>
 <div class="hint" id="hint">Chuva começa no solo seco. Observe a formação das poças. Pode recolher os controles para ver a cena.</div>
 <button type="button" id="showControls" aria-controls="rainControls" aria-expanded="false">☷ Mostrar ajustes</button>
@@ -138,7 +138,7 @@ body.ui-hidden #showControls{display:block}
     <label for="fogToggle"><input id="fogToggle" type="checkbox" checked> Neblina física apenas sob condições de formação (não nas tempestades)</label>
  </div>
  <details id="ecoPanel" class="ecology-panel" style="padding:10px;margin:8px 0;border:1px solid #4c706c;border-radius:10px;background:#12272c">
- <summary style="font-weight:600;cursor:pointer">🌿 V12.35 · Rio, estrada, gramado e vida do solo</summary>
+ <summary style="font-weight:600;cursor:pointer">🌿 V12.36 · Rio, estrada, gramado e vida do solo</summary>
  <p style="font-size:11px;color:#abc9bd;line-height:1.5">
   Gramas Quaternius densas conforme a fertilidade e a qualidade gráfica. Estrada sem malha sobreposta: a própria terra muda de cor e escurece ao encharcar, conservando pegadas. Rio alimentado a montante, ninhos, feromônios e galerias em camada subterrânea.
   As colônias procuram alimento conforme o vigor das plantas e os resíduos no solo; os animais permanecem minúsculos em escala natural.
@@ -150,6 +150,7 @@ body.ui-hidden #showControls{display:block}
  <div class="row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
   <button type="button" id="ecoTraffic">👣 Simular passadas na estrada</button>
   <button type="button" id="ecoCarcass">🍂 Acrescentar matéria orgânica / restos</button>
+  <button type="button" id="ecoLeafTest">🍂 Soltar folhas para testar queda e decomposição</button>
   <button type="button" id="ecoFeedColony">🐜 Deixar alimento para as forrageadoras</button>
   <button type="button" id="ecoAdvance">⏩ Simular 30 dias ecológicos</button>
  </div>
@@ -158,7 +159,7 @@ body.ui-hidden #showControls{display:block}
  <label><input id="ecoMagnify" type="checkbox"> Lupa didática: ampliar apenas o desenho de formigas e minhocas 6×</label>
  <label><input id="ecoBurrows" type="checkbox"> Mostrar galerias e câmaras abaixo do solo (raio-X didático)</label>
  <p style="font-size:11px;line-height:1.45;color:#a8c5b4">
-  Formigueiros possuem montinhos de terra e entrada escura. As operárias coletam resíduos, reforçam trilhas de feromônio, alimentam a rainha e as crias, escavam câmaras e devolvem dejetos ao solo. Minhocas rastejam por contrações do corpo, migram conforme a umidade, acasalam e produzem casulos. Pegadas aparecem na estrada úmida com o pisoteio.
+  Formigueiros possuem montinhos de terra, entrada escura e operárias em câmaras subterrâneas; use raio-X para acompanhar os deslocamentos. As operárias coletam resíduos, reforçam trilhas de feromônio, alimentam a rainha e as crias, escavam câmaras e devolvem dejetos ao solo. Minhocas rastejam por contrações do corpo, migram conforme a umidade, acasalam e produzem casulos. Folhas de árvores caem, apodrecem e podem ser carregadas pelas formigas. Na chuva, elas retornam ao ninho; pegadas aparecem na estrada úmida com o pisoteio.
  </p>
  <label for="ecoColonySelect" style="display:block;margin-top:9px">Inspecionar papéis na colônia:
   <select id="ecoColonySelect" style="padding:6px;margin:4px 0;background:#20383b;color:#e7f5ef;border-radius:6px"><option value="0">Colônia 1</option></select>
@@ -167,6 +168,7 @@ body.ui-hidden #showControls{display:block}
  <output id="ecoStatus" style="display:block;font-size:11px;padding:9px;color:#d3e7dc;line-height:1.55" aria-live="polite">
   Carregando fauna e gramado denso com contagem por qualidade...
  </output>
+ <output id="ecoLeafStatus" style="display:block;font:11px/1.5 system-ui;color:#b8d6a4;padding:5px 0" aria-live="off">Aguardando folhas, minhocas e formigas...</output>
  <output id="ecoEvents" style="display:block;white-space:pre-line;font:11px/1.65 system-ui;color:#d2bda3;background:#1a2c2c;border-radius:6px;padding:8px;margin-top:8px" aria-live="off">Aguardando eventos ecológicos...</output>
  <small style="font-size:10px;color:#a3bab7">Modelo demonstrativo, não calibrado em indivíduos/m² ou mm de infiltração. O modo de lupa não aumenta o tamanho biológico real.</small>
 </details>
