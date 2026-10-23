@@ -18,6 +18,8 @@ animals.name='Formigas e minhocas minúsculas';roads.name='Estrada e ponte demon
 for(const g of [foliage,rocks,animals,roads])realm.add(g);
 const meshLibrary={},textureLibrary={};let ready=false, biologicalSpeed=4,previewMagnification=1, trampleEnabled=true;
 const grassPatches=[],rockPositions=[],colonies=[],worms=[],antDraws=[],wormDraws=[];
+const nestDisplays=new Map();
+let colonySequence=0,ecologicalDays=0,burrowLength=0,castsReturned=0;
 const targetNativeGrass=api.forestInstances.filter(a=>a.type==='grass');
 const roadZ=x=>4.6-.67*Math.sin(x*.47+.6)+.20*Math.sin(x*1.34);
 const riverX=z=>-2.3+.55*Math.sin(z*.69)+.48*Math.sin(z*.29+1.3);
@@ -68,35 +70,63 @@ function material(kind){
   alphaTest:kind==='rock'?0:.38,transparent:false,depthWrite:true});
 }
 function makeMesh(name,kind){const geo=meshLibrary[name];return geo?new T.Mesh(geo,material(kind)):null;}
-function makeRoad(){
- // Trilho de terra com as mesmas cotas do terreno, interrompido no rio.
- const points=[],indices=[],uv=[],colors=[];let col=0;
- for(let i=0;i<=140;i++){
-  const x=-9.15+i*(18.3/140),z=roadZ(x);
-  if(Math.abs(x-riverX(z))<.70)continue;
-  const half=.55+.08*Math.sin(x*1.2);
-  const left=z-half,right=z+half;
-  points.push(x,height(x,left)+.018,left,x,height(x,right)+.018,right);
-  uv.push(i/11,0,i/11,1);
-  colors.push(.77,.62,.47,.77,.62,.47);
-  if(col>0){ // Discontinuity at the bridge is handled as a separate patch, skip larger spans.
-   const old=points.length/3-4,current=points.length/3-2;
-   if(Math.abs(points[current*3]-points[old*3])<.30)indices.push(old,old+1,current,old+1,current+1,current);
+// V12.34: a estrada é uma ALTERAÇÃO DE COR no shader do solo,
+ // nunca uma fita de polígonos sobreposta. Apenas a ponte é geometria extra.
+const footprintSites=[];
+const printShapes=new T.Group();printShapes.name='Pegadas de lama compactada';roads.add(printShapes);
+function generateFootprints(){
+ printShapes.clear();footprintSites.length=0;
+ const sole=new T.CircleGeometry(.045,10);
+ const mudMaterial=new T.MeshStandardMaterial({
+  color:'#36261b',transparent:true,opacity:.0,depthWrite:false,
+  polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2,
+  roughness:1,metalness:0,side:T.DoubleSide
+ });
+ // Sempre existe apenas uma malha instanciada para solas e calcanhares.
+ const max=160,stamps=new T.InstancedMesh(sole,mudMaterial,max);
+ stamps.name='Marcas de passos pressionadas no barro';
+ stamps.count=0;stamps.frustumCulled=false;printShapes.add(stamps);
+ const dummy=new T.Object3D(),marks=[];
+ for(let k=0;k<76;k++){
+  const x=-8.6+k*.226,z=roadZ(x),side=k%2?1:-1;
+  for(let part=0;part<2;part++){
+   const fx=x+(part?.047:0),fz=z+side*.15+(part?.016:0);
+   const cell=idx(fx,fz);
+   if(roadMask[cell]<.55||riverMask[cell]>.64||api.depth[cell]>.09)continue;
+   const tilt=Math.atan2(roadZ(x+.08)-roadZ(x-.08),.16);
+   dummy.position.set(fx,height(fx,fz)+.016,fz);
+   dummy.rotation.set(-Math.PI/2,0,tilt);
+   dummy.scale.set(part?.80:1.25,part?1.15:1.6,1);
+   dummy.updateMatrix();marks.push(dummy.matrix.clone());
   }
-  col++;
  }
- const geo=new T.BufferGeometry();
- geo.setAttribute('position',new T.Float32BufferAttribute(points,3));
- geo.setAttribute('uv',new T.Float32BufferAttribute(uv,2));geo.setIndex(indices);geo.computeVertexNormals();
- const mat=new T.MeshStandardMaterial({color:'#a78662',roughness:1,metalness:0,side:T.DoubleSide});
- const m=new T.Mesh(geo,mat);m.name='Estrada compactada, margens irregulares';m.receiveShadow=true;roads.add(m);
- // Pequena ponte de madeira no cruzamento do rio.
- const bx=riverX(roadZ(-2)),bz=roadZ(bx);
+ footprintSites.push(...marks);
+ for(let i=0;i<Math.min(max,marks.length);i++)stamps.setMatrixAt(i,marks[i]);
+ stamps.count=Math.min(max,marks.length);stamps.instanceMatrix.needsUpdate=true;
+ return stamps;
+}
+let muddyFootprints=null;
+function updateFootprints(){
+ if(!muddyFootprints)return;
+ let wet=0;for(let k=0;k<cells;k+=7){
+  if(roadMask[k]>.60)wet=Math.max(wet,
+   clamp(api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]),0,1));
+ }
+ const intensity=clamp((wet-.32)*1.25,0,.74);
+ muddyFootprints.visible=intensity>.02;
+ muddyFootprints.material.opacity=intensity*.70;
+}
+function makeRoad(){
+ // Ponte curta — estrada de terra é somente a máscara cromática no solo.
+ const bx=-2.15,bz=roadZ(bx);
  const wood=new T.MeshStandardMaterial({color:'#76563d',roughness:1,metalness:0});
  for(let k=-3;k<=3;k++){
-  const plank=new T.Mesh(new T.BoxGeometry(.22,.09,1.42),wood);
-  plank.position.set(bx+k*.24,height(bx,bz)+.23,bz);plank.castShadow=true;roads.add(plank);
+  const plank=new T.Mesh(new T.BoxGeometry(.22,.08,1.42),wood);
+  plank.position.set(bx+k*.24,height(bx,bz)+.15,bz);
+  plank.castShadow=true;plank.receiveShadow=true;roads.add(plank);
  }
+ muddyFootprints=generateFootprints();
+ updateFootprints();
 }
 function initializeLandscape(){
  for(let k=0;k<cells;k++){
@@ -185,6 +215,101 @@ function rockShape(){
  }
 }
 function ecologicalDayRate(dt){return dt*biologicalSpeed/1440;}
+// Trilha química discreta na malha: evapora/é lavada pela chuva e é reforçada
+// quando a forrageadora retorna com alimento.
+function reinforceTrail(c,site,intensity=1){
+ const start=idx(c.x,c.z),a=position(start),b=position(site);
+ const count=Math.max(2,Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)/dx));
+ for(let step=0;step<=count;step++){
+  const t=step/count,k=idx(a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t);
+  const dry=clamp(api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]),0,1);
+  c.pheromones[k]=clamp(c.pheromones[k]+(.05+.26*intensity)*(1-dry*.15),0,2);
+ }
+ c.lastFoodSite=site;
+}
+function chooseFoodSites(c){
+ const origin=idx(c.x,c.z),o=position(origin),sites=[];
+ for(let iz=-8;iz<=8;iz+=2)for(let ix=-8;ix<=8;ix+=2){
+  const x=clamp(Math.round((c.x+W*.5)/dx)+ix,0,NX-1);
+  const z=clamp(Math.round((c.z+L*.5)/dz)+iz,0,NZ-1),k=z*NX+x;
+  const site=position(k),distance=Math.hypot(o.x-site.x,o.z-site.z);
+  const food=api.soilLitter[k]+.35*api.soilOrganic[k];
+  const pheromone=c.pheromones[k];
+  const submerged=api.depth[k]>.06;
+  sites.push({k,score:(food*1.85+pheromone*.26)/(1+distance*.27)
+   *(submerged?.05:1)*(1-roadMask[k]*.28)});
+ }
+ sites.sort((a,b)=>b.score-a.score);
+ return sites.slice(0,18);
+}
+function newColony(x,z,workers=24,food=12,founder=false){
+ const c={id:colonySequence++,queen:true,queenFertile:true,queenAge:0,x,z,
+ workers,food,deathProgress:0,eggProgress:0,foodGathered:0,
+ brood:founder?[]:[{stage:'egg',age:0,count:5},{stage:'larva',age:8,count:4},
+  {stage:'pupa',age:18,count:3}],
+ scouts:0,foragers:0,nurses:0,builders:0,guards:0,dead:0,
+ temperature:23,pheromones:new Float32Array(cells),lastFoodSite:idx(x,z),
+ tunnels:Math.max(.09,workers*.003),chambers:1,spoil:Math.max(.03,workers*.0006),
+ foodStored:food*.35,founder, reproductiveCooldown:0,daysWithoutFood:0};
+ distributeTasks(c);return c;
+}
+function distributeTasks(c){
+ const n=c.workers;
+ c.foragers=Math.floor(n*.44);c.nurses=Math.floor(n*.23);
+ c.builders=Math.floor(n*.17);c.guards=Math.floor(n*.10);
+ c.scouts=Math.max(0,n-c.foragers-c.nurses-c.builders-c.guards);
+}
+function nestSurface(c){
+ const anchor=position(idx(c.x,c.z)),y=height(c.x,c.z);
+ if(nestDisplays.has(c.id))return nestDisplays.get(c.id);
+ const g=new T.Group();g.name='Formigueiro colônia '+(c.id+1);g.position.set(c.x,y,c.z);
+ const granules=new T.MeshStandardMaterial({color:'#98764e',roughness:1,metalness:0});
+ const mound=new T.Mesh(new T.ConeGeometry(.18,.085,16,3),granules);
+ mound.rotation.y=c.id*1.2;mound.position.y=.035;g.add(mound);
+ const entrance=new T.Mesh(new T.CircleGeometry(.042,20),
+  new T.MeshBasicMaterial({color:'#24170f',depthWrite:false,side:T.DoubleSide}));
+ entrance.rotation.x=-Math.PI/2;entrance.position.y=.088;g.add(entrance);
+ const rim=new T.Mesh(new T.TorusGeometry(.056,.012,5,20),
+  new T.MeshStandardMaterial({color:'#b48c62',roughness:1,metalness:0}));
+ rim.rotation.x=-Math.PI/2;rim.position.y=.092;g.add(rim);
+ const grainsG=new T.SphereGeometry(.009,4,3);
+ for(let i=0;i<18;i++){
+  const angle=i*2.399,dist=.08+.085*random();
+  const grain=new T.Mesh(grainsG,granules);
+  grain.position.set(Math.cos(angle)*dist,.012+random()*.025,Math.sin(angle)*dist);
+  grain.scale.set(.4+random(),.30+random(),.5+random());g.add(grain);
+ }
+ realm.add(g);nestDisplays.set(c.id,{group:g,mound,entrance,rim});
+ updateNestSurface(c);
+ return nestDisplays.get(c.id);
+}
+function updateNestSurface(c){
+ const nest=nestDisplays.get(c.id);if(!nest)return;
+ const scale=clamp(.55+c.spoil*1.4,.65,1.75);
+ nest.mound.scale.set(scale,Math.min(1.55,scale*.7),scale);
+ nest.group.position.y=height(c.x,c.z);
+ nest.entrance.visible=c.workers>0||c.queen;
+ nest.rim.visible=nest.entrance.visible;
+}
+// Galerias computadas abaixo da superfície: comprimento/câmaras são físicos
+// no estado do solo, mas não se abre geometria cara no mapa à distância.
+function excavateNest(c,days,safe){
+ if(c.workers<=0)return;
+ const k=idx(c.x,c.z);
+ const saturation=clamp(api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]),0,1);
+ const effort=Math.max(0,c.builders)*days*.00045*safe*(1-saturation*.6);
+ if(effort<=0)return;
+ const available=Math.min(effort,.018*days);
+ c.tunnels=clamp(c.tunnels+available,0,8);
+ c.chambers=Math.min(12,1+Math.floor(c.tunnels/.32));
+ c.spoil=clamp(c.spoil+available*.64,0,1);
+ burrowLength+=available;
+ // Solo escavado vai para o monte exterior. Túneis melhoram macroporosidade
+ // local mas obras excessivas não transformam o solo em meio infinito.
+ api.permeability[k]=clamp(api.permeability[k]*(1+available*.13),.000001,.16);
+ api.soilBiota[k]=clamp(api.soilBiota[k]+available*.06,0,1);
+ updateNestSurface(c);
+}
 function initialColonies(){
  const locations=[[-6,2.5],[4.5,2.9],[-2,-4.1]];
  for(let i=0;i<locations.length;i++){
