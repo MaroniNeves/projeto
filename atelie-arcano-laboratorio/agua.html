@@ -154,6 +154,10 @@ body.ui-hidden #showControls{display:block}
  <label for="ecoSpeed" style="display:block;margin-top:10px">Velocidade do ciclo biológico: <strong id="ecoSpeedVal">4×</strong></label>
  <input id="ecoSpeed" type="range" min="1" max="200" step="1" value="4" style="width:100%;accent-color:#86b98e">
  <label><input id="ecoMagnify" type="checkbox"> Lupa didática: ampliar apenas o desenho de formigas e minhocas 6×</label>
+ <label for="ecoColonySelect" style="display:block;margin-top:9px">Inspecionar papéis na colônia:
+  <select id="ecoColonySelect" style="padding:6px;margin:4px 0;background:#20383b;color:#e7f5ef;border-radius:6px"><option value="0">Colônia 1</option></select>
+ </label>
+ <output id="ecoColonyDetails" style="display:block;padding:5px;font-size:11px;color:#bcd3c3"></output>
  <output id="ecoStatus" style="display:block;font-size:11px;padding:9px;color:#d3e7dc;line-height:1.55" aria-live="polite">
   Carregando modelos de formigas, minhocas, pedras e gramados...
  </output>
