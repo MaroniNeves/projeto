@@ -509,32 +509,44 @@ function lifeDay(days){
  }
 }
 function visualizeAnimals(){
- animals.clear();antDraws.length=0;wormDraws.length=0;
+ for(const child of [...animals.children]){
+  animals.remove(child);
+  if(child.isInstancedMesh)child.material.dispose();
+  if(child.userData.animatedWorm){child.geometry.dispose();child.material.dispose();}
+ }
+ antDraws.length=0;wormDraws.length=0;
  const variants=['ant1','ant2','ant3','antRed','ant4','ant5'];
- for(let j=0;j<colonies.length;j++)for(let v=0;v<2;v++){
-  const c=colonies[j],key=variants[(j*2+v)%variants.length],geo=meshLibrary[key];
-  if(!geo)continue;
-  const count=innerWidth<680?7:14;
-  const m=new T.InstancedMesh(geo,
-   new T.MeshStandardMaterial({color:(j===2||key==='antRed')?'#a3533b':'#49332b',
-    roughness:1,metalness:0,side:T.DoubleSide}),count);
-  m.name='Operárias minúsculas · '+key+' · colônia '+(j+1);
-  m.count=Math.min(count,Math.ceil(c.foragers/2));
-  m.castShadow=false;m.frustumCulled=false;animals.add(m);antDraws.push({m,c,variant:v});
+ for(const c of colonies){
+  const geo=meshLibrary[variants[c.id%6]]||meshLibrary.ant1;if(!geo)continue;
+  const max=mobileDevice?10:18;
+  const mesh=new T.InstancedMesh(geo,new T.MeshStandardMaterial({
+   color:c.id%2?'#a3533b':'#49332b',roughness:1,metalness:0,side:T.DoubleSide}),max);
+  mesh.name='Operárias · reconhecimento, coleta, retorno · colônia '+(c.id+1);
+  mesh.count=Math.min(max,Math.ceil(c.workers*.2));
+  mesh.frustumCulled=false;mesh.castShadow=false;animals.add(mesh);
+  antDraws.push({m:mesh,c,max});
  }
- const variantsWorm=['worm1','worm2','worm3'];
- for(let kind=0;kind<variantsWorm.length;kind++){
-  const geo=meshLibrary[variantsWorm[kind]];if(!geo)continue;
-  const max=innerWidth<680?5:8;
-  const m=new T.InstancedMesh(geo,
-   new T.MeshStandardMaterial({color:kind===0?'#9b736c':kind===1?'#86645e':'#ab877c',
-    roughness:1,metalness:0,side:T.DoubleSide}),max);
-  m.count=Math.min(max,Math.ceil(worms.length/3));
-  m.name='Minhocas minúsculas · '+variantsWorm[kind];m.castShadow=false;
-  animals.add(m);wormDraws.push({m,offset:kind});
+ const wormModels=['worm1','worm2','worm3'];
+ for(let i=0;i<worms.length;i++){
+  const w=worms[i],base=meshLibrary[wormModels[i%3]];
+  if(!base)continue;
+  const geometry=base.clone(),pos=geometry.getAttribute('position');
+  geometry.computeBoundingBox();
+  const box=geometry.boundingBox,size=new T.Vector3();box.getSize(size);
+  const axis=size.x>size.y&&size.x>size.z?0:size.z>size.y?2:1;
+  const side=axis===0?2:0;
+  const low=axis===0?box.min.x:axis===1?box.min.y:box.min.z;
+  const high=axis===0?box.max.x:axis===1?box.max.y:box.max.z;
+  const m=new T.Mesh(geometry,new T.MeshStandardMaterial({
+   color:i%3===0?'#90716d':i%3===1?'#9f7e74':'#84625e',
+   roughness:1,metalness:0,side:T.DoubleSide}));
+  m.name='Minhoca OBJ com segmentos e contrações '+i;
+  m.castShadow=false;m.frustumCulled=false;
+  m.userData.animatedWorm=true;animals.add(m);
+  wormDraws.push({m,w,pos,orig:Float32Array.from(pos.array),
+   axis,side,span:Math.max(.0001,high-low),low,phase:random()*6.28});
  }
-}
-function moveAnimals(t){
+}function moveAnimals(t){
  const obj=new T.Object3D(),magnify=previewMagnification;
  for(const {m,c,variant} of antDraws){
   for(let i=0;i<m.count;i++){
