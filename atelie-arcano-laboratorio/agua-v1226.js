@@ -2980,82 +2980,130 @@ function flowStep(dt,multiplier){
   }
  }
 }
+// V12.53: máscaras estáticas e cor do campo calculadas uma única vez.
+// Todos os valores de luz e pigmentação são os mesmos da V12.52.
+const staticRoadBlend=new Float32Array(size),staticGrassRGB=new Float32Array(size*3);
+for(let k=0;k<size;k++){
+ const x=nx(k%NX),z=nz(Math.floor(k/NX));
+ const roadZ=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
+ const fade=clamp(1-Math.abs(z-roadZ)/1.10,0,1);
+ staticRoadBlend[k]=fade*fade*(3-2*fade);
+ const meadow=biomeField(x,z);
+ staticGrassRGB[k*3]=.30+meadow*.18;
+ staticGrassRGB[k*3+1]=.76-meadow*.16;
+ staticGrassRGB[k*3+2]=.19+meadow*.065;
+}
+const terrainShoreDamp=new Float32Array(size),terrainDirtyRows=new Uint8Array(NZ);
+const terrainPrevDepth=new Float32Array(size),terrainPrevMoisture=new Float32Array(size);
+const terrainPrevCapacity=new Float32Array(size),terrainPrevPlant=new Float32Array(size);
+const terrainPrevCover=new Float32Array(size),terrainPrevRoad=new Float32Array(size);
+const terrainPrevAbrasion=new Float32Array(size),terrainPrevEcoCover=new Float32Array(size);
+const terrainPrevNest=new Uint8Array(size),terrainPrevDry=new Float32Array(size*3);
+let terrainCacheReady=false,terrainPrevShowWet=false,terrainPrevEcoActive=false;
+const terrainWetBrown=[.22,.11,.07],terrainDryPath=[.66,.49,.31],terrainMudPath=[.27,.18,.12];
 function rebuild(){
  let count=0;foamCount=0;
- // A grade física só controla profundidade, escoamento e infiltração.
+ const eco=window.arcanoEcoV1232,ecoActive=!!eco?.active;
+ const forceAll=!terrainCacheReady||terrainPrevShowWet!==showWet||
+  terrainPrevEcoActive!==ecoActive;
+ terrainDirtyRows.fill(forceAll?1:0);
+ terrainShoreDamp.fill(0);
+ reflectWetBlocks.fill(0);
+ // Ler a grade física uma única vez, mantendo fluxos/águas exatos;
+ // identificar linhas cujo solo mudou enquanto os dados já estão no cache.
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
-  const k=idx(i,j),d=depth[k],x=nx(i),z=nz(j);
+  const k=idx(i,j),d=depth[k],x=nx(i),z=nz(j),o=k*3;
   shoreField[k]=d-SURFACE_VISIBLE-
     .0017*Math.sin(x*3.9+z*4.2)-.0011*Math.sin(x*8.7-z*5.1);
   wet[k]=clamp((d-.002)/.014,0,1);
   if(d>=SURFACE_VISIBLE)count++;
+  if(d>.0035)
+   reflectWetBlocks[Math.floor(j/REFLECT_CELL_BLOCK)*reflectCols+
+    Math.floor(i/REFLECT_CELL_BLOCK)]=1;
   const left=idx(Math.max(0,i-1),j),right=idx(Math.min(NX-1,i+1),j);
   const up=idx(i,Math.max(0,j-1)),down=idx(i,Math.min(NZ-1,j+1));
   flow[k*2]=flowXField[k]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
   flow[k*2+1]=flowZField[k]=(soil[up]+depth[up]-soil[down]-depth[down])*.6;
+  const road=ecoActive?(eco.roadMask[k]||0):0;
+  const abrasion=ecoActive?(eco.traffic[k]||0):0;
+  const ec=ecoActive?eco.cover[k]:0;
+  const nest=ecoActive?(eco.nestBareMask?.[k]||0):0;
+  const depthChanged=d!==terrainPrevDepth[k];
+  if(forceAll||depthChanged||
+     soilMoisture[k]!==terrainPrevMoisture[k]||
+     soilCapacity[k]!==terrainPrevCapacity[k]||
+     soilPlant[k]!==terrainPrevPlant[k]||cover[k]!==terrainPrevCover[k]||
+     road!==terrainPrevRoad[k]||abrasion!==terrainPrevAbrasion[k]||
+     ec!==terrainPrevEcoCover[k]||nest!==terrainPrevNest[k]||
+     dry[o]!==terrainPrevDry[o]||
+     dry[o+1]!==terrainPrevDry[o+1]||
+     dry[o+2]!==terrainPrevDry[o+2])terrainDirtyRows[j]=1;
+  // As margens encharcadas dependem de até 2 linhas adjacentes.
+  if(showWet&&depthChanged&&(d>=SURFACE_VISIBLE||
+     terrainPrevDepth[k]>=SURFACE_VISIBLE))
+   for(let oz=-2;oz<=2;oz++)if(j+oz>=0&&j+oz<NZ)
+    terrainDirtyRows[j+oz]=1;
+  terrainPrevDepth[k]=d;terrainPrevMoisture[k]=soilMoisture[k];
+  terrainPrevCapacity[k]=soilCapacity[k];terrainPrevPlant[k]=soilPlant[k];
+  terrainPrevCover[k]=cover[k];terrainPrevRoad[k]=road;
+  terrainPrevAbrasion[k]=abrasion;terrainPrevEcoCover[k]=ec;
+  terrainPrevNest[k]=nest;
+  terrainPrevDry[o]=dry[o];terrainPrevDry[o+1]=dry[o+1];
+  terrainPrevDry[o+2]=dry[o+2];
  }
- // Faixa de margem encharcada, sem adicionar volume de água ao modelo.
- for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
-  const k=idx(i,j);
-  const sat=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
-  const damp=showWet?clamp(sat*.84+wet[k]*.16,0,.95):0;
-  let shoreDamp=0;
-  if(showWet&&depth[k]<SURFACE_VISIBLE){
-   for(let oy=-2;oy<=2;oy++)for(let ox=-2;ox<=2;ox++){
-    const ix=i+ox,iz=j+oy;if(ix<0||iz<0||ix>=NX||iz>=NZ)continue;
-    const other=idx(ix,iz),h=depth[other];
-    if(h<SURFACE_VISIBLE)continue;
-    const dist=Math.hypot(ox*dx,oy*dz);
-    shoreDamp=Math.max(shoreDamp,clamp(1-dist/.82,0,1)*clamp(h/.030,0,1));
+ terrainCacheReady=true;terrainPrevShowWet=showWet;terrainPrevEcoActive=ecoActive;
+ // Buscar bordas SOMENTE ao redor de células com água. Na V12.52,
+ // milhares de células secas examinavam 25 vizinhos sem necessidade.
+ // O máximo comutativo produz exatamente a mesma umidade de borda.
+ if(showWet){
+  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
+   const k=idx(i,j),h=depth[k];
+   if(h<SURFACE_VISIBLE)continue;
+   const intensity=clamp(h/.030,0,1);
+   for(let oz=-2;oz<=2;oz++)for(let ox=-2;ox<=2;ox++){
+    const tx=i+ox,tz=j+oz;
+    if(tx<0||tz<0||tx>=NX||tz>=NZ)continue;
+    const neighbor=idx(tx,tz);
+    if(depth[neighbor]>=SURFACE_VISIBLE)continue;
+    const dist=Math.hypot(ox*dx,oz*dz);
+    const damp=clamp(1-dist/.82,0,1)*intensity;
+    if(damp>terrainShoreDamp[neighbor])terrainShoreDamp[neighbor]=damp;
    }
   }
-  const dark=clamp(shoreDamp*(.53+.25*sat),0,.72);
-  for(let m=0;m<3;m++){
-   const base=dry[k*3+m]*(1-damp)+mudRGB[m]*damp;
-   colors[k*3+m]=base*(1-dark)+[.22,.11,.07][m]*dark;
-  }
  }
- // Solo vivo e caminho compacto no MESMO buffer de cores da superfície.
- // Não usar uma fita 3D sobre o terreno: forma, elevação e lama vêm do solo.
- const eco=window.arcanoEcoV1232;
- // Camada verde NÃO depende do carregamento assíncrono das formigas.
- // Assim o solo fica verde desde o primeiro frame mesmo se o módulo
- // ecológico demorar a carregar ou estiver desativado.
- {
-  for(let k=0;k<size;k++){
-   const x=nx(k%NX),z=nz(Math.floor(k/NX));
-   const roadZ=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
-   const roadDistance=Math.abs(z-roadZ);
-   const fade=clamp(1-roadDistance/1.10,0,1);
-   const road=eco?.active?clamp(eco.roadMask[k]||0,0,1):
-     fade*fade*(3-2*fade);
-   const abrasion=eco?.active?clamp(eco.traffic[k]||0,0,1):0;
-   const effectiveCover=eco?.active?eco.cover[k]:cover[k];
+ // Atualização LOCALIZADA das cores de terreno. Nenhuma interpolação ou
+ // cor foi alterada: linhas intactas mantêm seus buffers anteriores.
+ let terrainColorsChanged=false;
+ for(let j=0;j<NZ;j++){
+  if(!terrainDirtyRows[j])continue;
+  terrainColorsChanged=true;
+  for(let i=0;i<NX;i++){
+   const k=idx(i,j),o=k*3;
+   const sat=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1);
+   const damp=showWet?clamp(sat*.84+wet[k]*.16,0,.95):0;
+   const dark=clamp(terrainShoreDamp[k]*(.53+.25*sat),0,.72);
+   const road=ecoActive?clamp(eco.roadMask[k]||0,0,1):staticRoadBlend[k];
+   const abrasion=ecoActive?clamp(eco.traffic[k]||0,0,1):0;
+   const effectiveCover=ecoActive?eco.cover[k]:cover[k];
    const vegetated=clamp(soilPlant[k]*.55+effectiveCover*.45,0,1.2);
    const health=clamp(vegetated*(1-abrasion)*
      (1-clamp(depth[k]/.065,0,.85)),0,1);
    const greenAmount=clamp(.36+health*.59,0,.96);
    const saturated=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1.4);
    const mud=clamp((saturated-.20)*.90+depth[k]*6.5,0,1);
-   // Pequena área marrom de solo escavado ao redor de cada formigueiro.
-   // Não é trilha de tráfego; fica descoberta mesmo quando a grama cresce.
-   const nestDirt=eco?.active?(eco.nestBareMask?.[k]||0)/255:0;
+   const nestDirt=ecoActive?(eco.nestBareMask?.[k]||0)/255:0;
    const dirtAmount=clamp(Math.max(road*(.99+.08*abrasion),nestDirt*.995),0,.995);
-   // O mapa do chão é multiplicativo (tons ocres); verde vivo para que
-   // o substrato sob a grama curta realmente PAREÇA um gramado contínuo.
-   const meadow=biomeField(x,z);
-   // Campo aberto é verde mais seco e dourado, sem cortar a grama de repente.
-   const grassRGB=[.30+meadow*.18,.76-meadow*.16,.19+meadow*.065];
-   const dryPath=[.66,.49,.31],mudPath=[.27,.18,.12];
-   for(let m=0;m<3;m++){
-    const ix=k*3+m;
-    const green=colors[ix]*(1-greenAmount)+grassRGB[m]*greenAmount;
-    const soilTone=dryPath[m]*(1-mud)+mudPath[m]*mud;
+   for(let c=0;c<3;c++){
+    const ix=o+c;
+    const base=dry[ix]*(1-damp)+mudRGB[c]*damp;
+    const soilLayer=base*(1-dark)+terrainWetBrown[c]*dark;
+    const green=soilLayer*(1-greenAmount)+staticGrassRGB[ix]*greenAmount;
+    const soilTone=terrainDryPath[c]*(1-mud)+terrainMudPath[c]*mud;
     colors[ix]=green*(1-dirtAmount)+soilTone*dirtAmount;
    }
   }
  }
- landG.attributes.color.needsUpdate=true;
+ if(terrainColorsChanged)landG.attributes.color.needsUpdate=true;
  wetted=count*area;
  // A malha visual 2-3× mais densa interpola os dados; não gera quadrados da grade antiga.
  for(let j=0;j<VIS_NZ;j++)for(let i=0;i<VIS_NX;i++){
