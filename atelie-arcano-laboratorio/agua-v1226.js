@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.25 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.26 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.25]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.26]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -962,6 +962,15 @@ function addLeafWind(mesh){
  }
 }
 
+// Ancoragem de modelos FBX/glTF baseada nos LIMITES REAIS das malhas,
+// depois de escala/rotação. Uma raycast encontra o terreno renderizado,
+// evitando o erro de assumir que o pivô de todos os arquivos fica no pé.
+const placementRay=new T.Raycaster(),placementDown=new T.Vector3(0,-1,0);
+function terrainHeightAt(x,z){
+ placementRay.set(new T.Vector3(x,35,z),placementDown);
+ const hits=placementRay.intersectObject(land,false);
+ return hits.length?hits[0].point.y:elevation(x,z);
+}
 function placeForestModel(item,root){
  const randomForest=rand(9157+item.name.split('').reduce((a,c)=>a+c.charCodeAt(0),0));
  root.updateMatrixWorld(true);
@@ -985,25 +994,52 @@ function placeForestModel(item,root){
    }
   }
   if(basinBlocked)continue;
-  const y=elevation(x,z);
-  if(y<-.13)continue;
+  const groundY=terrainHeightAt(x,z);
+  if(groundY<-.13)continue;
   const obj=root.clone(true),factor=.78+randomForest()*.52;
-  const desired=item.height*factor;
-  const scale=desired/h;
-  obj.scale.setScalar(scale);obj.position.set(x,y-bbox.min.y*scale-.015,z);
-  const rot=randomForest()*Math.PI*2;obj.rotation.y=rot;
+  const scale=item.height*factor/h;
+  const rot=randomForest()*Math.PI*2;
+  obj.scale.setScalar(scale);obj.rotation.y=rot;
+  obj.position.set(0,0,0);obj.updateMatrixWorld(true);
+  // O pivô do FBX pode estar fora do tronco, diferente da origem glTF.
+  const scaledBox=new T.Box3().setFromObject(obj);
+  if(!Number.isFinite(scaledBox.min.y))continue;
+  obj.position.x=x-(scaledBox.min.x+scaledBox.max.x)*.5;
+  obj.position.z=z-(scaledBox.min.z+scaledBox.max.z)*.5;
+  // Enterrar levemente raízes e rochas evita uma faixa de ar em encostas.
+  const bury=item.type==='rock'?.11:
+    item.type==='tree'||item.type==='pine'?.065:.028;
+  const bottomOffset=scaledBox.min.y; // y do ponto mais baixo com pivô a zero
+  obj.position.y=groundY-bottomOffset-bury;
+  obj.updateMatrixWorld(true);
   obj.traverse(o=>{
    if(!o.isMesh)return;
-   o.castShadow=!mobile&&(item.type==='tree'||item.type==='pine')&&created<4;
-   o.receiveShadow=false;
+   o.castShadow=(item.type==='tree'||item.type==='pine')&&created<4;
+   o.receiveShadow=true;
    const mat=o.material;
-   if(mat){mat.side=T.DoubleSide;mat.roughness=.92;mat.metalness=0;}
+   if(mat){
+    const mats=Array.isArray(mat)?mat:[mat];
+    for(const m of mats){
+     m.side=T.DoubleSide;
+     if('roughness'in m)m.roughness=.88;
+     if('metalness'in m)m.metalness=0;
+    }
+   }
   });
   forestGroup.add(obj);
-  forestInstances.push({obj,x,z,y,rotation:rot,baseScale:scale,pack:item.pack||'mega',type:item.type,
-   phase:randomForest()*Math.PI*2});
+  forestInstances.push({obj,x,z,y:groundY,rotation:rot,baseScale:scale,
+   bottomOffset,bury,groundY,growthFactor:1,pack:item.pack||'mega',
+   type:item.type,phase:randomForest()*Math.PI*2});
   created++;
  }
+}
+function setForestGrowthTransform(a,factor){
+ if(Math.abs(a.growthFactor-factor)<.004)return;
+ a.growthFactor=factor;
+ a.obj.scale.setScalar(a.baseScale*factor);
+ // Ao alterar tamanho/biomassa, corrigir a base também. Antes, só a escala
+ // mudava e a planta começava a flutuar ou afundar com o crescimento.
+ a.obj.position.y=a.groundY-a.bottomOffset*factor-a.bury;
 }
 // Texturas de troncos, cascas e rochas são pintadas procedurais compactas.
 // O Ultimate original usa mapas de casca muito pesados (até ~23MB cada),
@@ -1114,7 +1150,7 @@ function updateForestHealth(){
   const j=clamp(Math.round((a.z+L*.5)/dz),0,NZ-1),k=idx(i,j);
   const biomass=clamp(soilPlant[k],.12,1.2),health=clamp(soilHealth[k],0,1);
   const factor=.69+biomass*.30;
-  a.obj.scale.setScalar(a.baseScale*factor);
+  setForestGrowthTransform(a,factor);
   a.obj.visible=health>.10&&(forestCollection==='mixed'||forestCollection===a.pack);
  }
 }
@@ -1133,11 +1169,10 @@ function animateForest(dt){
  // Copas e folhas são deformadas no shader; troncos pouco se deslocam.
  if(!forestGroup.visible)return;
  const trunkSway=(.002+.014*strength)*(.65+.35*gust);
+ // Não rotacionar a raiz dos modelos inteiros: isso deslocava o ponto
+ // de contato no solo. A folhagem continua balançando no vertex shader.
  for(const a of forestInstances){
-  if(a.type==='rock')continue;
-  const amount=trunkSway*(a.type==='tree'||a.type==='pine'?1:.80);
-  a.obj.rotation.z=amount*Math.sin(t*(.57+actualWind*.12)+a.phase);
-  a.obj.rotation.x=amount*.51*Math.cos(t*(.72+actualWind*.10)+a.phase*1.36);
+  a.obj.rotation.x=0;a.obj.rotation.z=0;
  }
 }
 loadPainterlyForest();
@@ -1858,7 +1893,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1225'))fail(e.error||e.message);});
-window.arcanoWaterV1225={scene,renderer,setForestCollection,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1226'))fail(e.error||e.message);});
+window.arcanoWaterV1226={scene,renderer,setForestCollection,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
