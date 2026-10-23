@@ -1330,7 +1330,8 @@ function forestStatus(state){
   ' · solo aquarelado procedural';
 }
 function setFloraVisible(v){
- floraWanted=!!v;forestGroup.visible=floraWanted&&floraLoaded>0;
+ floraWanted=!!v;forestGroup.visible=floraWanted&&floraLoaded>0&&
+  !(assetTestActor&&$('assetTestIsolate')?.checked);
  applyForestVisibility();
  grass.visible=!forestGroup.visible;sproutGroup.visible=!forestGroup.visible;
  if($('floraToggle'))$('floraToggle').checked=floraWanted;
@@ -1704,12 +1705,16 @@ function arcanoTrunkRootPoint(obj){
 // Autoaprumo limitado à espécie (não altera o vento que age no pai).
 // Calcula vetor do pé central à seção intermediária da madeira e reduz
 // inclinações excessivas sem retificar árvores tortuosas deliberadamente.
+const arcanoStraightenCache=new WeakMap();
 function arcanoStraightenSpecies(item,root,rotation){
- if(item.type!=='tree'&&item.type!=='pine')return rotation;
+ if(arcanoStraightenCache.has(root))return arcanoStraightenCache.get(root).clone();
+ function retain(q){arcanoStraightenCache.set(root,q.clone());return q;}
+
+ if(item.type!=='tree'&&item.type!=='pine')return retain(rotation);
  const probe=new T.Group();probe.quaternion.copy(rotation);
  probe.add(root.clone(true));probe.updateMatrixWorld(true);
  const box=arcanoWorldPartBox(probe,'wood');
- if(!box)return rotation;
+ if(!box)return retain(rotation);
  const h=Math.max(.001,box.max.y-box.min.y);
  const low=[],middle=[],v=new T.Vector3();
  probe.traverse(mesh=>{
@@ -1730,18 +1735,18 @@ function arcanoStraightenSpecies(item,root,rotation){
    }
   }
  });
- if(low.length<6||middle.length<6)return rotation;
+ if(low.length<6||middle.length<6)return retain(rotation);
  const center=pts=>{const sum=new T.Vector3();for(const p of pts)sum.add(new T.Vector3(...p));return sum.divideScalar(pts.length);};
  const a=center(low),b=center(middle),dir=b.sub(a);
- if(dir.length()<.15)return rotation;
+ if(dir.length()<.15)return retain(rotation);
  const tilt=Math.atan2(Math.hypot(dir.x,dir.z),Math.max(.01,dir.y));
  // Mantém o caráter natural das copas: corrigir só troncos claramente caídos.
- if(tilt<.31)return rotation;
+ if(tilt<.31)return retain(rotation);
  const corrected=dir.clone().normalize(),upright=new T.Vector3(0,1,0);
  const full=new T.Quaternion().setFromUnitVectors(corrected,upright);
  const amt=clamp((tilt-.18)/Math.max(.01,tilt),0,.75);
  const tweak=new T.Quaternion().slerp(full,amt);
- return tweak.multiply(rotation.clone()).normalize();
+ return retain(tweak.multiply(rotation.clone()).normalize());
 }
 function snapForestToGround(anchor){
  const a=anchor,obj=a.obj;
@@ -2069,6 +2074,7 @@ function applyAssetTestIsolation(){
  forestGroup.visible=!!floraWanted&&!$('assetTestIsolate')?.checked;
 }
 function removeAssetTest(){
+ if(assetTestMarker){assetTestMarker.geometry.dispose();assetTestMarker.material.dispose();}
  assetTestGroup.clear();
  assetTestActor=null;assetTestAnchor=null;assetTestMarker=null;
  forestGroup.visible=!!floraWanted;
@@ -2083,7 +2089,8 @@ function placeAssetTest(name){
   assetTestMessage('Modelo '+name+' ainda não carregado. Confira a conexão e tente novamente.');
   return;
  }
- assetTestGroup.clear();assetTestActor=null;
+ if(assetTestMarker){assetTestMarker.geometry.dispose();assetTestMarker.material.dispose();}
+ assetTestGroup.clear();assetTestActor=null;assetTestMarker=null;
  const orientation=arcanoBestOrientation(item,root);
  const diagnostic=!orientation;
  const orient=orientation||{
