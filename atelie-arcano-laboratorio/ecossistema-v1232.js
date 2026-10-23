@@ -30,7 +30,8 @@ function recordEcoEvent(message){
  ecoEvents.unshift(entry);ecoEvents.length=Math.min(6,ecoEvents.length);
 }
 const targetNativeGrass=api.forestInstances.filter(a=>a.type==='grass');
-const roadZ=x=>4.6-.67*Math.sin(x*.47+.6)+.20*Math.sin(x*1.34);
+// A estrada atravessa a clareira central, não fica escondida atrás da floresta.
+const roadZ=x=>.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
 const riverX=z=>-2.3+.55*Math.sin(z*.69)+.48*Math.sin(z*.29+1.3);
 function idx(x,z){const i=clamp(Math.round((x+W*.5)/dx),0,NX-1),j=clamp(Math.round((z+L*.5)/dz),0,NZ-1);return j*NX+i;}
 function position(k){const i=k%NX,j=(k-i)/NX;return {x:-W*.5+i*dx,z:-L*.5+j*dz};}
@@ -41,7 +42,7 @@ function height(x,z){
  return A*(1-a)*(1-b)+B*a*(1-b)+C*(1-a)*b+D*a*b;
 }
 const mobileDevice=innerWidth<680;
-const grassBudgets=mobileDevice?{high:7200,balanced:4100,low:760}:{high:14000,balanced:7600,low:1400};
+const grassBudgets=mobileDevice?{high:14000,balanced:7800,low:1600}:{high:23000,balanced:13000,low:3200};
 let grassDrawn=0,lastGrassQuality='';
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
@@ -74,9 +75,9 @@ async function loadMeshes(){
 }
 function material(kind){
  const map=textureLibrary[kind]||null;
- const tint=kind==='rock'?'#d5d0c5':'#73935b';
+ const tint=kind==='rock'?'#d5d0c5':'#9abe7c';
  return new T.MeshStandardMaterial({color:tint,map,roughness:1,metalness:0,side:T.DoubleSide,
-  alphaTest:kind==='rock'?0:.38,transparent:false,depthWrite:true});
+  alphaTest:kind==='rock'?0:kind==='grassTall'?.15:.10,transparent:false,depthWrite:true});
 }
 function makeMesh(name,kind){const geo=meshLibrary[name];return geo?new T.Mesh(geo,material(kind)):null;}
 // V12.34: a estrada é uma ALTERAÇÃO DE COR no shader do solo,
@@ -144,78 +145,85 @@ function updateFootprints(){
  muddyFootprints.material.opacity=intensity*.70;
 }
 function makeRoad(){
- // Travessia apenas se a ESTRADA cruza um vão REAL do rio. Duas margens
- // verificadas, tablado com viga por baixo e encontros firmes no terreno.
+ // Um tablado CONTÍNUO, horizontal, sustentado por vigas e fixado em dois
+ // encontros elevados. Nenhuma tábua cresce em degraus sobre o terreno.
+ // O vão precisa atravessar rio com margens opostas — sem ponte aleatória.
  let crossing=null,nearest=Infinity;
- for(let x=-7;x<7;x+=.06){
-  const z=roadZ(x),k=idx(x,z),river=riverMask[k];
-  if(river>.65&&Math.abs(x-riverX(z))<nearest){
+ for(let x=-7.8;x<7.8;x+=.045){
+  const z=roadZ(x),k=idx(x,z);
+  if(riverMask[k]>.62&&Math.abs(x-riverX(z))<nearest){
    crossing=x;nearest=Math.abs(x-riverX(z));
   }
  }
  if(crossing!==null){
-  function findBank(direction){
-   for(let d=.12;d<2.1;d+=.05){
+  function bank(direction){
+   for(let d=.2;d<2.45;d+=.035){
     const x=crossing+d*direction,z=roadZ(x),k=idx(x,z);
-    if(riverMask[k]<.08&&api.depth[k]<.045&&roadMask[k]>.45)
+    if(riverMask[k]<.075&&api.depth[k]<.065&&roadMask[k]>.50)
      return {x,z,y:height(x,z)};
    }
    return null;
   }
-  const left=findBank(-1),right=findBank(1);
+  const left=bank(-1),right=bank(1);
   if(left&&right){
-   const length=Math.hypot(right.x-left.x,right.z-left.z);
-   if(length>.7&&length<4.1){
-    const bridge=new T.Group();bridge.name='Ponte com encontros reais nas duas margens';
-    const wood=new T.MeshStandardMaterial({color:'#786047',roughness:1,metalness:0});
-    const edge=new T.MeshStandardMaterial({color:'#4b3729',roughness:1,metalness:0});
-    const midX=(left.x+right.x)*.5,midZ=(left.z+right.z)*.5;
-    const course=Math.atan2(right.z-left.z,right.x-left.x);
-    const tilt=Math.atan2(right.y-left.y,length);
-    const beamY=(left.y+right.y)*.5+.022;
-    // Vigas longitudinais conectam as cabeceiras e suportam todas as tábuas.
-    for(const side of [-1,1]){
-     const beam=new T.Mesh(new T.BoxGeometry(length+.22,.13,.10),edge);
-     beam.rotation.set(0,-course,tilt);
-     const lateral=side*.47;
-     beam.position.set(midX-Math.sin(course)*lateral,beamY,midZ+Math.cos(course)*lateral);
-     beam.castShadow=true;bridge.add(beam);
-    }
-    const planks=Math.max(5,Math.ceil(length/.17));
+   const span=Math.hypot(right.x-left.x,right.z-left.z);
+   if(span>.95&&span<4.7){
+    const mx=(left.x+right.x)*.5,mz=(left.z+right.z)*.5;
+    const direction=Math.atan2(right.z-left.z,right.x-left.x);
+    const deckY=Math.max(left.y,right.y)+.13;
+    const bridge=new T.Group();
+    bridge.name='Ponte de madeira nivelada · vão entre duas margens elevadas';
+    bridge.position.set(mx,deckY,mz);
+    // X local = eixo longitudinal da ponte; Z local = largura.
+    bridge.rotation.y=-direction;
+    const deckMat=new T.MeshStandardMaterial({color:'#86664a',roughness:1,metalness:0});
+    const timber=new T.MeshStandardMaterial({color:'#4c382a',roughness:1,metalness:0});
+    const addBox=(w,h,d,mat,x,y,z,name)=>{
+     const o=new T.Mesh(new T.BoxGeometry(w,h,d),mat);
+     o.name=name;o.position.set(x,y,z);
+     o.castShadow=true;o.receiveShadow=true;bridge.add(o);return o;
+    };
+    // O tablado possui uma base contínua, para não parecer escada suspensa.
+    addBox(span+.10,.11,1.29,timber,0,-.095,0,'Estrutura de apoio contínua');
+    for(const lateral of [-.53,.53])
+     addBox(span+.28,.18,.13,timber,0,-.175,lateral,'Viga longitudinal');
+    const planks=Math.max(8,Math.ceil(span/.15));
     for(let i=0;i<planks;i++){
-     const t=(i+.5)/planks;
-     const plank=new T.Mesh(new T.BoxGeometry(length/planks*.92,.075,1.22),wood);
-     plank.rotation.set(0,-course,tilt);
-     plank.position.set(left.x+(right.x-left.x)*t,left.y+(right.y-left.y)*t+.095,
-      left.z+(right.z-left.z)*t);
-     plank.castShadow=true;plank.receiveShadow=true;bridge.add(plank);
+     const x=-span*.5+(i+.5)*span/planks;
+     addBox(span/planks*.97,.065,1.32,deckMat,x,0,0,'Tábua nivelada '+i);
     }
-    for(const bank of [left,right]){
-     // Encontros enterrados nas duas margens; sem pontas no ar.
-     const base=new T.Mesh(new T.BoxGeometry(.24,.16,1.30),edge);
-     base.rotation.y=-course;
-     base.position.set(bank.x,bank.y+.043,bank.z);
-     base.castShadow=true;base.receiveShadow=true;bridge.add(base);
-     for(const side of [-1,1]){
-      const dx=-Math.sin(course)*side*.47,dz=Math.cos(course)*side*.47;
-      const support=new T.Mesh(new T.BoxGeometry(.095,.19,.095),wood);
-      support.position.set(bank.x+dx,bank.y+.043,bank.z+dz);
-      support.castShadow=true;bridge.add(support);
+    // Encontros enterram-se no terreno das duas margens; só o meio vence
+    // o vão sem encostar no leito.
+    for(const [side,bankPoint] of [[-1,left],[1,right]]){
+     const bankGap=Math.max(.06,deckY-bankPoint.y);
+     addBox(.33,bankGap+.24,1.47,timber,
+      side*span*.5,-bankGap*.5-.035,0,'Encontro embutido na margem');
+     for(const offset of [-.54,.54])
+      addBox(.14,bankGap+.31,.15,deckMat,
+       side*(span*.5-.13),-bankGap*.5-.02,offset,'Poste da cabeceira');
+    }
+    for(const lateral of [-.57,.57]){
+     for(let p=0;p<=4;p++){
+      const x=-span*.5+.08+(span-.16)*p/4;
+      addBox(.09,.43,.09,timber,x,.22,lateral,'Balaústre');
      }
+     addBox(span+.10,.095,.10,deckMat,0,.47,lateral,'Corrimão da ponte');
     }
     roads.add(bridge);
-    console.info('[Arcano] Ponte ancorada entre margens',left,right,'vão',length.toFixed(2));
-   }
-  }else{
-   console.warn('[Arcano] Sem duas margens válidas: ponte não criada.');
-  }
+    console.info('[Arcano V12.37] Ponte horizontal entre margens',
+     {left,right,span,deckY,clearance:deckY-height(mx,mz)});
+   }else console.warn('[Arcano] Vão fora da faixa segura, ponte omitida.');
+  }else console.warn('[Arcano] Margens opostas não encontradas, ponte omitida.');
  }
  muddyFootprints=generateFootprints();updateFootprints();
 }
 function initializeLandscape(){
  for(let k=0;k<cells;k++){
   const {x,z}=position(k),distRoad=Math.abs(z-roadZ(x)),distRiver=Math.abs(x-riverX(z));
-  roadMask[k]=clamp(1-distRoad/.83,0,1);riverMask[k]=clamp(1-distRiver/.68,0,1);
+  // Borda de terra batida macia, largura suficiente para se distinguir no solo.
+  const roadT=clamp(1-distRoad/1.10,0,1);
+  roadMask[k]=roadT*roadT*(3-2*roadT);
+  riverMask[k]=clamp(1-distRiver/.68,0,1);
   // A estrada recebe a compactação histórica; rio rebaixa o leito local.
   if(riverMask[k]>.05){
    // Profundidade física só nasce na fonte; impedir poças azuis geradas em todas as células.
@@ -225,7 +233,7 @@ function initializeLandscape(){
    api.permeability[k]*=(1-roadMask[k]*.44);}
   const shade=.5+.5*Math.sin(x*.85+z*.34)*Math.cos(z*.6);
   const moist=api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]);
-  cover[k]=clamp(.77+.17*shade+.15*moist-roadMask[k]*.96-riverMask[k]*.91,0,1);
+  cover[k]=clamp(.89+.08*shade+.12*moist-roadMask[k]*1.06-riverMask[k]*.90,0,1);
   foodResources[k]=Math.max(0,cover[k]*(1-roadMask[k])*.12);
  }
  const geom=api.terrain.geometry,positionAttribute=geom.getAttribute('position');
@@ -238,49 +246,68 @@ function initializeLandscape(){
 function terrainTint(){/* delegated to main rebuild() */}
 function grassShape(){
  const names=['grassShort1','grassMixed1','grassTall1','grassMixed2'];
- const max=grassBudgets.high,meshes=new Map(),dummies=new Map();
+ const maxTotal=grassBudgets.high;
+ const meshes=new Map(),dummies=new Map();
  for(const name of names){
-  const kind=name.startsWith('grassMixed')?'grassMixed':name==='grassTall1'?'grassTall':'grassShort';
+  const kind=name.startsWith('grassMixed')?'grassMixed':
+   name==='grassTall1'?'grassTall':'grassShort';
   const geo=meshLibrary[name];if(!geo)continue;
-  const m=new T.InstancedMesh(geo,material(kind),max);
-  m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;
-  m.userData.planted=0;m.count=0;m.name='Capim original em moitas · '+name;
-  meshes.set(name,m);dummies.set(name,new T.Object3D());foliage.add(m);
+  const mesh=new T.InstancedMesh(geo,material(kind),maxTotal);
+  mesh.frustumCulled=false;mesh.castShadow=false;mesh.receiveShadow=true;
+  mesh.userData.planted=0;mesh.count=0;mesh.name='Gramado Quaternius · '+name;
+  meshes.set(name,mesh);dummies.set(name,new T.Object3D());foliage.add(mesh);
  }
  if(!meshes.size)return;
- const cols=mobileDevice?82:112,rows=mobileDevice?66:98,sites=[];
+ // Gramado baixo como matriz CONTÍNUA. Áreas férteis recebem grama alta por
+ // cima, em manchas conectadas — não apenas tufos sorteados e espaçados.
+ const cols=mobileDevice?146:192,rows=mobileDevice?118:158,sites=[];
  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++)sites.push([i,j]);
+ // Ordens embaralhadas mantêm cobertura em TODO o terreno mesmo em Baixa.
  for(let i=sites.length-1;i>0;i--){
-  const j=Math.floor(random()*(i+1)),tmp=sites[i];sites[i]=sites[j];sites[j]=tmp;
+  const j=Math.floor(random()*(i+1)),temp=sites[i];sites[i]=sites[j];sites[j]=temp;
  }
  let planted=0;
+ function plant(name,x,z,k,multiplier=1){
+  if(planted>=maxTotal)return;
+  const mesh=meshes.get(name),o=dummies.get(name);
+  if(!mesh)return;
+  const scale=(name==='grassTall1'?.39:name==='grassShort1'?.27:.32)*
+   (.73+random()*.49)*multiplier;
+  o.position.set(x,height(x,z)-.018,z);
+  o.rotation.set(0,random()*Math.PI*2,0);
+  o.scale.set(scale*(.80+random()*.30),scale*(.84+random()*.38),
+   scale*(.82+random()*.30));o.updateMatrix();
+  const index=mesh.userData.planted++;
+  mesh.setMatrixAt(index,o.matrix);
+  grassPatches.push({x,z,k,mesh,index,matrix:o.matrix.clone()});planted++;
+ }
  for(const [i,j] of sites){
-  if(planted>=max)break;
-  const x0=-9.35+(i+.5)/cols*18.7,z0=-7.35+(j+.5)/rows*14.7;
-  const k0=idx(x0,z0),density=clamp(cover[k0]*(1-traffic[k0]),0,1);
-  if(density<.11||api.depth[k0]>.035)continue;
-  const count=density>.70?4:density>.42?3:2;
-  for(let n=0;n<count&&planted<max;n++){
-   const x=x0+(random()-.5)*.21,z=z0+(random()-.5)*.20,k=idx(x,z);
-   const life=clamp(cover[k]*(1-traffic[k]),0,1);
-   if(life<.12||random()>Math.min(1,life*1.24)||api.depth[k]>.025)continue;
+  if(planted>=maxTotal)break;
+  const x=-9.55+(i+.5)/cols*19.1+(random()-.5)*.05;
+  const z=-7.55+(j+.5)/rows*15.1+(random()-.5)*.05;
+  const k=idx(x,z),live=clamp(cover[k]*(1-traffic[k]),0,1);
+  if(live<.16||roadMask[k]>.17||riverMask[k]>.61||api.depth[k]>.028)continue;
+  // Umidade e luz influenciam o crescimento; a vegetação persiste em
+  // torno das árvores, sem criar milhares de folgas artificiais.
+  const meadow=.5+.5*Math.sin(x*.88+Math.sin(z*.41)*1.25)*
+   Math.cos(z*.92-x*.13);
+  const tallChance=clamp((live-.40)*.92+meadow*.26,0,.70);
+  // Grama baixa sempre preenche primeiro as clareiras entre as altas.
+  if(random()<.88+live*.11)plant('grassShort1',x,z,k,.86+random()*.22);
+  if(planted>=maxTotal)break;
+  if(random()<tallChance){
    const roll=random();
-   const name=riverMask[k]>.21&&roll<.22?'grassTall1':roll<.40?'grassShort1':
-    roll<.76?'grassMixed1':'grassMixed2';
-   const mesh=meshes.get(name),o=dummies.get(name);
-   if(!mesh)continue;
-   const base=name==='grassTall1'?.37:name==='grassShort1'?.31:.32;
-   const scale=base*(.75+random()*.53);
-   o.position.set(x,height(x,z)-.014,z);o.rotation.set(0,random()*Math.PI*2,0);
-   o.scale.set(scale*(.76+random()*.35),scale*(.84+random()*.40),
-    scale*(.80+random()*.38));o.updateMatrix();
-   const index=mesh.userData.planted++;
-   mesh.setMatrixAt(index,o.matrix);
-   grassPatches.push({x,z,k,mesh,index,matrix:o.matrix.clone()});planted++;
+   const name=roll<.40?'grassTall1':roll<.72?'grassMixed1':'grassMixed2';
+   plant(name,x+(random()-.5)*.12,z+(random()-.5)*.12,k);
+   if(live>.73&&meadow>.63&&random()<.42&&planted<maxTotal)
+    plant(random()<.5?'grassTall1':'grassMixed1',
+     x+(random()-.5)*.20,z+(random()-.5)*.20,k,.88);
   }
  }
  for(const mesh of meshes.values())mesh.instanceMatrix.needsUpdate=true;
  applyGrassQuality();
+ console.info('[Arcano V12.37] Cobertura Quaternius densa',
+  planted,'tufos | limite',maxTotal,'qualidade',lastGrassQuality);
 }
 // FOLHAS: pequena malha 3D low-poly de seis faces (nervura central elevada),
 // nas cores dos modelos Quaternius já carregados. O próprio MegaKit/Ultimate
