@@ -667,7 +667,7 @@ function update(dt){
   }
   updateGrassMeshes();
  }
- while(ecologicalAccumulator>1){lifeDay(1);ecologicalAccumulator-=1;}
+ while(ecologicalAccumulator>1){lifeDay(1);ecologicalAccumulator-=1;if(nestCutGroup.visible)drawNestCutaway();}
  moveAnimals(time);
  if(uiAccumulator>1.4){uiAccumulator=0;status();}
 }
@@ -679,8 +679,58 @@ function status(){
   grassDrawn+' tufos de grama ('+lastGrassQuality+') · '+colonies.length+' colônias · '+workers+' operárias · '+eggs+' ovos · '+larva+' larvas · '+adults+' minhocas adultas · '+cocoons+' casulos. '+
   'É uma simulação ecológica simplificada; rainhas e crias ficam nos ninhos. Quase invisíveis fora da lupa.';
 }
+const nestCutGroup=new T.Group();
+nestCutGroup.name='Raio-X das galerias do formigueiro';
+nestCutGroup.visible=false;realm.add(nestCutGroup);
+function drawNestCutaway(){
+ for(const mesh of [...nestCutGroup.children]){
+  nestCutGroup.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();
+ }
+ const id=Number($('ecoColonySelect')?.value||0),c=colonies.find(x=>x.id===id);
+ if(!c)return;
+ const points=[],dep=clamp(.15+c.tunnels*.16,.19,.96);
+ const y=height(c.x,c.z),branches=Math.min(7,2+Math.floor(c.chambers/2));
+ const origin=new T.Vector3(c.x,y-.055,c.z);
+ for(let b=0;b<branches;b++){
+  const angle=b*2.39996323,radius=Math.min(.85,.18+c.tunnels*.1)*(b+1)/branches;
+  const start=new T.Vector3(c.x,y-.055-dep*.22,c.z);
+  const end=new T.Vector3(c.x+Math.cos(angle)*radius,
+   y-.09-dep*(.35+.07*b),c.z+Math.sin(angle)*radius);
+  points.push(origin,start,start,end);
+ }
+ const geo=new T.BufferGeometry().setFromPoints(points);
+ const material=new T.LineBasicMaterial({color:'#dda970',transparent:true,
+  opacity:.8,depthTest:false,depthWrite:false});
+ const lines=new T.LineSegments(geo,material);lines.renderOrder=20;
+ nestCutGroup.add(lines);nestCutGroup.visible=!!$('ecoBurrows')?.checked;
+}
+function updateColonyInspector(){
+ const select=$('ecoColonySelect'),panel=$('ecoColonyDetails');
+ if(!select||!panel)return;
+ const prior=select.value;
+ if(select.options.length!==colonies.length){
+  select.textContent='';
+  for(const c of colonies){
+   const option=document.createElement('option');
+   option.value=String(c.id);option.textContent='Colônia '+(c.id+1);
+   select.appendChild(option);
+  }
+  select.value=colonies.some(c=>String(c.id)===prior)?prior:String(colonies[0]?.id??0);
+ }
+ const c=colonies.find(c=>String(c.id)===select.value);if(!c)return;
+ const stages={egg:0,larva:0,pupa:0};
+ for(const brood of c.brood)stages[brood.stage]+=brood.count;
+ panel.textContent='👑 Rainha '+(c.queen?'viva, fértil':'ausente')+
+  ' · alimento '+c.food.toFixed(1)+' · '+c.workers+' operárias: '+
+  c.foragers+' coletoras, '+c.scouts+' exploradoras, '+c.nurses+
+  ' cuidadoras, '+c.builders+' escavadoras, '+c.guards+' guardas'+
+  ' · '+stages.egg+' ovos, '+stages.larva+' larvas, '+stages.pupa+
+  ' pupas · '+c.tunnels.toFixed(2)+' m de túneis · '+c.chambers+
+  ' câmaras · feromônios '+c.pheromones.reduce((a,v)=>a+v,0).toFixed(1);
+}
 async function setup(){
  await loadMeshes();initializeLandscape();grassShape();rockShape();initialColonies();visualizeAnimals();
+ drawNestCutaway();
  const board=$('ecoStatus');if(board)board.textContent='Pacotes enviados integrados: '+Object.keys(meshLibrary).length+' malhas · '+colonies.length+' colônias.';
  const s=$('ecoSpeed');if(s){s.oninput=e=>{biologicalSpeed=clamp(+e.target.value,1,200);$('ecoSpeedVal').textContent=biologicalSpeed+'×';};}
  const mag=$('ecoMagnify');if(mag)mag.onchange=e=>{previewMagnification=e.target.checked?6:1;};
@@ -691,6 +741,8 @@ async function setup(){
   }
   status();
  };
+ const colonySelect=$('ecoColonySelect');if(colonySelect)colonySelect.onchange=()=>{updateColonyInspector();drawNestCutaway();};
+ const cut=$('ecoBurrows');if(cut)cut.onchange=()=>{drawNestCutaway();nestCutGroup.visible=cut.checked;};
  const organic=$('ecoCarcass');if(organic)organic.onclick=()=>{
   addCarcass(4,3,.16);addCarcass(-5,-2,.10);status();
  };
@@ -703,7 +755,8 @@ async function setup(){
  const original=api.grass;if(original)original.visible=false;
  for(const obj of targetNativeGrass)obj.obj.visible=false;
  window.arcanoEcoV1232={active:true,cover,traffic,roadMask,riverMask,colonies,worms,
-  trample,addCarcass,update,status,api,ready:()=>ready,setMagnification:n=>previewMagnification=n};
+  trample,addCarcass,update,status,api,ready:()=>ready,setMagnification:n=>previewMagnification=n,
+  getColony:id=>colonies.find(c=>c.id===id),getWorms:()=>worms,inspectColony:updateColonyInspector};
  let last=performance.now();function frame(now){requestAnimationFrame(frame);const dt=Math.min(.09,(now-last)/1000);last=now;if(!document.hidden)update(dt);}
  requestAnimationFrame(frame);status();
 }
