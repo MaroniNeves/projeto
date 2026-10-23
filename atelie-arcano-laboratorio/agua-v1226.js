@@ -1290,6 +1290,12 @@ async function loadPainterlyForest(){
 function updateForestHealth(){
  updateMeadowHealth();
  for(const a of forestInstances){
+  // Atualizar apoio se a erosão/infiltração alterou o solo sob a raiz.
+  const surface=terrainHeightAt(a.x,a.z);
+  if(Math.abs(surface-a.groundY)>.008){
+   a.groundY=surface;
+   a.obj.position.y=a.groundY-a.bottomOffset*a.growthFactor-a.bury;
+  }
   if(a.type==='rock'||a.type==='tree'||a.type==='pine')continue;
   const i=clamp(Math.round((a.x+W*.5)/dx),0,NX-1);
   const j=clamp(Math.round((a.z+L*.5)/dz),0,NZ-1),k=idx(i,j);
@@ -2003,6 +2009,13 @@ function updateInfo(force){
   '% · '+atmPressureMean.toFixed(0)+' hPa · vento '+atmWindMean.toFixed(1)+
   ' · nuvens '+Math.round(atmCloudMean*100)+'% · chuva efetiva '+Math.round(clamp(appliedRainMean/.0061,0,1)*100)+'%';
  $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
+ if($('qualityStatus')){
+  const qp=QUALITY_PRESETS[graphicsQuality];
+  $('qualityStatus').textContent='🎮 '+qp.label+' · '+(qualityFPS||'…')+
+   ' FPS estimados · modelos '+Math.round(qp.density*100)+'% · rel. sombras '+
+   (qp.shadowsMobile&&mobile?qp.shadowsMobile:qp.shadowsDesktop)+' px'+
+   (graphicsQuality==='high'?' · texturas Quaternius originais onde disponíveis':'');
+ }
  $('info').textContent=level===0
  ?'Chuva suspensa: poças infiltram e evaporam; o ciclo solar continua'
  :physicalWeather
