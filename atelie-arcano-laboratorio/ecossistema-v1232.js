@@ -23,6 +23,12 @@ const meshLibrary={},textureLibrary={};let ready=false, biologicalSpeed=4,previe
 const grassPatches=[],rockPositions=[],colonies=[],worms=[],antDraws=[],wormDraws=[];
 const nestDisplays=new Map();
 let colonySequence=0,ecologicalDays=0,burrowLength=0,castsReturned=0;
+const ecoEvents=[];
+function recordEcoEvent(message){
+ const entry='Dia '+Math.floor(ecologicalDays)+' · '+message;
+ if(ecoEvents[0]===entry)return;
+ ecoEvents.unshift(entry);ecoEvents.length=Math.min(6,ecoEvents.length);
+}
 const targetNativeGrass=api.forestInstances.filter(a=>a.type==='grass');
 const roadZ=x=>4.6-.67*Math.sin(x*.47+.6)+.20*Math.sin(x*1.34);
 const riverX=z=>-2.3+.55*Math.sin(z*.69)+.48*Math.sin(z*.29+1.3);
@@ -323,7 +329,10 @@ function excavateNest(c,days,safe){
  if(effort<=0)return;
  const available=Math.min(effort,.018*days);
  c.tunnels=clamp(c.tunnels+available,0,8);
+ const previousChambers=c.chambers;
  c.chambers=Math.min(12,1+Math.floor(c.tunnels/.32));
+ if(c.chambers>previousChambers)
+  recordEcoEvent('Colônia '+(c.id+1)+' construiu a câmara '+c.chambers+'.');
  c.spoil=clamp(c.spoil+available*.64,0,1);
  burrowLength+=available;
  // Solo escavado vai para o monte exterior. Túneis melhoram macroporosidade
@@ -333,6 +342,7 @@ function excavateNest(c,days,safe){
  updateNestSurface(c);
 }
 function initialColonies(){
+ recordEcoEvent('Início com rainhas, crias e operárias.');
  for(const [x,z] of [[-6,2.5],[4.5,2.9],[-2,-4.1]]){
   const c=newColony(x,z,24+colonies.length*12,15,false);
   colonies.push(c);nestSurface(c);
@@ -427,6 +437,7 @@ function lifeDay(days){
   if(casualties){
    c.workers-=casualties;c.dead+=casualties;
    addCarcass(c.x,c.z,casualties*.0018);
+   if(casualties>=7)recordEcoEvent('Colônia '+(c.id+1)+' perdeu '+casualties+' operárias.');
   }
   const nurseEfficiency=clamp(c.nurses/Math.max(1,c.brood.length*1.3),0,1);
   if(c.queen&&c.queenFertile&&safe>.42&&fed>.50&&c.food>1.2){
@@ -454,11 +465,13 @@ function lifeDay(days){
   }
   c.brood=next.slice(-96);
   c.workers=clamp(c.workers+born,0,240);
+  if(c.founder&&born>0)recordEcoEvent('Primeiras operárias da colônia '+(c.id+1)+' nasceram.');
   if(c.workers>0)c.founder=false;
   c.queenAge+=days;
   if(c.queen&&c.queenAge>365*9){
    c.queen=false;c.queenFertile=false;
    addCarcass(c.x,c.z,.004);
+   recordEcoEvent('Rainha da colônia '+(c.id+1)+' morreu.');
   }
   distributeTasks(c);
   excavateNest(c,days,safe);
@@ -480,10 +493,12 @@ function lifeDay(days){
     const daughter=newColony(fx,fz,0,8,true);
     daughter.brood.push({stage:'egg',age:0,count:3});
     colonies.push(daughter);nestSurface(daughter);visualizeAnimals();
+    recordEcoEvent('Nova rainha fundou a colônia '+(daughter.id+1)+'.');
     c.food-=7;c.reproductiveCooldown=110;
    }
   }
  }
+ let hatchedToday=0;
  for(const w of worms){
   const k=idx(w.x,w.z),safe=goodForWorms(k);
   const moist=clamp(api.soilMoisture[k]/Math.max(.0001,api.soilCapacity[k]),0,1.8);
@@ -526,6 +541,7 @@ function lifeDay(days){
   }
   w.cocoons=cocoons.slice(-40);
   w.juveniles=Math.min(130,w.juveniles+hatch);
+  hatchedToday+=hatch;
   w.matureProgress+=days*w.juveniles/Math.max(40,w.juvenileMaturityDays)*safe;
   const mature=Math.min(w.juveniles,Math.floor(w.matureProgress));
   w.matureProgress-=mature;w.juveniles-=mature;w.adults+=mature;
@@ -553,6 +569,8 @@ function lifeDay(days){
   // Enterram-se mais quando o ar seca; aproximam-se da superfície após chuva.
   w.depth=clamp(w.depth+(wetEnough&&safe>.4?-.013:.023)*days,.016,.48);
  }
+ if(hatchedToday>0&&Math.floor(ecologicalDays)%10===0)
+  recordEcoEvent(hatchedToday+' minhocas eclodiram dos casulos.');
 }
 function visualizeAnimals(){
  for(const child of [...animals.children]){
@@ -707,6 +725,7 @@ function status(){
  const el=$('ecoStatus');if(el)el.textContent=
   grassDrawn+' tufos de grama ('+lastGrassQuality+') · '+colonies.length+' colônias · '+workers+' operárias · '+eggs+' ovos · '+larva+' larvas · '+adults+' minhocas adultas · '+cocoons+' casulos · galerias '+burrowLength.toFixed(1)+' m simulados · resíduos '+castsReturned.toFixed(2)+' u. '+
   'É uma simulação ecológica simplificada; rainhas e crias ficam nos ninhos. Quase invisíveis fora da lupa.';
+ const eventPanel=$('ecoEvents');if(eventPanel)eventPanel.textContent=ecoEvents.join('\n');
 }
 const nestCutGroup=new T.Group();
 nestCutGroup.name='Raio-X das galerias do formigueiro';
@@ -802,7 +821,8 @@ async function setup(){
  for(const obj of targetNativeGrass)obj.obj.visible=false;
  window.arcanoEcoV1232={active:true,cover,traffic,roadMask,riverMask,colonies,worms,
   trample,addCarcass,update,status,api,ready:()=>ready,setMagnification:n=>previewMagnification=n,
-  getColony:id=>colonies.find(c=>c.id===id),getWorms:()=>worms,inspectColony:updateColonyInspector};
+  getColony:id=>colonies.find(c=>c.id===id),getWorms:()=>worms,inspectColony:updateColonyInspector,
+  events:ecoEvents,getDays:()=>ecologicalDays};
  let last=performance.now();function frame(now){requestAnimationFrame(frame);const dt=Math.min(.09,(now-last)/1000);last=now;if(!document.hidden)update(dt);}
  requestAnimationFrame(frame);status();
 }
