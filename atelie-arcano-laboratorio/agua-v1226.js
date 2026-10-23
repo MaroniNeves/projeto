@@ -930,6 +930,54 @@ function applyForestVisibility(){
  meadowMesh.count=Math.floor(fullMeadowCount*QUALITY_PRESETS[graphicsQuality].meadow);
  if(meadowMesh.instanceMatrix)meadowMesh.instanceMatrix.needsUpdate=true;
 }
+
+// V12.26 / reparo de folhagens: vincula o PNG correto e conserva recortes alpha.
+const arcanoLeafFiles={
+ BirchTree_1:'BirchTree_Leaves.png',BirchTree_3:'BirchTree_Leaves.png',
+ MapleTree_3:'MapleTree_Leaves.png',NormalTree_2:'NormalTree_Leaves.png',
+ PineTree_2:'PineTree_Leaves.png',Bush_Large_Flowers:'Bush_Leaves.png',
+ Plant_Flowers:'Bush_Leaves.png',Flower_1_Clump:'Flowers.png',
+ Grass_Large_Extruded:'Grass.png'
+};
+const arcanoFoliageTextureCache=new Map();
+async function arcanoFoliageTexture(filename){
+ if(!arcanoFoliageTextureCache.has(filename)){
+  const url=new URL('./assets/ultimate/'+filename,document.baseURI).href;
+  const task=new T.TextureLoader().loadAsync(url).then(texture=>{
+   texture.colorSpace=T.SRGBColorSpace;texture.anisotropy=QUALITY_PRESETS[graphicsQuality].anisotropy;
+   texture.wrapS=texture.wrapT=T.ClampToEdgeWrapping;texture.needsUpdate=true;
+   return texture;
+  }).catch(err=>{console.warn('[Arcano] PNG local de folhas indisponível',filename,err);return null;});
+  arcanoFoliageTextureCache.set(filename,task);
+ }
+ return arcanoFoliageTextureCache.get(filename);
+}
+async function arcanoRepairForestMaterials(item,root){
+ const leafFile=item.pack==='ultimate'?arcanoLeafFiles[item.name]:null;
+ const leafMap=leafFile?await arcanoFoliageTexture(leafFile):null;
+ root.traverse(obj=>{
+  if(!obj.isMesh)return;
+  const materials=Array.isArray(obj.material)?obj.material:[obj.material];
+  for(const mat of materials){
+   if(!mat)return;
+   const materialName=(mat.name||'').toLowerCase();
+   const name=materialName+' '+(obj.name||'').toLowerCase();
+   const foliage=/(leaves|leaf|foliage|canopy|flower|petal|grass|fern|plant|bush)/.test(name);
+   const bark=/(bark|trunk|wood|stem|rock|stone)/.test(materialName);
+   if(!foliage||bark)continue;
+   if(item.pack==='ultimate'&&leafMap){
+    mat.map=leafMap;
+    if(mat.color)mat.color.set('#ffffff');
+   }else if(!mat.map&&mat.color){
+    mat.color.set(item.type==='flower'?'#a48d65':'#638344');
+   }
+   if(mat.map)mat.map.colorSpace=T.SRGBColorSpace;
+   mat.side=T.DoubleSide;mat.alphaTest=.42;mat.transparent=false;
+   mat.opacity=1;mat.depthWrite=true;mat.roughness=.94;mat.metalness=0;mat.needsUpdate=true;
+  }
+ });
+}
+
 function registerForestMaterial(item,root){
  if(item.pack!=='ultimate')return;
  root.traverse(o=>{
@@ -944,7 +992,7 @@ function registerForestMaterial(item,root){
    const source=mat.map?.image?.currentSrc||mat.map?.image?.src||'';
    const isProcedural=typeof source==='string'&&source.startsWith('data:image/');
    const materialName=(mat.name||'')+' '+(o.name||'');
-   if(!original||(!isProcedural&&!/(bark|trunk|wood|rock|stone)/i.test(materialName)))continue;
+   if(!original||!/(bark|trunk|wood|rock|stone)/i.test(mat.name||''))continue;
    mat.userData.arcanoFallbackMap=mat.map||null;
    mat.userData.arcanoOriginalTextureFile=original;
    qualityMaterials.add(mat);
@@ -1270,6 +1318,7 @@ async function loadPainterlyForest(){
      const doc=await loader.loadAsync('./assets/quaternius/'+item.name+'.gltf');
      model=doc.scene;
     }
+    await arcanoRepairForestMaterials(item,model);
     forestModels[item.name]=model;
     registerForestMaterial(item,model);
     placeForestModel(item,model);
