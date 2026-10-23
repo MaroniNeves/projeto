@@ -719,8 +719,12 @@ landG.setAttribute('color',new T.BufferAttribute(colors,3));landG.computeVertexN
 const land=new T.Mesh(landG,new T.MeshStandardMaterial({map:groundTexture(),vertexColors:true,roughness:1,side:T.DoubleSide}));
 land.receiveShadow=true;land.name='Terra absorvente e barro V12.12';scene.add(land);
 // Estratos demonstrativos sob o relevo; sem malhas caras ou superfícies expostas.
-const soilBaseY=Math.min(...soil)-.13;
-const soilStrata=new T.Group();soilStrata.name='Horizontes O/A/B/C · aquífero · rocha matriz';scene.add(soilStrata);
+// V12.30 — HORIZONTES CONFORMES: nenhuma caixa/plataforma plana.
+// Apenas cortes laterais ao longo do perímetro da malha real do solo.
+// Sem superfícies horizontais interceptando árvores ou projetando sombras.
+const soilStrata=new T.Group();
+soilStrata.name='Horizontes O/A/B/C, aquífero e rocha matriz conformes ao terreno';
+scene.add(soilStrata);
 const strata=[
  ['O · matéria orgânica',.12,'#4d3827'],
  ['A · solo superficial',.21,'#836047'],
@@ -729,14 +733,48 @@ const strata=[
  ['Aquífero poroso',.26,'#657a7f'],
  ['Rocha matriz',.30,'#736b62']
 ];
-let stratumTop=soilBaseY;
-for(const [name,height,color] of strata){
- const mesh=new T.Mesh(new T.BoxGeometry(W,height,L),
-  new T.MeshStandardMaterial({color,roughness:1,metalness:0}));
- mesh.name=name;mesh.position.y=stratumTop-height*.5;
- mesh.receiveShadow=true;soilStrata.add(mesh);
- stratumTop-=height;
+// Contorno em coordenadas da mesma grid da superfície: sem lacuna vertical.
+const rim=[];
+for(let i=0;i<NX;i++)rim.push([i,0]);
+for(let j=1;j<NZ;j++)rim.push([NX-1,j]);
+for(let i=NX-2;i>=0;i--)rim.push([i,NZ-1]);
+for(let j=NZ-2;j>0;j--)rim.push([0,j]);
+function makeConformingStratum(upper,lower,color,name){
+ const positions=[],triangles=[],uvs=[];
+ for(let k=0;k<rim.length;k++){
+  const [i,j]=rim[k],x=nx(i),z=nz(j),y=soil[idx(i,j)]-.014;
+  positions.push(x,y-upper,z,x,y-lower,z);
+  uvs.push(k/Math.max(1,rim.length-1)*5,0,
+           k/Math.max(1,rim.length-1)*5,1);
+ }
+ for(let k=0;k<rim.length;k++){
+  const a=k*2,b=((k+1)%rim.length)*2;
+  triangles.push(a,a+1,b,b,a+1,b+1);
+ }
+ const geo=new T.BufferGeometry();
+ geo.setAttribute('position',new T.Float32BufferAttribute(positions,3));
+ geo.setAttribute('uv',new T.Float32BufferAttribute(uvs,2));
+ geo.setIndex(triangles);geo.computeVertexNormals();
+ const mesh=new T.Mesh(geo,new T.MeshStandardMaterial({
+  color,roughness:1,metalness:0,side:T.DoubleSide
+ }));
+ mesh.name=name;mesh.castShadow=false;mesh.receiveShadow=false;
+ mesh.renderOrder=0;return mesh;
 }
+let layerOffset=0;
+for(const [name,height,color] of strata){
+ soilStrata.add(makeConformingStratum(layerOffset,layerOffset+height,color,name));
+ layerOffset+=height;
+}
+// Tampa inferior acompanha o mesmo relevo; não existe laje plana visível.
+const under=grid(),underP=under.attributes.position.array;
+for(let k=0;k<size;k++)underP[k*3+1]=soil[k]-.014-layerOffset;
+under.computeVertexNormals();
+const underFace=new T.Mesh(under,new T.MeshStandardMaterial({
+ color:'#635e58',roughness:1,metalness:0,side:T.BackSide
+}));
+underFace.name='Base inferior conforme ao terreno';
+underFace.castShadow=false;underFace.receiveShadow=false;soilStrata.add(underFace);
 const slab=soilStrata;
 // Rochas anime: silhuetas orgânicas sem faces quadradas, paleta envelhecida e musgo discreto.
 // Modelos procedurais locais: sem download externo, acessíveis também em Android/offline.
