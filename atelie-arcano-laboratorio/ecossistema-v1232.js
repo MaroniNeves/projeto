@@ -305,6 +305,13 @@ function grassShape(){
   positions.push({x,z,k,health});
  }
  // Índices sobre toda a malha (e não sorteio com parada prematura).
+ // Em Baixa/Equilibrada, exibir um subconjunto menor continua cobrindo
+ // todo o mapa: embaralhar uma única vez, sem concentrar as primeiras
+ // instâncias apenas num lado do terreno.
+ for(let i=positions.length-1;i>0;i--){
+  const j=Math.floor(random()*(i+1));
+  const t=positions[i];positions[i]=positions[j];positions[j]=t;
+ }
  const step=positions.length/Math.max(1,lowBudget);
  for(let n=0;n<Math.min(lowBudget,positions.length);n++){
   const p=positions[Math.min(positions.length-1,Math.floor((n+.5)*step))];
@@ -1004,13 +1011,26 @@ function antGeometry(name){
 // Esconde quaisquer modelos antigos de formiga inseridos fora do sistema
 // de instâncias animadas; protege contra a formiga gigante estática.
 function hideDetachedAntModels(){
- const pattern=/(^|[_\s-])(ant|formiga|leafcutter)([_\s-]|$)/i;
+ // A versão antiga só procurava "ant" no NOME DA MALHA. Nos OBJ/FBX
+ // originais, o nome costuma pertencer ao GRUPO PAI e a malha chama-se
+ // Mesh_0 ou Object_0. Remover a origem de qualquer formiga estática.
+ const pattern=/(^|[\s_.-])(ant|formiga|leaf.?cutter|red.?ant)([\s_.-]|\d|$)|^(leaf.?cutter|red.?ant|formiga)/i;
+ const roots=new Set();
  api.scene.traverse(obj=>{
-  if(!obj.isMesh||!pattern.test(obj.name||'')||obj.userData.arcanoRetainAnt)return;
-  let parent=obj.parent,insideEcology=false;
-  while(parent){if(parent===realm){insideEcology=true;break;}parent=parent.parent;}
-  if(!insideEcology)obj.visible=false;
+  if(!obj.isMesh&&!obj.isSkinnedMesh)return;
+  let p=obj,insideEcology=false,antRoot=null;
+  while(p&&p!==api.scene){
+   if(p===realm){insideEcology=true;break;}
+   if(pattern.test(p.name||''))antRoot=p;
+   p=p.parent;
+  }
+  if(!insideEcology&&antRoot)roots.add(antRoot);
  });
+ for(const obj of roots){
+  // Não descartar os recursos compartilhados; apenas retirar do cenário.
+  if(obj.parent)obj.parent.remove(obj);
+ }
+ if(roots.size)console.info('[Arcano V12.40] Formigas estáticas removidas:',roots.size);
 }
 let compactAntMesh=null;
 function compactAntGeometry(){
@@ -1267,6 +1287,7 @@ function moveAnimals(t){
 // A estrada NÃO é um objeto gerado: é o resultado histórico de pisoteio,
 // compactação, perda de clorofila e redução dos tufos de grama.
 const largeAnimals=[];
+let grassRefreshRequested=false;
 function stampTraffic(x,z,weight=.25,animal=false){
  const ix=Math.round((x+W*.5)/dx),iz=Math.round((z+L*.5)/dz);
  const cellRadius=animal?3:2;
@@ -1300,7 +1321,9 @@ function trample(x,z,weight=.22){
  markFootprint(x,z);
  checkAntTrampling(x,z,weight);
  stampTraffic(x,z,weight,false);
- clearLargeRocksFromTrails();updateGrassMeshes();
+ // Atualização da malha é consolidada a cada passo da simulação.
+ // Recalcular mais de 100 mil instâncias em CADA pegada travava o Android.
+ grassRefreshRequested=true;
 }
 function registerAnimalFootfall(x,z,mass=1){
  // API para grandes animais que forem integrados no laboratório:
@@ -1395,6 +1418,7 @@ function update(dt){
    if(wear<.25&&suitability>.22)
     api.soilPlant[cell]=clamp(api.soilPlant[cell]+.0008*suitability*dtBio,.025,1.25);
   }
+  if(grassRefreshRequested||grassAccumulator===0)grassRefreshRequested=false;
   updateGrassMeshes();
  }
  while(ecologicalAccumulator>1){lifeDay(1);ecologicalAccumulator-=1;if(nestCutGroup.visible)drawNestCutaway();}
