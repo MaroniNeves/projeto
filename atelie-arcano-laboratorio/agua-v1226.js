@@ -1888,7 +1888,7 @@ function placeForestModel(item,root){
  // Florestas em manchas densas, mas com seleção de qualidade no render.
  // Crescimento do número de árvores fica separado de pedras e flores.
  const count=(item.type==='tree'||item.type==='pine')?
-  Math.ceil((mobile?item.mobile:item.desktop)*1.75):
+  Math.ceil((mobile?item.mobile:item.desktop)*2.06):
   (mobile?item.mobile:item.desktop);
  let created=0;
  for(let attempt=0;attempt<count*26&&created<count;attempt++){
@@ -1902,6 +1902,13 @@ function placeForestModel(item,root){
    if(randomForest()<.76){
     x=clamp(ax+(randomForest()+randomForest()-1)*W*.115,-W*.48,W*.48);
     z=clamp(az+(randomForest()+randomForest()-1)*L*.125,-L*.48,L*.48);
+   }
+   // Grupos ciliares e bordas do caminho. Troncos crescem FORA da terra
+   // batida; as copas e ramos tornam o corredor visualmente fechado.
+   if(randomForest()<.46){
+    x=(randomForest()-.5)*W*.93;
+    const center=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
+    z=center+(randomForest()<.5?-1:1)*(1.22+Math.pow(randomForest(),1.25)*5.2);
    }
   }
   const edge=Math.max(Math.abs(x)/(W*.5),Math.abs(z)/(L*.5));
@@ -1924,9 +1931,9 @@ function placeForestModel(item,root){
   // após carregar todos os FBX, sem árvores/arbustos crescendo no traçado.
   const roadCenter=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
   const pathDistance=Math.abs(z-roadCenter);
-  if((item.type==='tree'||item.type==='pine')&&pathDistance<1.29)continue;
-  if((item.type==='bush'||item.type==='flower'||item.type==='fern')&&
-     pathDistance<(item.type==='bush'?1.13:.78))continue;
+  if((item.type==='tree'||item.type==='pine')&&pathDistance<1.16)continue;
+  if((item.type==='bush'||item.type==='flower'||item.type==='fern'||item.type==='grass')&&
+     pathDistance<(item.type==='bush'?1.10:item.type==='grass'?1.11:.72))continue;
   if(item.type==='bush'||item.type==='flower'||item.type==='fern'){
    // Evitar que a base da planta afunde em barrancos de grande inclinação.
    const rr=item.type==='bush'?.24:.12;
