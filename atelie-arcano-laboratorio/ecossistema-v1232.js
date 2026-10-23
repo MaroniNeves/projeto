@@ -1240,7 +1240,7 @@ async function setup(){
  drawNestCutaway();
  const board=$('ecoStatus');if(board)board.textContent='Pacotes enviados integrados: '+Object.keys(meshLibrary).length+' malhas · '+colonies.length+' colônias.';
  const s=$('ecoSpeed');if(s){s.oninput=e=>{biologicalSpeed=clamp(+e.target.value,1,200);$('ecoSpeedVal').textContent=biologicalSpeed+'×';};}
- const mag=$('ecoMagnify');if(mag)mag.onchange=e=>{previewMagnification=e.target.checked?6:1;};
+ const mag=$('ecoMagnify');if(mag)mag.onchange=e=>{previewMagnification=e.target.checked?4:1;};
  const sim=$('ecoTraffic');if(sim)sim.onclick=()=>{
   for(let i=0;i<36;i++){
    const x=-8+random()*16;
