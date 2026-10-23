@@ -1885,7 +1885,11 @@ function placeForestModel(item,root){
  const orientation=arcanoBestOrientation(item,root);
  if(!orientation)return;
  const h=Math.max(.001,orientation.height);
- const count=mobile?item.mobile:item.desktop;
+ // Florestas em manchas densas, mas com seleção de qualidade no render.
+ // Crescimento do número de árvores fica separado de pedras e flores.
+ const count=(item.type==='tree'||item.type==='pine')?
+  Math.ceil((mobile?item.mobile:item.desktop)*1.75):
+  (mobile?item.mobile:item.desktop);
  let created=0;
  for(let attempt=0;attempt<count*26&&created<count;attempt++){
   // Concentra árvores por manchas de floresta (núcleos verdejantes),
