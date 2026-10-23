@@ -1,0 +1,8 @@
+Quaternius Ultimate Stylized Nature Pack - selecao individual CC0.
+Oficial: https://quaternius.com/packs/ultimatestylizednature.html
+O ZIP enviado pelo usuario reune modelos FBX em colecoes; estas variacoes individuais
+da mesma familia de assets vieram do espelho:
+https://github.com/walterpalladino/godot-quaternius-ultimate-stylized-nature
+11 malhas FBX e 7 texturas PNG leves. Troncos e rochas recebem material proprio,
+sem baixar mapas gigantes do pacote original. O MegaKit glTF permanece preservado
+em assets/quaternius. Licenca CC0 Quaternius.
