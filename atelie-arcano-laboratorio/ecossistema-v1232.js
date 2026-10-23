@@ -463,6 +463,81 @@ function animateLeafFall(dt){
   if(m.instanceColor)m.instanceColor.needsUpdate=true;
  }
 }
+
+const fruitGroup=new T.Group();fruitGroup.name='Maçãs originais · verde, madura, podre e húmus';realm.add(fruitGroup);
+const fruits=[];let fruitClock=0,fruitFallen=0,fruitNutrients=0,fruitGeo=null;
+function setupFruits(){
+ fruitGeo=window.ARCANO_NATURE_MODELS_V1239?.geometry?.(T,'apple')||
+   new T.SphereGeometry(.5,8,7);
+}
+function spawnFruit(test=false){
+ if(!fruitGeo||fruits.length>=(mobileDevice?42:80))return;
+ const candidates=api.forestInstances.filter(a=>
+  a.type==='tree'&&a.obj.visible&&Number.isFinite(a.dropY)&&a.dropY>a.y+.8);
+ if(!candidates.length)return;
+ const tree=candidates[Math.floor(random()*candidates.length)];
+ const spread=clamp((tree.crownWidth||2.5)*.22,.12,.70);
+ const x=clamp(tree.x+(random()-.5)*spread*2,-W*.48,W*.48);
+ const z=clamp(tree.z+(random()-.5)*spread*2,-L*.48,L*.48);
+ const y=Math.max(height(x,z)+.6,tree.dropY-.45-random()*.52);
+ const mat=new T.MeshStandardMaterial({color:'#57a63f',roughness:.91,metalness:0});
+ const mesh=new T.Mesh(fruitGeo,mat);mesh.castShadow=false;
+ mesh.name='Maçã Kenney importada: verde / madura / podre';
+ mesh.position.set(x,y,z);mesh.scale.setScalar(.12+random()*.04);
+ fruitGroup.add(mesh);
+ fruits.push({mesh,x,z,y,age:test?random()*24:0,
+  ripeAt:12+random()*11,fallAt:26+random()*14,
+  rotAt:53+random()*19,mass:.0028+random()*.0026,
+  phase:random()*6.283,fallVelocity:0,stage:'green'});
+}
+function animateFruits(dt){
+ if(!fruitGeo)return;
+ const wind=clamp((api.atmosphere.getMetrics().wind||0)/3,0,1.5);
+ fruitClock+=dt;
+ if(fruitClock>6){
+  fruitClock=0;
+  if(random()<.68)spawnFruit();
+ }
+ const step=dt*clamp(.8+biologicalSpeed*.1,1,4);
+ for(let i=fruits.length-1;i>=0;i--){
+  const f=fruits[i];f.age+=step;
+  if(f.stage==='green'&&f.age>f.ripeAt){
+   f.stage='ripe';f.mesh.material.color.set('#cb4936');
+  }
+  if(f.stage==='ripe'&&f.age>f.fallAt&&
+    (random()<dt*(.045+wind*.18)||f.age>f.fallAt+17)){
+    f.stage='falling';fruitFallen++;f.fallVelocity=0;
+  }
+  if(f.stage==='falling'){
+   f.fallVelocity=Math.min(3.5,f.fallVelocity+dt*2.3);
+   f.y-=f.fallVelocity*dt;
+   f.x+=wind*dt*.012*Math.sin(f.phase+f.age);
+   f.z+=wind*dt*.012*Math.cos(f.phase+f.age);
+   const ground=height(f.x,f.z)+.035;
+   if(f.y<=ground){f.y=ground;f.stage='fallen';}
+   f.mesh.position.set(f.x,f.y,f.z);
+   f.mesh.rotation.z+=dt*1.8;
+  }else if(f.stage==='fallen'||f.stage==='rotten'){
+   const k=idx(f.x,f.z),moist=clamp(api.soilMoisture[k]/
+    Math.max(.001,api.soilCapacity[k]),0,1.4);
+   if(f.age>f.rotAt&&f.stage==='fallen'){
+    f.stage='rotten';f.mesh.material.color.set('#201a17');
+   }
+   if(f.stage==='rotten'){
+    const decay=Math.min(f.mass,dt*(.000021+.000028*moist));
+    f.mass-=decay;fruitNutrients+=decay;
+    api.soilLitter[k]=clamp(api.soilLitter[k]+decay*.64,0,1.8);
+    api.soilOrganic[k]=clamp(api.soilOrganic[k]+decay*.36,0,1.8);
+    f.mesh.scale.multiplyScalar(Math.max(.96,1-dt*.025));
+    if(f.mass<.000007){
+     fruitGroup.remove(f.mesh);f.mesh.material.dispose();fruits.splice(i,1);
+    }
+   }
+  }else{
+   f.mesh.position.y=f.y+Math.sin(f.age*.6+f.phase)*wind*.004;
+  }
+ }
+}
 function rockShape(){
  api.stones.visible=false;const names=['rock1','rock2','rock3','rock4','rock5'];
  const mat=material('rock');
@@ -1101,7 +1176,7 @@ let ecologicalAccumulator=0,time=0,grassAccumulator=0,uiAccumulator=0;
 function update(dt){
  if(!ready)return;
  dt=Math.min(dt,.09);time+=dt;ecologicalAccumulator+=ecologicalDayRate(dt);
- animateLeafFall(dt);
+ animateLeafFall(dt);animateFruits(dt);
  grassAccumulator+=dt;uiAccumulator+=dt;
  // Recarrega o rio somente pela fonte a montante, sem água infinita em toda a cena.
  if(grassAccumulator>.7){
@@ -1139,6 +1214,11 @@ function status(){
   grassDrawn+' tufos de grama ('+lastGrassQuality+') · '+colonies.length+' colônias · '+workers+' operárias · '+eggs+' ovos · '+larva+' larvas · '+adults+' minhocas adultas · '+cocoons+' casulos · galerias '+burrowLength.toFixed(1)+' m simulados · resíduos '+castsReturned.toFixed(2)+' u. '+
   'É uma simulação ecológica simplificada; rainhas e crias ficam nos ninhos. Quase invisíveis fora da lupa.';
  const eventPanel=$('ecoEvents');if(eventPanel)eventPanel.textContent=ecoEvents.join('\n');
+ const fruitsStatus=$('ecoFruitStatus');if(fruitsStatus)fruitsStatus.textContent=
+  '🍎 '+fruits.length+' frutas · verdes '+fruits.filter(f=>f.stage==='green').length+
+  ' · maduras '+fruits.filter(f=>f.stage==='ripe').length+
+  ' · podres '+fruits.filter(f=>f.stage==='rotten').length+
+  ' · caídas '+fruitFallen+' · adubo '+fruitNutrients.toFixed(3)+' u';
  const leaves=$('ecoLeafStatus');
  if(leaves)leaves.textContent=
   '🍂 '+fallingLeaves.length+' folhas 3D na cena · '+leafCollected.toFixed(3)+
@@ -1249,7 +1329,7 @@ function updateColonyInspector(){
  ' · feromônios '+c.pheromones.reduce((a,v)=>a+v,0).toFixed(1);
 }
 async function setup(){
- await loadMeshes();initializeLandscape();grassShape();rockShape();setupLeafVisuals();initialColonies();visualizeAnimals();
+ await loadMeshes();initializeLandscape();grassShape();rockShape();setupLeafVisuals();setupFruits();initialColonies();visualizeAnimals();
  drawNestCutaway();
  const board=$('ecoStatus');if(board)board.textContent='Pacotes enviados integrados: '+Object.keys(meshLibrary).length+' malhas · '+colonies.length+' colônias.';
  const s=$('ecoSpeed');if(s){s.oninput=e=>{biologicalSpeed=clamp(+e.target.value,1,200);$('ecoSpeedVal').textContent=biologicalSpeed+'×';};}
@@ -1278,6 +1358,11 @@ async function setup(){
  const advance=$('ecoAdvance');if(advance)advance.onclick=()=>{
   for(let d=0;d<30;d++)lifeDay(1);
   if(nestCutGroup.visible)drawNestCutaway();
+  status();
+ };
+ const fruitTest=$('ecoFruitTest');if(fruitTest)fruitTest.onclick=()=>{
+  for(let i=0;i<14;i++)spawnFruit(true);
+  recordEcoEvent('Maçãs geradas: amadurecimento, queda e decomposição.');
   status();
  };
  const leafTest=$('ecoLeafTest');
