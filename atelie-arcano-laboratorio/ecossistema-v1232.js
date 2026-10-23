@@ -463,12 +463,13 @@ function newColony(x,z,workers=24,food=12,founder=false){
   {stage:'pupa',age:18,count:3}],
  scouts:0,foragers:0,nurses:0,builders:0,guards:0,dead:0,
  temperature:23,queenStress:0,pheromones:new Float32Array(cells),lastFoodSite:idx(x,z),
- tunnels:Math.max(.09,workers*.003),chambers:1,spoil:Math.max(.03,workers*.0006),
+ tunnels:founder?.09:Math.max(.76,workers*.014),chambers:founder?1:3,
+ spoil:Math.max(.03,workers*.0006),
  foodStored:food*.35,founder, reproductiveCooldown:0,daysWithoutFood:0,
  leafCargo:0,queenDepth:.78,subterranean:[
   {depth:.15,role:'entrada / vigias / forrageio',chambers:1,workers:0},
-  {depth:.42,role:'depósito / alimento / operárias',chambers:0,workers:0},
-  {depth:.78,role:'rainha / ovos / larvas',chambers:0,workers:0},
+  {depth:.42,role:'depósito / alimento / operárias',chambers:founder?0:1,workers:0},
+  {depth:.78,role:'rainha / ovos / larvas',chambers:founder?0:1,workers:0},
   {depth:1.08,role:'refúgio profundo / pupas',chambers:0,workers:0}
  ]};
  distributeTasks(c);return c;
@@ -523,9 +524,9 @@ function excavateNest(c,days,safe){
  if(c.workers<=0)return;
  const k=idx(c.x,c.z);
  const saturation=clamp(api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]),0,1);
- const effort=Math.max(0,c.builders)*days*.00045*safe*(1-saturation*.6);
+ const effort=Math.max(0,c.builders)*days*.0015*safe*(1-saturation*.6);
  if(effort<=0)return;
- const available=Math.min(effort,.018*days);
+ const available=Math.min(effort,.035*days);
  c.tunnels=clamp(c.tunnels+available,0,8);
  const previousChambers=c.chambers;
  c.chambers=Math.min(12,1+Math.floor(c.tunnels/.32));
@@ -657,6 +658,7 @@ function lifeDay(days){
   const founding=c.founder&&c.workers===0;
   const need=days*(founding?.078:(.19+.015*c.workers+broodFood));
   const ration=Math.min(c.food,need);c.food-=ration;
+  c.leafCargo=Math.max(0,(c.leafCargo||0)-days*.004);
   const fed=need>0?ration/need:1;
   c.daysWithoutFood=fed<.38?c.daysWithoutFood+days:Math.max(0,c.daysWithoutFood-days*.25);
   // Morte de operárias, agravada por escassez, calor, enchentes e idade.
