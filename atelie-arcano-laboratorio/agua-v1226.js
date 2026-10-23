@@ -742,7 +742,7 @@ for(let j=NZ-2;j>0;j--)rim.push([0,j]);
 function makeConformingStratum(upper,lower,color,name){
  const positions=[],triangles=[],uvs=[];
  for(let k=0;k<rim.length;k++){
-  const [i,j]=rim[k],x=nx(i),z=nz(j),y=soil[idx(i,j)]-.014;
+  const [i,j]=rim[k],x=nx(i),z=nz(j),y=soil[idx(i,j)]-.002;
   positions.push(x,y-upper,z,x,y-lower,z);
   uvs.push(k/Math.max(1,rim.length-1)*5,0,
            k/Math.max(1,rim.length-1)*5,1);
@@ -768,7 +768,7 @@ for(const [name,height,color] of strata){
 }
 // Tampa inferior acompanha o mesmo relevo; não existe laje plana visível.
 const under=grid(),underP=under.attributes.position.array;
-for(let k=0;k<size;k++)underP[k*3+1]=soil[k]-.014-layerOffset;
+for(let k=0;k<size;k++)underP[k*3+1]=soil[k]-.002-layerOffset;
 under.computeVertexNormals();
 const underFace=new T.Mesh(under,new T.MeshStandardMaterial({
  color:'#635e58',roughness:1,metalness:0,side:T.BackSide
@@ -2034,6 +2034,7 @@ function rebuildImportedRocks(){
 }
 // V12.30 — Bancada de revisão in situ para TODAS as espécies não minerais.
 // É uma cópia temporária fora da distribuição, não altera a floresta original.
+let assetTestPlacementMode=false;
 const assetTestGroup=new T.Group();
 assetTestGroup.name='Bancada temporária de revisão de modelos';
 scene.add(assetTestGroup);
@@ -2061,6 +2062,11 @@ function setupAssetTest(){
    'Aguardando carregamento do modelo '+select.value);
  });
  $('assetTestPlace')?.addEventListener('click',()=>placeAssetTest(select.value));
+ $('assetTestChoosePosition')?.addEventListener('click',()=>{
+  assetTestPlacementMode=true;
+  assetTestMessage('Toque no terreno para posicionar a amostra: '+select.value);
+  $('collapseControls')?.click();
+ });
  $('assetTestNext')?.addEventListener('click',()=>{
   if(!select.options.length)return;
   select.selectedIndex=(select.selectedIndex+1)%select.options.length;
@@ -2074,6 +2080,7 @@ function applyAssetTestIsolation(){
  forestGroup.visible=!!floraWanted&&!$('assetTestIsolate')?.checked;
 }
 function removeAssetTest(){
+ assetTestPlacementMode=false;
  if(assetTestMarker){assetTestMarker.geometry.dispose();assetTestMarker.material.dispose();}
  assetTestGroup.clear();
  assetTestActor=null;assetTestAnchor=null;assetTestMarker=null;
@@ -2081,7 +2088,8 @@ function removeAssetTest(){
  assetTestMessage('Amostra removida. Floresta original restaurada.');
  if(typeof reflectionAge!=='undefined')reflectionAge=999;
 }
-function placeAssetTest(name){
+function placeAssetTest(name,at=null){
+ assetTestPlacementMode=false;
  const item=FOREST_MODELS.find(x=>x.name===name);
  const root=forestModels[name];
  if(!item||item.type==='rock'){assetTestMessage('Espécie não encontrada.');return;}
@@ -2098,7 +2106,9 @@ function placeAssetTest(name){
   height:new T.Box3().setFromObject(root).getSize(new T.Vector3()).y||1
  };
  const placed=new T.Group(),correction=new T.Group(),clone=root.clone(true);
- const x=5.15,z=-5.4,groundY=terrainContact(x,z);
+ const x=clamp(at?.x??5.15,-W*.5+.55,W*.5-.55);
+ const z=clamp(at?.z??-5.4,-L*.5+.55,L*.5-.55);
+ const groundY=terrainContact(x,z);
  placed.name='Amostra temporária '+name;
  correction.quaternion.copy(arcanoStraightenSpecies(item,root,orient.quaternion));
  correction.add(clone);placed.add(correction);
@@ -2910,7 +2920,13 @@ function setView(){camera.position.set(target.x+radius*Math.cos(pitch)*Math.sin(
 function tapAdd(event){
  const rect=stage.getBoundingClientRect(),mouse=new T.Vector2((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
  const ray=new T.Raycaster();ray.setFromCamera(mouse,camera);const found=ray.intersectObject(land);
- if(found.length){const p=found[0].point;for(let i=0;i<25;i++){const a=random()*Math.PI*2,r=random()*.6;add(p.x+Math.cos(a)*r,p.z+Math.sin(a)*r,.105);}
+ if(found.length){
+  const p=found[0].point;
+  if(assetTestPlacementMode){
+   placeAssetTest($('assetTestSelect')?.value,{x:p.x,z:p.z});
+   return;
+  }
+  for(let i=0;i<25;i++){const a=random()*Math.PI*2,r=random()*.6;add(p.x+Math.cos(a)*r,p.z+Math.sin(a)*r,.105);}
  rebuild();updateInfo(true);}
 }
 stage.addEventListener('pointerdown',e=>{drag=true;moved=false;prevX=e.clientX;prevY=e.clientY;try{stage.setPointerCapture(e.pointerId);}catch(_){}});
