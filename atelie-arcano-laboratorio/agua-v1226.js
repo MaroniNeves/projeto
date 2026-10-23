@@ -3144,9 +3144,9 @@ function resize(){
    Um manequim procedural leve funciona caso o GLB esteja offline. */
 const game={
  active:false,root:null,character:null,mixer:null,actions:{},animation:'',
- heading:Math.PI,position:new T.Vector3(),camHeading:Math.PI,
+ heading:Math.PI,position:new T.Vector3(),camHeading:Math.PI,camPitch:.35,camDistance:4.8,orbitPointer:null,orbitX:0,orbitY:0,
  input:{x:0,y:0,run:false},keys:new Set(),touch:false,
- elapsed:0,steps:0,loading:false,hasModel:false,openedFullscreen:false
+ elapsed:0,steps:0,loading:false,hasModel:false,openedFullscreen:false,fpsElapsed:0,fpsFrames:0
 };
 function gameStatus(message){
  if($('gameStatus'))$('gameStatus').textContent=message;
@@ -3222,23 +3222,47 @@ function gameInput(){
  const norm=Math.max(1,Math.hypot(x,y));
  return {x:x/norm,y:y/norm,run:game.input.run||game.keys.has('shift')};
 }
+// Árvore espacial por blocos de 3 unidades; evita percorrer milhares
+// de modelos a cada passo do jogador.
+const gameTreeGrid=new Map();let gameTreeCount=-1;
+function treesNearGame(x,z){
+ if(gameTreeCount!==forestInstances.length){
+  gameTreeGrid.clear();gameTreeCount=forestInstances.length;
+  for(const a of forestInstances){
+   if(a.type!=='tree'&&a.type!=='pine')continue;
+   const key=Math.floor(a.x/3)+','+Math.floor(a.z/3);
+   if(!gameTreeGrid.has(key))gameTreeGrid.set(key,[]);
+   gameTreeGrid.get(key).push(a);
+  }
+ }
+ const ix=Math.floor(x/3),iz=Math.floor(z/3);
+ for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++){
+  const trees=gameTreeGrid.get((ix+dx)+','+(iz+dz));
+  if(!trees)continue;
+  for(const a of trees){
+   if((a.x-x)*(a.x-x)+(a.z-z)*(a.z-z)<.19)return true;
+  }
+ }
+ return false;
+}
 function updateGame(dt){
  if(!game.active||!game.root)return;
  const control=gameInput(),length=Math.hypot(control.x,control.y);
  if(length>.08){
-  // Mapa visto por trás: joystick para cima caminha para Z negativo.
-  const angle=Math.atan2(control.x,-control.y);
-  const dirX=Math.sin(angle),dirZ=-Math.cos(angle);
+  // Movimento RELATIVO à direção da câmera: a seta para cima sempre
+  // avança na direção em que o jogador está olhando.
+  const forward=-control.y,strafe=control.x;
+  const dirX=Math.sin(game.camHeading)*forward+
+   Math.cos(game.camHeading)*strafe;
+  const dirZ=Math.cos(game.camHeading)*forward-
+   Math.sin(game.camHeading)*strafe;
   const speed=control.run?3.25:1.65;
   const nx=clamp(game.position.x+dirX*dt*speed*length,-W*.48,W*.48);
   const nz=clamp(game.position.z+dirZ*dt*speed*length,-L*.48,L*.48);
   const y=terrainContact(nx,nz),oldY=terrainContact(game.position.x,game.position.z);
-  // Impedir passagem por rochas, troncos e água profunda/encostas altas.
-  if(Math.abs(y-oldY)<.43&&!rockAt(nx,nz)&&sample(depth,nx,nz)<.18){
-   const blockedTree=forestInstances.some(a=>
-    (a.type==='tree'||a.type==='pine')&&
-    Math.pow(a.x-nx,2)+Math.pow(a.z-nz,2)<.19);
-   if(!blockedTree){game.position.x=nx;game.position.z=nz;}
+  if(Math.abs(y-oldY)<.43&&!rockAt(nx,nz)&&sample(depth,nx,nz)<.18&&
+     !treesNearGame(nx,nz)){
+    game.position.x=nx;game.position.z=nz;
   }
   const newHeading=Math.atan2(dirX,dirZ);
   game.heading+=Math.atan2(Math.sin(newHeading-game.heading),
@@ -3264,31 +3288,32 @@ function updateGame(dt){
   parts.rightArm.rotation.x=gait*.65;
  }
 }
+const gameCameraGoal=new T.Vector3();
 function applyGameCamera(){
  const goal=game.position;
- // Câmera de terceira pessoa: sempre atrás do personagem.
- game.camHeading+=Math.atan2(Math.sin(game.heading-game.camHeading),
-  Math.cos(game.heading-game.camHeading))*.08;
- const behind=new T.Vector3(-Math.sin(game.camHeading)*4.7,2.90,
-  -Math.cos(game.camHeading)*4.7);
- const cameraGoal=new T.Vector3(goal.x+behind.x,
-   Math.max(terrainContact(goal.x+behind.x,goal.z+behind.z)+1.4,goal.y+behind.y),
-   goal.z+behind.z);
- camera.position.lerp(cameraGoal,.22);
- camera.lookAt(goal.x,goal.y+1.18,goal.z);
+ // Órbita livre: o ângulo persiste após soltar o dedo, sem forçar a
+ // câmera automaticamente de volta para trás do personagem.
+ const reach=Math.cos(game.camPitch)*game.camDistance;
+ const bx=-Math.sin(game.camHeading)*reach,bz=-Math.cos(game.camHeading)*reach;
+ gameCameraGoal.set(goal.x+bx,
+  Math.max(terrainContact(goal.x+bx,goal.z+bz)+.65,
+   goal.y+1.15+Math.sin(game.camPitch)*game.camDistance),
+  goal.z+bz);
+ camera.position.lerp(gameCameraGoal,.22);
+ camera.lookAt(goal.x,goal.y+1.22,goal.z);
 }
 async function setPlayActive(active){
  if(game.active===active)return;
  game.active=active;
  document.body.classList.toggle('play-active',active);
  if($('gameHUD'))$('gameHUD').setAttribute('aria-hidden',String(!active));
- game.keys.clear();game.input.x=0;game.input.y=0;game.input.run=false;
+ game.keys.clear();game.input.x=0;game.input.y=0;game.input.run=false;game.orbitPointer=null;
  if(active){
   if(!game.root){
    game.root=new T.Group();game.root.name='Personagem jogável';
    game.character=gameFallback();game.root.add(game.character);scene.add(game.root);
    game.position.set(0,terrainContact(0,.92),.92);
-   game.heading=Math.PI;game.camHeading=Math.PI;
+   game.heading=Math.PI;game.camHeading=Math.PI;game.camPitch=.35;
   }
   game.root.visible=true;
   // Fullscreen e rotação são tentativas; o navegador pode negar.
@@ -3400,8 +3425,17 @@ function paintWalkingStep(e){
  }
  return true;
 }
+// Área livre da cena: arrastar o dedo gira a câmera do modo Jogar.
+// Joystick e botão Correr têm eventos próprios sobrepostos ao canvas.
 stage.addEventListener('pointerdown',e=>{
- if(game.active)return;
+ if(game.active){
+  if(game.orbitPointer===null){
+   game.orbitPointer=e.pointerId;
+   game.orbitX=e.clientX;game.orbitY=e.clientY;
+   try{stage.setPointerCapture(e.pointerId);}catch(_){}
+  }
+  return;
+ }
  pressedPointers.add(e.pointerId);drag=true;moved=false;
  prevX=e.clientX;prevY=e.clientY;
  lastEcoWalkX=NaN;lastEcoWalkZ=NaN;
@@ -3409,7 +3443,15 @@ stage.addEventListener('pointerdown',e=>{
  try{stage.setPointerCapture(e.pointerId);}catch(_){}
 });
 stage.addEventListener('pointermove',e=>{
- if(game.active||!drag)return;
+ if(game.active){
+  if(e.pointerId!==game.orbitPointer)return;
+  const dx=e.clientX-game.orbitX,dy=e.clientY-game.orbitY;
+  game.camHeading-=dx*.006;
+  game.camPitch=clamp(game.camPitch+dy*.0045,-.06,1.10);
+  game.orbitX=e.clientX;game.orbitY=e.clientY;
+  return;
+ }
+ if(!drag)return;
  if(pressedPointers.size>1){moved=true;return;} // multitoque: panorâmica e zoom
  if(paintWalkingStep(e)){moved=true;prevX=e.clientX;prevY=e.clientY;return;}
  const a=e.clientX-prevX,b=e.clientY-prevY;
@@ -3418,14 +3460,21 @@ stage.addEventListener('pointermove',e=>{
  prevX=e.clientX;prevY=e.clientY;
 });
 stage.addEventListener('pointerup',e=>{
- if(game.active)return;
+ if(game.active){
+  if(e.pointerId===game.orbitPointer)game.orbitPointer=null;
+  return;
+ }
  pressedPointers.delete(e.pointerId);
  if(drag&&!moved)tapAdd(e);
  drag=false;
 });
-stage.addEventListener('pointercancel',e=>{pressedPointers.delete(e.pointerId);drag=false;});
+stage.addEventListener('pointercancel',e=>{if(e.pointerId===game.orbitPointer)game.orbitPointer=null;pressedPointers.delete(e.pointerId);drag=false;});
 stage.addEventListener('wheel',e=>{
- if(game.active)return;
+ if(game.active){
+  e.preventDefault();
+  game.camDistance=clamp(game.camDistance+Math.sign(e.deltaY)*.40,2.7,9);
+  return;
+ }
  e.preventDefault();
  // Roda: zoom. Shift+roda: desloca pelo mapa grande.
  if(e.shiftKey)target.z=clamp(target.z+Math.sign(e.deltaY)*radius*.07,-L*.42,L*.42);
