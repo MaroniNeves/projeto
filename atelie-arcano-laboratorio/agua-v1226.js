@@ -2982,7 +2982,7 @@ function flowStep(dt,multiplier){
 }
 // V12.53: máscaras estáticas e cor do campo calculadas uma única vez.
 // Todos os valores de luz e pigmentação são os mesmos da V12.52.
-const staticRoadBlend=new Float32Array(size),staticGrassRGB=new Float32Array(size*3);
+const staticRoadBlend=new Float64Array(size),staticGrassRGB=new Float64Array(size*3);
 for(let k=0;k<size;k++){
  const x=nx(k%NX),z=nz(Math.floor(k/NX));
  const roadZ=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
@@ -2993,7 +2993,7 @@ for(let k=0;k<size;k++){
  staticGrassRGB[k*3+1]=.76-meadow*.16;
  staticGrassRGB[k*3+2]=.19+meadow*.065;
 }
-const terrainShoreDamp=new Float32Array(size),terrainDirtyRows=new Uint8Array(NZ);
+const terrainShoreDamp=new Float64Array(size),terrainDirtyRows=new Uint8Array(NZ);
 const terrainPrevDepth=new Float32Array(size),terrainPrevMoisture=new Float32Array(size);
 const terrainPrevCapacity=new Float32Array(size),terrainPrevPlant=new Float32Array(size);
 const terrainPrevCover=new Float32Array(size),terrainPrevRoad=new Float32Array(size);
@@ -3096,7 +3096,9 @@ function rebuild(){
    for(let c=0;c<3;c++){
     const ix=o+c;
     const base=dry[ix]*(1-damp)+mudRGB[c]*damp;
-    const soilLayer=base*(1-dark)+terrainWetBrown[c]*dark;
+    // O código original grava esta camada num Float32Array ANTES da mistura verde.
+    // Preservar esse arredondamento mantém exatamente os mesmos pixels.
+    const soilLayer=Math.fround(base*(1-dark)+terrainWetBrown[c]*dark);
     const green=soilLayer*(1-greenAmount)+staticGrassRGB[ix]*greenAmount;
     const soilTone=terrainDryPath[c]*(1-mud)+terrainMudPath[c]*mud;
     colors[ix]=green*(1-dirtAmount)+soilTone*dirtAmount;
