@@ -122,12 +122,13 @@ body.ui-hidden #showControls{display:block}
     </label>
     <details id="modelTesting" style="margin:9px 0;padding:8px;border:1px solid #56757b;border-radius:9px;background:#142b32">
       <summary style="cursor:pointer;font-weight:600">🧪 Bancada de teste — árvores, arbustos, flores e gramíneas</summary>
-      <p style="font:11px/1.45 system-ui;color:#bdd6d7;margin:8px 0">Selecione qualquer espécie dos pacotes e coloque uma cópia temporária na cena. A câmera será direcionada para a amostra; o marcador mostra a base do tronco em relação ao solo. Nenhum modelo será alterado ou salvo permanentemente.</p>
+      <p style="font:11px/1.45 system-ui;color:#bdd6d7;margin:8px 0">Selecione qualquer espécie dos pacotes e coloque uma cópia temporária na cena, em posição padrão ou por toque no terreno. A câmera será direcionada à amostra; o círculo verde/laranja indica o contato do tronco com o solo. Nenhum modelo será alterado ou salvo permanentemente.</p>
       <label for="assetTestSelect">Espécie / modelo
         <select id="assetTestSelect" style="width:100%;padding:8px;background:#203c45;color:#eff9f6;border-radius:6px"></select>
       </label>
       <div class="row" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">
         <button type="button" id="assetTestPlace">🌱 Colocar no terreno</button>
+        <button type="button" id="assetTestChoosePosition">📍 Escolher lugar por toque</button>
         <button type="button" id="assetTestNext">Próximo modelo →</button>
         <button type="button" id="assetTestRemove">Remover teste</button>
       </div>
