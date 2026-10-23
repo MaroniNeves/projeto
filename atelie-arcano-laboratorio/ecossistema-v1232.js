@@ -1186,19 +1186,82 @@ function moveAnimals(t){
  }
  for(const m of foliage.children)if(m.isInstancedMesh)m.instanceMatrix.needsUpdate=true;
 }
+// A estrada NÃO é um objeto gerado: é o resultado histórico de pisoteio,
+// compactação, perda de clorofila e redução dos tufos de grama.
+const largeAnimals=[];
+function stampTraffic(x,z,weight=.25,animal=false){
+ const ix=Math.round((x+W*.5)/dx),iz=Math.round((z+L*.5)/dz);
+ const cellRadius=animal?3:2;
+ for(let oz=-cellRadius;oz<=cellRadius;oz++)for(let ox=-cellRadius;ox<=cellRadius;ox++){
+  const cx=ix+ox,cz=iz+oz;
+  if(cx<0||cz<0||cx>=NX||cz>=NZ)continue;
+  const k=cz*NX+cx,dist=Math.hypot(ox,oz)/cellRadius;
+  if(dist>1||riverMask[k]>.88)continue;
+  const f=Math.pow(1-dist,1.35);
+  const press=weight*(animal?.51:.66)*f;
+  traffic[k]=clamp(traffic[k]+press,0,1);
+  if(animal)animalTrail[k]=clamp(animalTrail[k]+press*.96,0,1);
+  compaction[k]=clamp(compaction[k]+press*.33,0,1);
+  api.soilPlant[k]=clamp(api.soilPlant[k]-press*(animal?.12:.18),.025,1.25);
+  api.permeability[k]=Math.max(.000005,api.permeability[k]*(1-press*.015));
+  const t=clamp((Math.max(traffic[k],animalTrail[k])-.18)/.65,0,1);
+  roadMask[k]=t*t*(3-2*t);
+  // Muito trânsito remove vegetação de imediato, mas ela pode rebrotar
+  // posteriormente com a água e os nutrientes que voltam ao solo.
+  cover[k]=clamp(cover[k]-press*.48,0,1);
+ }
+}
 function trample(x,z,weight=.22){
  if(!trampleEnabled)return;
  markFootprint(x,z);
  checkAntTrampling(x,z,weight);
- const centerX=clamp(Math.round((x+W*.5)/dx),0,NX-1),centerZ=clamp(Math.round((z+L*.5)/dz),0,NZ-1);
- for(let j=-2;j<=2;j++)for(let i=-2;i<=2;i++){
-  const ix=centerX+i,iz=centerZ+j;if(ix<0||iz<0||ix>=NX||iz>=NZ)continue;
-  const k=iz*NX+ix,f=Math.max(0,1-Math.hypot(i,j)/2.7);
-  traffic[k]=clamp(traffic[k]+weight*f,0,1);
-  api.soilPlant[k]=clamp(api.soilPlant[k]-.15*weight*f,.02,1.25);
-  api.permeability[k]=Math.max(.00001,api.permeability[k]*(1-weight*f*.06));
- }
+ stampTraffic(x,z,weight,false);
  updateGrassMeshes();
+}
+function registerAnimalFootfall(x,z,mass=1){
+ // API para grandes animais que forem integrados no laboratório:
+ // andar pela mata compacta terra; seguir uma trilha facilita o percurso.
+ stampTraffic(x,z,clamp(mass*.22,.12,.68),true);
+}
+function movementCost(x,z){
+ if(Math.abs(x)>W*.48||Math.abs(z)>L*.48)return 30;
+ const k=idx(x,z),rock=rockPositions.some(p=>Math.hypot(p.x-x,p.z-z)<1.6);
+ const slope=Math.abs(height(x+.35,z)-height(x-.35,z))+
+             Math.abs(height(x,z+.35)-height(x,z-.35));
+ return .85+cover[k]*.30+compaction[k]*.06+
+  clamp(slope,0,3)*2+api.depth[k]*14+(rock?10:0)
+  -clamp(Math.max(roadMask[k],animalTrail[k]),0,1)*.55;
+}
+function initializeLargeAnimalRoutes(){
+ // Enquanto não há modelos 3D dos animais grandes, o trânsito é simulado
+ // sem introduzir criaturas artificiais visíveis ao usuário.
+ for(let i=0;i<6;i++){
+  const x=(i-2.5)*W*.11,z=i%2?L*.12:-L*.12;
+  largeAnimals.push({x,z,angle:random()*Math.PI*2,
+   speed:.35+random()*.31,phase:random()*6.28,steps:0});
+ }
+}
+function animateAnimalTrails(dt){
+ if(!largeAnimals.length)return;
+ for(const a of largeAnimals){
+  a.steps++;
+  const options=[-1.1,-.75,-.4,0,.4,.75,1.1];
+  let best=null,cost=Infinity;
+  for(const offset of options){
+   const angle=a.angle+offset;
+   const tx=a.x+Math.cos(angle)*1.1,tz=a.z+Math.sin(angle)*1.1;
+   const score=movementCost(tx,tz)+Math.abs(offset)*.08+random()*.13;
+   if(score<cost){cost=score;best=angle;}
+  }
+  if(best===null)continue;
+  a.angle=best;
+  const nx=clamp(a.x+Math.cos(a.angle)*a.speed*dt,-W*.46,W*.46);
+  const nz=clamp(a.z+Math.sin(a.angle)*a.speed*dt,-L*.46,L*.46);
+  if(Math.hypot(nx-a.x,nz-a.z)>.0001){
+   a.x=nx;a.z=nz;
+   stampTraffic(a.x,a.z,.095,true);
+  }
+ }
 }
 let ecologicalAccumulator=0,time=0,grassAccumulator=0,uiAccumulator=0;
 function update(dt){
@@ -1209,6 +1272,7 @@ function update(dt){
  // Recarrega o rio somente pela fonte a montante, sem água infinita em toda a cena.
  if(grassAccumulator>.7){
   grassAccumulator=0;
+  animateAnimalTrails(.7);
   if(api.getGraphicsQuality()!==lastGrassQuality)applyGrassQuality();
   updateFootprints();
   // Alimentação distribuída ao longo da entrada do canal.
@@ -1220,12 +1284,32 @@ function update(dt){
    if(water>0&&riverMask[k]>.36&&api.depth[k]<.06)
     api.depth[k]=Math.min(.06,api.depth[k]+water);
   }
+  // Ao deixar de passar, a trilha perde compactação, o solo recupera água
+  // e a grama invade gradualmente a faixa de terra batida.
   for(let cell=0;cell<cells;cell++){
-   const sat=api.soilMoisture[cell]/Math.max(.001,api.soilCapacity[cell]);
-   const good=clamp(api.soilPlant[cell]*.57+api.soilHealth[cell]*.25+sat*.18,0,1);
-   if(roadMask[cell]>.48)traffic[cell]=Math.max(traffic[cell],.55);
-   else traffic[cell]=clamp(traffic[cell]-.0004*biologicalSpeed,0,1);
-   cover[cell]=clamp(cover[cell]*.999+good*.001-roadMask[cell]*.0005,0,1);
+   const moist=api.soilMoisture[cell]/Math.max(.001,api.soilCapacity[cell]);
+   const water=clamp(1-Math.abs(moist-.67)/.69,0,1);
+   const light=lightField[cell];
+   const organics=clamp(api.soilOrganic[cell]/.72,0,1);
+   const nutrients=clamp(api.soilN[cell]*.48+api.soilP[cell]*.24+
+     organics*.28,0,1);
+   const salinity=clamp(1-api.soilSalinity[cell]*1.3,0,1);
+   const oxygen=clamp((1.2-moist)/.55,0,1);
+   const submerged=api.depth[cell]>.04?.15:1;
+   const suitability=water*light*nutrients*salinity*oxygen*submerged;
+   // Multiplicador de tempo ecológico usado tanto no ressecamento quanto no crescimento.
+   const dtBio=.7*clamp(biologicalSpeed/4,.5,30);
+   traffic[cell]=Math.max(0,traffic[cell]-.00012*dtBio);
+   animalTrail[cell]=Math.max(0,animalTrail[cell]-.00010*dtBio);
+   compaction[cell]=Math.max(0,compaction[cell]-.000045*dtBio);
+   const wear=Math.max(traffic[cell],animalTrail[cell]);
+   const normalized=clamp((wear-.18)/.65,0,1);
+   roadMask[cell]=normalized*normalized*(3-2*normalized);
+   const desired=clamp(.22+.87*suitability-roadMask[cell]*1.1,0,1);
+   const growthRate=desired>cover[cell]?.0035*suitability:.028*roadMask[cell]+.001;
+   cover[cell]=clamp(cover[cell]+(desired-cover[cell])*growthRate*dtBio,0,1);
+   if(wear<.25&&suitability>.22)
+    api.soilPlant[cell]=clamp(api.soilPlant[cell]+.0008*suitability*dtBio,.025,1.25);
   }
   updateGrassMeshes();
  }
@@ -1363,7 +1447,7 @@ function updateColonyInspector(){
  ' · feromônios '+c.pheromones.reduce((a,v)=>a+v,0).toFixed(1);
 }
 async function setup(){
- await loadMeshes();initializeLandscape();grassShape();rockShape();setupLeafVisuals();setupFruits();initialColonies();visualizeAnimals();
+ await loadMeshes();initializeLandscape();grassShape();rockShape();setupLeafVisuals();setupFruits();initialColonies();visualizeAnimals();initializeLargeAnimalRoutes();
  drawNestCutaway();hideDetachedAntModels();
  const board=$('ecoStatus');if(board)board.textContent='Pacotes enviados integrados: '+Object.keys(meshLibrary).length+' malhas · '+colonies.length+' colônias.';
  const s=$('ecoSpeed');if(s){s.oninput=e=>{biologicalSpeed=clamp(+e.target.value,1,200);$('ecoSpeedVal').textContent=biologicalSpeed+'×';};}
@@ -1421,7 +1505,8 @@ async function setup(){
  };
  const original=api.grass;if(original)original.visible=false;
  for(const obj of targetNativeGrass)obj.obj.visible=false;
- window.arcanoEcoV1232={active:true,cover,traffic,roadMask,riverMask,colonies,worms,
+ window.arcanoEcoV1232={active:true,cover,traffic,roadMask,animalTrail,riverMask,colonies,worms,
+  registerAnimalFootfall,movementCost,largeAnimals,
   trample,addCarcass,update,status,api,ready:()=>ready,setMagnification:n=>previewMagnification=n,
   getColony:id=>colonies.find(c=>c.id===id),getWorms:()=>worms,inspectColony:updateColonyInspector,
   events:ecoEvents,getDays:()=>ecologicalDays};
