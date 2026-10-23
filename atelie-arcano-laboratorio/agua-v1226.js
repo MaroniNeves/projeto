@@ -1694,6 +1694,11 @@ function placeForestModel(item,root){
    pack:item.pack||'mega',type:item.type,phase:randomForest()*Math.PI*2,
    qualityRank:randomForest(),modelName:item.name,crownWidth:projected};
   snapForestToGround(anchor);
+  if(item.type==='tree'||item.type==='pine'||item.type==='bush'){
+   obj.updateMatrixWorld(true);
+   const crown=new T.Box3().setFromObject(obj);
+   anchor.dropY=crown.max.y;
+  }
   obj.traverse(o=>{
    if(!o.isMesh)return;
    o.castShadow=!mobile&&(item.type==='tree'||item.type==='pine')&&created<4;
@@ -1850,6 +1855,7 @@ async function loadPainterlyForest(){
     }
     await arcanoRepairForestMaterials(item,model);
     forestModels[item.name]=model;
+    if(item.type!=='rock')registerWetForestMaterials(model);
     registerForestMaterial(item,model);
     placeForestModel(item,model);
     ok++;floraLoaded=ok;
@@ -2163,6 +2169,60 @@ function updateRipples(dt){
  }
 }
 const dropObj=new T.Object3D(),splashObj=new T.Object3D();
+// Água retida nos galhos é uma reserva finita; sem chuva, pingos isolados
+// voltam ao solo até que a interceptação das folhas tenha secado.
+let leafDripAccumulator=0,wetBarkLeaves=0,wetMaterialTick=0,leafDripTotal=0;
+const wetForestMaterials=new Set();
+function registerWetForestMaterials(root){
+ root.traverse(obj=>{
+  if(!obj.isMesh)return;
+  const materials=Array.isArray(obj.material)?obj.material:[obj.material];
+  for(const mat of materials){
+   if(!mat?.color)continue;
+   if(!mat.userData.arcanoDryColor)mat.userData.arcanoDryColor=mat.color.clone();
+   wetForestMaterials.add(mat);
+  }
+ });
+}
+function updateWetForest(dt){
+ const selectedRain=level>0?Math.min(.75,rainMeters[level]*120):0;
+ wetBarkLeaves=clamp(wetBarkLeaves+
+  (selectedRain>0?dt*(.02+selectedRain*.11):-dt*.009),0,1);
+ wetMaterialTick+=dt;
+ if(wetMaterialTick<.45)return;
+ wetMaterialTick=0;
+ for(const mat of wetForestMaterials){
+  mat.color.copy(mat.userData.arcanoDryColor).multiplyScalar(1-wetBarkLeaves*.19);
+  mat.roughness=1-wetBarkLeaves*.17;
+  mat.metalness=0;
+ }
+}
+function spawnLeafDrips(dt){
+ if(level!==0||wetBarkLeaves<.08)return;
+ leafDripAccumulator+=dt*clamp(wetBarkLeaves*3.0,.12,3.0);
+ const active=forestInstances.filter(a=>
+  (a.type==='tree'||a.type==='pine'||a.type==='bush')&&a.obj.visible);
+ if(!active.length)return;
+ while(leafDripAccumulator>=1&&drops.length<MAX_DROPS){
+  leafDripAccumulator-=1;
+  let spawned=false;
+  for(let tries=0;tries<9&&!spawned;tries++){
+   const a=active[Math.floor(random()*active.length)];
+   const i=clamp(Math.round((a.x+W*.5)/dx),0,NX-1);
+   const j=clamp(Math.round((a.z+L*.5)/dz),0,NZ-1),k=idx(i,j);
+   const amount=Math.min(canopy[k],.00014+.00015*random());
+   if(amount<.000025)continue;
+   canopy[k]-=amount;
+   const pos=a.obj.position;
+   const top=a.dropY||pos.y+Math.min(5,a.type==='bush'?1.1:4.0);
+   drops.push({x:a.x+(random()-.5)*.43,z:a.z+(random()-.5)*.43,
+    y:Math.max(terrainContact(a.x,a.z)+.45,top-.20-random()*.5),
+    speed:2.1+random()*1.5,stretch:.19,fromLeaf:true,volume:amount});
+   leafDripTotal++;spawned=true;
+  }
+  if(!spawned){leafDripAccumulator=0;break;}
+ }
+}
 let mode='rain',process='combined',level=3,lastRainLevel=3,timeScale=4,paused=false,showWet=true,showFoam=true,enableInfiltration=true;
 let rainStyle='enhanced',time=0,visualTime=0,acc=0,spawnAcc=0,lastUI=0,wetted=0,frame=0;
 // Escala V12.21: fonte única para deposição, visual, vento e movimento superficial.
@@ -2208,6 +2268,7 @@ function seed(m){
  drops.length=0;splashes.length=0;dropG.setDrawRange(0,0);streak.count=splashMesh.count=0;
  stats.rain=stats.infiltrated=stats.evaporated=stats.transpired=stats.outflow=0;
  time=0;visualTime=0;acc=0;spawnAcc=0;lastUI=0;
+ leafDripAccumulator=0;leafDripTotal=0;wetBarkLeaves=0;
  // Reiniciar no seco, sem poças pré-fabricadas: observar as poças se formando.
  configureSoilCells(false);
  for(let k=0;k<size;k++){soilMoisture[k]=soilCapacity[k]*.22;soilHealth[k]=minNutrientAt(k);}
@@ -2442,6 +2503,7 @@ function dropStep(dt){
  // A densidade visual segue o MESMO nível aplicado à física.
  // O clima só modula o número de gotas e a distribuição entre as regiões.
  const severe=stormActive(),profile=RAIN_SCALE[level];
+ updateWetForest(dt);spawnLeafDrips(dt);
  const availability=level===0?0:!physicalWeather?1:
    Math.max(MIN_RAIN_VISUAL[level],
     clamp(Math.pow(appliedRainMean/Math.max(.0000001,profile.rate),.48),0,1));
@@ -2480,14 +2542,20 @@ function dropStep(dt){
   }
   const gh=impactHeightAt(d.x,d.z);
   if(d.y<=gh){
-   if(displayedImpacts<([0,1,2,4,7,13][level])){spawnSplash(d.x,d.z,gh);displayedImpacts++;}
+   if(d.fromLeaf){
+    // A gota saiu da copa, não foi contabilizada como chuva nova.
+    add(d.x,d.z,d.volume);
+    if(displayedImpacts<3){spawnSplash(d.x,d.z,gh);displayedImpacts++;}
+   }else if(displayedImpacts<([0,1,2,4,7,13][level])){
+    spawnSplash(d.x,d.z,gh);displayedImpacts++;
+   }
    drops[i]=drops[drops.length-1];drops.pop();
   }
  }
  const enhanced=rainStyle==='enhanced';
- streak.material.opacity=(enhanced?1:.75)*[0,.31,.43,.56,.67,.73][level];
+ streak.material.opacity=Math.max((enhanced?1:.75)*[0,.31,.43,.56,.67,.73][level],drops.some(d=>d.fromLeaf)?.42:0);
  halo.material.size=(mobile?8.0:7.3)*Math.max(.56,profile.thick);
- halo.material.opacity=[0,.19,.25,.32,.35,.39][level];
+ halo.material.opacity=Math.max([0,.19,.25,.32,.35,.39][level],drops.some(d=>d.fromLeaf)?.18:0);
  for(let i=0;i<drops.length;i++){
   const d=drops[i],o=i*3;dropPos[o]=d.x;dropPos[o+1]=d.y-.1;dropPos[o+2]=d.z;
   dropObj.position.set(d.x,d.y,d.z);const windSlant=physicalWeather?clamp(atmWindMean*(severe?.15:.055),0,severe?.42:.20):.07;
