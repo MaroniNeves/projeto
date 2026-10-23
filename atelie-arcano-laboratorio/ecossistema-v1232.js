@@ -841,6 +841,27 @@ function lifeDay(days){
  if(hatchedToday>0&&Math.floor(ecologicalDays)%10===0)
   recordEcoEvent(hatchedToday+' minhocas eclodiram dos casulos.');
 }
+const normalizedAntGeometries=new Map();
+function antGeometry(name){
+ const source=meshLibrary[name]||meshLibrary.ant1;
+ if(!source)return null;
+ if(normalizedAntGeometries.has(source))return normalizedAntGeometries.get(source);
+ const geom=source.clone();geom.computeBoundingBox();
+ let bounds=geom.boundingBox,size=new T.Vector3();bounds.getSize(size);
+ // Evitar eixo vertical incorreto em alguns modelos antigos Z-up.
+ if(size.y>Math.max(size.x,size.z)*1.6){
+  geom.rotateX(Math.PI*.5);geom.computeBoundingBox();
+  bounds=geom.boundingBox;bounds.getSize(size);
+ }
+ const largest=Math.max(size.x,size.y,size.z,.000001);
+ geom.scale(1/largest,1/largest,1/largest);
+ geom.computeBoundingBox();bounds=geom.boundingBox;
+ const center=new T.Vector3();bounds.getCenter(center);
+ geom.translate(-center.x,-bounds.min.y,-center.z);
+ geom.computeBoundingSphere();
+ normalizedAntGeometries.set(source,geom);
+ return geom;
+}
 function visualizeAnimals(){
  for(const child of [...animals.children]){
   animals.remove(child);
@@ -850,7 +871,7 @@ function visualizeAnimals(){
  antDraws.length=0;wormDraws.length=0;
  const variants=['ant1','ant2','ant3','antRed','ant4','ant5'];
  for(const c of colonies){
-  const geo=meshLibrary[variants[c.id%6]]||meshLibrary.ant1;if(!geo)continue;
+  const geo=antGeometry(variants[c.id%6]);if(!geo)continue;
   const max=mobileDevice?10:18;
   const mesh=new T.InstancedMesh(geo,new T.MeshStandardMaterial({
    color:c.id%2?'#a3533b':'#49332b',roughness:1,metalness:0,side:T.DoubleSide}),max);
@@ -865,7 +886,8 @@ function visualizeAnimals(){
   cargo.frustumCulled=false;animals.add(cargo);
   const agents=Array.from({length:max},(_,i)=>({
    dead:false,deadUntil:0,retreatAt:-1,
-   originX:c.x,originZ:c.z,retreatDuration:1,x:c.x,z:c.z,phase:random()*2
+   originX:c.x,originZ:c.z,retreatDuration:1,x:c.x,z:c.z,phase:random()*2,
+   targetX:c.x,targetZ:c.z,goalAt:0,lastTick:0,walkPhase:random()*6.283
   }));
   antDraws.push({m,c,max,agents,cargo});
  }
@@ -913,63 +935,86 @@ function checkAntTrampling(x,z,weight){
 }
 let wormVisualFrame=0;
 function moveAnimals(t){
- const o=new T.Object3D(),magnify=previewMagnification;
+ const body=new T.Object3D(),carrier=new T.Object3D();
+ const magnify=clamp(previewMagnification,1,4);
  const rainLevel=api.getRainLevel?.()||0,heavy=rainLevel>0,storm=rainLevel>=4;
- for(const {m,c,max,agents,cargo} of antDraws){
-  cargo.count=0;
-  m.count=Math.min(max,Math.max(0,Math.ceil(c.workers*.2)));
-  const target=position(c.lastFoodSite??idx(c.x,c.z));
+ for(const item of antDraws){
+  const {m,c,max,agents,cargo}=item;
+  cargo.count=0;m.count=Math.min(max,Math.max(0,Math.ceil(c.workers*.2)));
+  const foragingSite=position(c.lastFoodSite??idx(c.x,c.z));
   for(let i=0;i<m.count;i++){
    const agent=agents[i];
+   const dt=clamp(t-(agent.lastTick||t-.016),.001,.12);
+   agent.lastTick=t;
    if(agent.dead){
     const remaining=agent.deadUntil-t;
     if(remaining>0){
-     o.position.set(agent.x,height(agent.x,agent.z)+.003,agent.z);
-     o.rotation.set(.65,0,1.18);
-     o.scale.set(.013*magnify,.001*magnify,.012*magnify*
-      clamp(remaining/3.4,.04,1));
-    }else{o.position.set(agent.x,-100,agent.z);o.scale.setScalar(.0000001);}
-    o.updateMatrix();m.setMatrixAt(i,o.matrix);continue;
+     body.position.set(agent.x,height(agent.x,agent.z)+.004,agent.z);
+     body.rotation.set(.45,0,1.35);
+     body.scale.set(.057*magnify,.005*magnify,.046*magnify*
+      clamp(remaining/3.4,.02,1));
+    }else{
+     body.position.set(agent.x,-100,agent.z);body.scale.setScalar(.000001);
+    }
+    body.updateMatrix();m.setMatrixAt(i,body.matrix);continue;
    }
-   const cycle=(t*(.10+.014*(i%4))+i*.17+c.id*.13+agent.phase)%2;
-   const outward=cycle<1,along=outward?cycle:2-cycle;
-   const swing=.03*Math.sin(t*2.2+i*2.7);
-   let x=c.x+(target.x-c.x)*along+Math.sin(i*1.7)*swing;
-   let z=c.z+(target.z-c.z)*along+Math.cos(i*1.7)*swing;
+   if(!heavy&&agent.retreatAt>=0){
+    agent.retreatAt=-1;agent.goalAt=0;
+   }
+   let x=agent.x,z=agent.z;
+   let direction=0;
    if(heavy){
     if(agent.retreatAt<0){
-     agent.retreatAt=t;agent.originX=agent.x;agent.originZ=agent.z;
-     const dist=Math.hypot(agent.x-c.x,agent.z-c.z);
-     agent.retreatDuration=1.5+dist*(storm?4.2:5.8);
+     agent.retreatAt=t;agent.originX=x;agent.originZ=z;
+     const distance=Math.hypot(x-c.x,z-c.z);
+     agent.retreatDuration=1.5+distance*(storm?4.2:5.8);
     }
-    const pct=clamp((t-agent.retreatAt)/agent.retreatDuration,0,1);
-    x=agent.originX+(c.x-agent.originX)*pct;
-    z=agent.originZ+(c.z-agent.originZ)*pct;
-    if(pct>=1){
-     // As formigas refugiadas permanecem abaixo do solo.
-     o.position.set(c.x,-100,c.z);o.scale.setScalar(.0000001);
-     o.updateMatrix();m.setMatrixAt(i,o.matrix);
+    const percent=clamp((t-agent.retreatAt)/agent.retreatDuration,0,1);
+    const remainX=c.x-x,remainZ=c.z-z;
+    direction=Math.atan2(remainX,remainZ);
+    x=agent.originX+(c.x-agent.originX)*percent;
+    z=agent.originZ+(c.z-agent.originZ)*percent;
+    if(percent>=1){
+     body.position.set(c.x,-100,c.z);body.scale.setScalar(.000001);
+     body.updateMatrix();m.setMatrixAt(i,body.matrix);
      agent.x=c.x;agent.z=c.z;continue;
     }
     if(api.depth[idx(x,z)]>.052||
-       (storm&&(t-agent.retreatAt>13||pct>.70&&random()<.0015))){
-     killSurfaceAnt({m,c},agent,x,z,'chuva');
-     o.position.set(x,-100,z);o.scale.setScalar(.0000001);
-     o.updateMatrix();m.setMatrixAt(i,o.matrix);continue;
+       (storm&&(t-agent.retreatAt>13||percent>.70&&random()<.0015))){
+     killSurfaceAnt(item,agent,x,z,'chuva');
+     body.position.set(x,-100,z);body.scale.setScalar(.000001);
+     body.updateMatrix();m.setMatrixAt(i,body.matrix);continue;
     }
-   }else if(agent.retreatAt>=0)agent.retreatAt=-1;
+   }else{
+    // Rota persistente, individual e contínua no mapa. Nunca teleportar
+    // para a entrada ou repetir a mesma reta oscilante.
+    if(agent.goalAt<=t||Math.hypot(agent.targetX-x,agent.targetZ-z)<.028){
+     const nest=i%4===0||random()<.42,baseX=nest?c.x:foragingSite.x;
+     const baseZ=nest?c.z:foragingSite.z,ang=random()*Math.PI*2;
+     const radius=.08+random()*(nest?.35:1.10);
+     agent.targetX=clamp(baseX+Math.cos(ang)*radius,-9.45,9.45);
+     agent.targetZ=clamp(baseZ+Math.sin(ang)*radius,-7.40,7.40);
+     agent.goalAt=t+4+random()*9;
+    }
+    const vx=agent.targetX-x,vz=agent.targetZ-z;
+    const distance=Math.max(.000001,Math.hypot(vx,vz));
+    direction=Math.atan2(vx,vz);
+    const step=Math.min(distance,dt*(.075+(i%5)*.022));
+    x+=vx/distance*step;z+=vz/distance*step;
+   }
    agent.x=x;agent.z=z;
-   o.position.set(x,height(x,z)+.008,z);
-   o.rotation.set(0,Math.atan2(target.x-c.x,target.z-c.z)+(outward?0:Math.PI),0);
-   o.scale.setScalar((api.depth[idx(x,z)]>.06?.006:.014)*magnify);
-   o.updateMatrix();m.setMatrixAt(i,o.matrix);
-   // Folhas de serrapilheira reais acompanham as operárias retornando.
-   if(!heavy&&!outward&&c.leafCargo>.004&&i%3===0){
-    const tiny=new T.Object3D();
-    tiny.position.set(x,height(x,z)+.02,z);
-    tiny.rotation.y=o.rotation.y;tiny.scale.setScalar(.20*magnify);
-    tiny.updateMatrix();
-    cargo.setMatrixAt(cargo.count++,tiny.matrix);
+   // Marcha: pequenas oscilações de corpo e passos, quase invisíveis fora da lupa.
+   const phase=t*(13+i%3*2)+agent.walkPhase;
+   body.position.set(x,height(x,z)+.003+Math.abs(Math.sin(phase))*.0018,z);
+   body.rotation.set(.025*Math.sin(phase),direction,.05*Math.cos(phase));
+   body.scale.setScalar((api.depth[idx(x,z)]>.06?.025:.056)*magnify);
+   body.updateMatrix();m.setMatrixAt(i,body.matrix);
+   const nearNest=Math.hypot(x-c.x,z-c.z)<.38;
+   if(!heavy&&nearNest&&c.leafCargo>.004&&i%3===0){
+    carrier.position.set(x,height(x,z)+.027,z);
+    carrier.rotation.set(0,direction,0);
+    carrier.scale.setScalar(.13*magnify);
+    carrier.updateMatrix();cargo.setMatrixAt(cargo.count++,carrier.matrix);
    }
   }
   m.instanceMatrix.needsUpdate=true;cargo.instanceMatrix.needsUpdate=true;
