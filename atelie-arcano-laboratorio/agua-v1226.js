@@ -2422,7 +2422,9 @@ function animateForest(dt){
  skyM.uniforms.uWind.value=clamp(strength,0,1.2);
  if(!forestGroup.visible)return;
  for(const a of forestInstances){
-  if(a.type==='rock')continue;
+  // Árvores fora do alcance ou de qualidade escolhida continuam presentes
+  // no mapa, mas não precisam atualizar os pivôs de vento a cada quadro.
+  if(a.type==='rock'||!a.obj.visible)continue;
   const wx=fieldAt(atmWindX,a.x,a.z),wz=fieldAt(atmWindZ,a.x,a.z);
   const localStrength=clamp(Math.hypot(wx,wz)/2.4,0,1.2);
   const wave=.72+.28*Math.sin(t*(.84+localStrength)+a.phase);
@@ -3660,7 +3662,8 @@ function updateInfo(force){
  :'Chuva manual: as depressões concentram poças • arraste para girar';
 }
 
-let last=performance.now();function loop(now){
+let last=performance.now();const gamePerf={elapsed:0,frames:0,lastFps:0};
+function loop(now){
  requestAnimationFrame(loop);const dt=Math.min((now-last)/1000,.065);last=now;
  updateGame(dt);
  if(!paused&&!document.hidden){
@@ -3688,6 +3691,17 @@ let last=performance.now();function loop(now){
   updateInfo(false);
  }
  setView();renderer.render(scene,camera);
+ gamePerf.elapsed+=dt;gamePerf.frames++;
+ if(gamePerf.elapsed>=1.25){
+  gamePerf.lastFps=Math.round(gamePerf.frames/gamePerf.elapsed);
+  const info=renderer.info.render;
+  if($('gameFPS'))$('gameFPS').textContent=
+   gamePerf.lastFps+' FPS · '+info.calls+' chamadas de desenho';
+  if($('viewFpsStats'))$('viewFpsStats').textContent=
+   'FPS '+gamePerf.lastFps+' · '+info.calls+' chamadas · '+
+   (info.triangles||0).toLocaleString('pt-BR')+' triângulos';
+  gamePerf.elapsed=0;gamePerf.frames=0;
+ }
 }
 
 window.addEventListener('resize',resize);
