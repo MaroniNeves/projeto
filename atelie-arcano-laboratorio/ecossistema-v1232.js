@@ -29,7 +29,19 @@ function height(x,z){
  const A=api.soil[j*NX+i],B=api.soil[j*NX+i+1],C=api.soil[(j+1)*NX+i],D=api.soil[(j+1)*NX+i+1];
  return A*(1-a)*(1-b)+B*a*(1-b)+C*(1-a)*b+D*a*b;
 }
-function qualityMax(){return innerWidth<680?660:1180;}
+const mobileDevice=innerWidth<680;
+const grassBudgets=mobileDevice?{high:7200,balanced:4100,low:760}:{high:14000,balanced:7600,low:1400};
+let grassDrawn=0,lastGrassQuality='';
+function applyGrassQuality(){
+ const quality=api.getGraphicsQuality()||'balanced';
+ const ratio=Math.min(1,(grassBudgets[quality]||grassBudgets.balanced)/grassBudgets.high);
+ grassDrawn=0;
+ for(const m of foliage.children)if(m.isInstancedMesh){
+  m.count=Math.min(m.userData.planted||0,Math.round((m.userData.planted||0)*ratio));
+  grassDrawn+=m.count;m.instanceMatrix.needsUpdate=true;
+ }
+ lastGrassQuality=quality;
+}
 async function loadMeshes(){
  const bytes=Uint8Array.from(atob(raw.compressed),c=>c.charCodeAt(0));
  if(!('DecompressionStream' in window))throw new Error('Navegador sem DecompressionStream');
@@ -92,9 +104,8 @@ function initializeLandscape(){
   roadMask[k]=clamp(1-distRoad/.83,0,1);riverMask[k]=clamp(1-distRiver/.68,0,1);
   // A estrada recebe a compactação histórica; rio rebaixa o leito local.
   if(riverMask[k]>.05){
-   const cut=Math.pow(riverMask[k],1.5)*.13;
-   api.soil[k]-=cut;
-   api.depth[k]=Math.max(api.depth[k],riverMask[k]*.055);
+   // Profundidade física só nasce na fonte; impedir poças azuis geradas em todas as células.
+   api.soil[k]-=Math.pow(riverMask[k],1.5)*.13;
   }
   if(roadMask[k]>.1){traffic[k]=.68+roadMask[k]*.23;
    api.permeability[k]*=(1-roadMask[k]*.44);}
@@ -107,54 +118,54 @@ function initializeLandscape(){
  positionAttribute.needsUpdate=true;geom.computeVertexNormals();
  makeRoad();
 }
-function terrainTint(){
- const colors=api.terrain.geometry.getAttribute('color');if(!colors)return;
- const base=window.arcanoEcoV1232BaseColor;
- if(!base){
-  const first=new Float32Array(colors.array);
-  window.arcanoEcoV1232BaseColor=first;
+// Um só renderizador aplica verde, barro e chuva a cada quadro.
+// Uma segunda escrita periódica causava a piscada observada no Android.
+function terrainTint(){/* delegated to main rebuild() */}
+function grassShape(){
+ const names=['grassShort1','grassMixed1','grassTall1','grassMixed2'];
+ const max=grassBudgets.high,meshes=new Map(),dummies=new Map();
+ for(const name of names){
+  const kind=name.startsWith('grassMixed')?'grassMixed':name==='grassTall1'?'grassTall':'grassShort';
+  const geo=meshLibrary[name];if(!geo)continue;
+  const m=new T.InstancedMesh(geo,material(kind),max);
+  m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;
+  m.userData.planted=0;m.count=0;m.name='Capim original em moitas · '+name;
+  meshes.set(name,m);dummies.set(name,new T.Object3D());foliage.add(m);
  }
- const original=window.arcanoEcoV1232BaseColor;
- for(let k=0;k<cells;k++){
-  let factor=clamp(cover[k]*(1-traffic[k])*.57,0,.52);
-  const greenRoad=clamp(roadMask[k]*.74,0,.74);
-  for(let c=0;c<3;c++){
-   const grassCol=[green.r,green.g,green.b][c],pathCol=[roadColor.r,roadColor.g,roadColor.b][c];
-   let val=original[k*3+c]*(1-factor)+grassCol*factor;
-   val=val*(1-greenRoad)+pathCol*greenRoad;
-   colors.array[k*3+c]=val;
+ if(!meshes.size)return;
+ const cols=mobileDevice?82:112,rows=mobileDevice?66:98,sites=[];
+ for(let j=0;j<rows;j++)for(let i=0;i<cols;i++)sites.push([i,j]);
+ for(let i=sites.length-1;i>0;i--){
+  const j=Math.floor(random()*(i+1)),tmp=sites[i];sites[i]=sites[j];sites[j]=tmp;
+ }
+ let planted=0;
+ for(const [i,j] of sites){
+  if(planted>=max)break;
+  const x0=-9.35+(i+.5)/cols*18.7,z0=-7.35+(j+.5)/rows*14.7;
+  const k0=idx(x0,z0),density=clamp(cover[k0]*(1-traffic[k0]),0,1);
+  if(density<.11||api.depth[k0]>.035)continue;
+  const count=density>.70?3:density>.42?2:1;
+  for(let n=0;n<count&&planted<max;n++){
+   const x=x0+(random()-.5)*.27,z=z0+(random()-.5)*.25,k=idx(x,z);
+   const life=clamp(cover[k]*(1-traffic[k]),0,1);
+   if(life<.12||random()>life*.97||api.depth[k]>.025)continue;
+   const roll=random();
+   const name=riverMask[k]>.21&&roll<.22?'grassTall1':roll<.40?'grassShort1':
+    roll<.76?'grassMixed1':'grassMixed2';
+   const mesh=meshes.get(name),o=dummies.get(name);
+   if(!mesh)continue;
+   const base=name==='grassTall1'?.37:name==='grassShort1'?.31:.32;
+   const scale=base*(.75+random()*.53);
+   o.position.set(x,height(x,z)-.014,z);o.rotation.set(0,random()*Math.PI*2,0);
+   o.scale.set(scale*(.76+random()*.35),scale*(.84+random()*.40),
+    scale*(.80+random()*.38));o.updateMatrix();
+   const index=mesh.userData.planted++;
+   mesh.setMatrixAt(index,o.matrix);
+   grassPatches.push({x,z,k,mesh,index,matrix:o.matrix.clone()});planted++;
   }
  }
- colors.needsUpdate=true;
-}
-function grassShape(){
- const grassList=['grassShort1','grassMixed1','grassTall1','grassMixed2'];
- let patches=innerWidth<680?650:1150,attempts=patches*10;
- const instances=new Map(),dummies=new Map();
- for(let j=0;j<grassList.length;j++){
-  const name=grassList[j],kind=(name==='grassMixed1'||name==='grassMixed2')?'grassMixed':(name==='grassTall1'?'grassTall':'grassShort');
-  const geometry=meshLibrary[name];if(!geometry)continue;
-  const m=new T.InstancedMesh(geometry,material(kind),patches);
-  m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;m.count=0;
-  m.name='Moitas originais: '+name;instances.set(name,m);dummies.set(name,new T.Object3D());foliage.add(m);
- }
- let placed=0;
- while(attempts-->0 && placed<patches){
-  const x=(random()-.5)*18.9,z=(random()-.5)*14.9,k=idx(x,z);
-  if(random()>cover[k]*(1-traffic[k]))continue;
-  if(api.depth[k]>.02||api.soil[k]<-.7)continue;
-  const nearRiver=riverMask[k]>.23;
-  const desired=nearRiver&&random()>.32?'grassTall1':
-    random()>.72?'grassMixed1':random()>.58?'grassMixed2':'grassShort1';
-  const mesh=instances.get(desired);if(!mesh||mesh.count>=patches)continue;
-  const dummy=dummies.get(desired);const scale=(desired==='grassTall1'?.42:.25)*(.72+random()*.65);
-  dummy.position.set(x,height(x,z)-.015,z);
-  dummy.rotation.set(0,random()*Math.PI*2,0);
-  dummy.scale.set(scale*(.7+random()*.55),scale*(.85+random()*.5),scale*(.7+random()*.5));
-  dummy.updateMatrix();mesh.setMatrixAt(mesh.count++,dummy.matrix);
-  grassPatches.push({x,z,k,mesh,index:mesh.count-1,matrix:dummy.matrix.clone(),dummy:new T.Object3D()});placed++;
- }
- for(const m of instances.values())m.instanceMatrix.needsUpdate=true;
+ for(const mesh of meshes.values())mesh.instanceMatrix.needsUpdate=true;
+ applyGrassQuality();
 }
 function rockShape(){
  api.stones.visible=false;const names=['rock1','rock2','rock3','rock4','rock5'];
@@ -337,6 +348,7 @@ function moveAnimals(t){
 function updateGrassMeshes(){
  const o=new T.Object3D();
  for(const patch of grassPatches){
+  if(patch.index>=patch.mesh.count)continue;
   const k=patch.k,wear=traffic[k],c=cover[k],alive=clamp(c*(1-wear),0,1);
   const scale=alive>.045?(.25+.75*alive):.0001;
   o.matrix.copy(patch.matrix);
@@ -356,7 +368,7 @@ function trample(x,z,weight=.22){
   api.soilPlant[k]=clamp(api.soilPlant[k]-.15*weight*f,.02,1.25);
   api.permeability[k]=Math.max(.00001,api.permeability[k]*(1-weight*f*.06));
  }
- updateGrassMeshes();terrainTint();
+ updateGrassMeshes();
 }
 let ecologicalAccumulator=0,time=0,grassAccumulator=0,uiAccumulator=0;
 function update(dt){
@@ -366,6 +378,7 @@ function update(dt){
  // Recarrega o rio somente pela fonte a montante, sem água infinita em toda a cena.
  if(grassAccumulator>.7){
   grassAccumulator=0;
+  if(api.getGraphicsQuality()!==lastGrassQuality)applyGrassQuality();
   const zx=-7.1,xx=riverX(zx),k=idx(xx,zx);
   api.depth[k]=Math.max(api.depth[k],.09);
   for(let cell=0;cell<cells;cell++){
@@ -375,7 +388,7 @@ function update(dt){
    else traffic[cell]=clamp(traffic[cell]-.0004*biologicalSpeed,0,1);
    cover[cell]=clamp(cover[cell]*.999+good*.001-roadMask[cell]*.0005,0,1);
   }
-  updateGrassMeshes();terrainTint();
+  updateGrassMeshes();
  }
  while(ecologicalAccumulator>1){lifeDay(1);ecologicalAccumulator-=1;}
  moveAnimals(time);
@@ -386,7 +399,7 @@ function status(){
  const larva=colonies.reduce((a,b)=>a+b.brood.reduce((sum,c)=>sum+(c.stage==='larva'?c.count:0),0),0);
  const adults=worms.reduce((a,b)=>a+b.adults,0),cocoons=worms.reduce((a,b)=>a+b.cocoons.reduce((sum,c)=>sum+c.count,0),0);
  const el=$('ecoStatus');if(el)el.textContent=
-  colonies.length+' colônias · '+workers+' operárias · '+eggs+' ovos · '+larva+' larvas · '+adults+' minhocas adultas · '+cocoons+' casulos. '+
+  grassDrawn+' tufos de grama ('+lastGrassQuality+') · '+colonies.length+' colônias · '+workers+' operárias · '+eggs+' ovos · '+larva+' larvas · '+adults+' minhocas adultas · '+cocoons+' casulos. '+
   'É uma simulação ecológica simplificada; rainhas e crias ficam nos ninhos. Quase invisíveis fora da lupa.';
 }
 async function setup(){
