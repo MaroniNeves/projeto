@@ -1476,11 +1476,34 @@ async function setup(){
  const s=$('ecoSpeed');if(s){s.oninput=e=>{biologicalSpeed=clamp(+e.target.value,1,200);$('ecoSpeedVal').textContent=biologicalSpeed+'×';};}
  const mag=$('ecoMagnify');if(mag)mag.onchange=e=>{previewMagnification=e.target.checked?4:1;};
  const sim=$('ecoTraffic');if(sim)sim.onclick=()=>{
-  for(let i=0;i<36;i++){
-   const x=-W*.42+random()*W*.84;
-   trample(x,roadZ(x)+(random()-.5)*.8,.12);
+  // Cada passada humana deixa pressão onde o pé efetivamente tocou.
+  for(let pass=0;pass<4;pass++)for(let i=0;i<105;i++){
+   const x=-W*.23+i*W*.46/104;
+   trample(x,roadZ(x)+(random()-.5)*.16,.22);
   }
+  recordEcoEvent('Passadas humanas compactaram o solo e reduziram o capim.');
   status();
+ };
+ const animalButton=$('ecoAnimalTrailTest');
+ if(animalButton)animalButton.onclick=()=>{
+  // Trilhas novas fora do caminho original: caminho formado apenas por
+  // repetição de passos, nunca por um plano sobreposto.
+  for(let pass=0;pass<6;pass++)for(let i=0;i<130;i++){
+   const x=-W*.30+i*W*.60/129;
+   const z=9.5+Math.sin(x*.10)*2.1;
+   registerAnimalFootfall(x,z,.95);
+  }
+  recordEcoEvent('Trilha de animais grandes formada por trânsito repetido.');
+  updateGrassMeshes();status();
+ };
+ const regrowButton=$('ecoRegrowTest');
+ if(regrowButton)regrowButton.onclick=()=>{
+  const living=largeAnimals.splice(0);
+  // Sem tráfego por 90 dias: estrada vai sendo tomada pelo gramado.
+  lifeDay(90);
+  largeAnimals.push(...living);
+  recordEcoEvent('Área sem novas passadas por 90 dias: grama e solo se recuperam.');
+  updateGrassMeshes();status();
  };
  const colonySelect=$('ecoColonySelect');if(colonySelect)colonySelect.onchange=()=>{updateColonyInspector();drawNestCutaway();};
  const cut=$('ecoBurrows');if(cut)cut.onchange=()=>{drawNestCutaway();nestCutGroup.visible=cut.checked;};
