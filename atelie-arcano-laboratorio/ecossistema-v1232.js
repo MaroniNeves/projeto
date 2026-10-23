@@ -465,7 +465,13 @@ function newColony(x,z,workers=24,food=12,founder=false){
  scouts:0,foragers:0,nurses:0,builders:0,guards:0,dead:0,
  temperature:23,queenStress:0,pheromones:new Float32Array(cells),lastFoodSite:idx(x,z),
  tunnels:Math.max(.09,workers*.003),chambers:1,spoil:Math.max(.03,workers*.0006),
- foodStored:food*.35,founder, reproductiveCooldown:0,daysWithoutFood:0};
+ foodStored:food*.35,founder, reproductiveCooldown:0,daysWithoutFood:0,
+ leafCargo:0,queenDepth:.78,subterranean:[
+  {depth:.15,role:'entrada / vigias / forrageio',chambers:1,workers:0},
+  {depth:.42,role:'depósito / alimento / operárias',chambers:0,workers:0},
+  {depth:.78,role:'rainha / ovos / larvas',chambers:0,workers:0},
+  {depth:1.08,role:'refúgio profundo / pupas',chambers:0,workers:0}
+ ]};
  distributeTasks(c);return c;
 }
 function distributeTasks(c){
@@ -473,6 +479,12 @@ function distributeTasks(c){
  c.foragers=Math.floor(n*.44);c.nurses=Math.floor(n*.23);
  c.builders=Math.floor(n*.17);c.guards=Math.floor(n*.10);
  c.scouts=Math.max(0,n-c.foragers-c.nurses-c.builders-c.guards);
+ if(c.subterranean){
+  c.subterranean[0].workers=c.scouts+c.guards;
+  c.subterranean[1].workers=c.foragers+c.builders;
+  c.subterranean[2].workers=c.nurses;
+  c.subterranean[3].workers=0;
+ }
 }
 function nestSurface(c){
  const anchor=position(idx(c.x,c.z)),y=height(c.x,c.z);
@@ -518,6 +530,16 @@ function excavateNest(c,days,safe){
  c.tunnels=clamp(c.tunnels+available,0,8);
  const previousChambers=c.chambers;
  c.chambers=Math.min(12,1+Math.floor(c.tunnels/.32));
+ // Câmaras distribuídas em horizontes, rainha protegida abaixo da entrada.
+ const allocations=[1,Math.max(0,Math.floor(c.chambers*.30)),
+  Math.max(0,Math.floor(c.chambers*.35)),0];
+ allocations[3]=Math.max(0,c.chambers-allocations[0]-
+  allocations[1]-allocations[2]);
+ for(let layer=0;layer<4;layer++)
+  c.subterranean[layer].chambers=allocations[layer];
+ const groundwater=api.deepWater?.[k]||0;
+ const deepFlood=groundwater>.42;
+ c.queenDepth=deepFlood?.42:.78;
  if(c.chambers>previousChambers)
   recordEcoEvent('Colônia '+(c.id+1)+' construiu a câmara '+c.chambers+'.');
  c.spoil=clamp(c.spoil+available*.64,0,1);
@@ -593,6 +615,10 @@ function lifeDay(days){
   const moist=clamp(api.soilMoisture[k]/Math.max(.0001,api.soilCapacity[k]),0,1.8);
   const flooded=api.depth[k]>.075;
   c.temperature=temp;c.reproductiveCooldown=Math.max(0,c.reproductiveCooldown-days);
+  // Se a camada profunda estiver saturada, mover rainha e crias às
+  // câmaras intermediárias seguras; casulos e estoques permanecem em camadas.
+  const deepSaturation=api.deepWater?.[k]||0;
+  c.queenDepth=deepSaturation>.42?.42:.78;
   const safe=clamp((temp-10)/10,0,1)*clamp((39-temp)/10,0,1)*
    clamp((moist-.04)/.28,0,1)*clamp((1.16-moist)/.4,0,1)*
    (flooded?.13:1);
@@ -947,22 +973,37 @@ function drawNestCutaway(){
   nestCutGroup.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();
  }
  const id=Number($('ecoColonySelect')?.value||0),c=colonies.find(x=>x.id===id);
- if(!c)return;
- const points=[],dep=clamp(.15+c.tunnels*.16,.19,.96);
- const y=height(c.x,c.z),branches=Math.min(7,2+Math.floor(c.chambers/2));
- const origin=new T.Vector3(c.x,y-.055,c.z);
- for(let b=0;b<branches;b++){
-  const angle=b*2.39996323,radius=Math.min(.85,.18+c.tunnels*.1)*(b+1)/branches;
-  const start=new T.Vector3(c.x,y-.055-dep*.22,c.z);
-  const end=new T.Vector3(c.x+Math.cos(angle)*radius,
-   y-.09-dep*(.35+.07*b),c.z+Math.sin(angle)*radius);
-  points.push(origin,start,start,end);
+ if(!c||!c.subterranean)return;
+ const points=[],y=height(c.x,c.z);
+ const entrance=new T.Vector3(c.x,y-.02,c.z);
+ let previous=entrance;
+ // Corte com corredores verticais ligados às quatro profundidades físicas.
+ for(const [index,layer] of c.subterranean.entries()){
+  const depth=layer.depth;
+  const trunk=new T.Vector3(c.x,y-depth,c.z);
+  if(index===0||layer.chambers>0){
+   points.push(previous,trunk);previous=trunk;
+  }
+  for(let chamber=0;chamber<layer.chambers;chamber++){
+   const side=chamber%2?1:-1;
+   const angle=chamber*2.1+index*.6;
+   const span=.19+Math.min(.53,c.tunnels*.07)+chamber*.045;
+   const room=new T.Vector3(c.x+Math.cos(angle)*span*side,
+    y-depth,c.z+Math.sin(angle)*span*side);
+   const wall=room.clone().add(new T.Vector3(.075,0,.10));
+   points.push(trunk,room,room,wall);
+  }
  }
- const geo=new T.BufferGeometry().setFromPoints(points);
- const material=new T.LineBasicMaterial({color:'#dda970',transparent:true,
-  opacity:.8,depthTest:false,depthWrite:false});
- const lines=new T.LineSegments(geo,material);lines.renderOrder=20;
- nestCutGroup.add(lines);nestCutGroup.visible=!!$('ecoBurrows')?.checked;
+ if(points.length){
+  const geo=new T.BufferGeometry().setFromPoints(points);
+  const mat=new T.LineBasicMaterial({color:'#dda970',transparent:true,
+   opacity:.85,depthTest:false,depthWrite:false});
+  const lines=new T.LineSegments(geo,mat);lines.renderOrder=20;
+  nestCutGroup.add(lines);
+ }
+ // O raio-X só existe quando solicitado; no cenário normal tudo fica
+ // sob o solo, com operárias emergindo exclusivamente pela entrada.
+ nestCutGroup.visible=!!$('ecoBurrows')?.checked;
 }
 function updateColonyInspector(){
  const select=$('ecoColonySelect'),panel=$('ecoColonyDetails');
@@ -986,7 +1027,8 @@ function updateColonyInspector(){
   ' cuidadoras, '+c.builders+' escavadoras, '+c.guards+' guardas'+
   ' · '+stages.egg+' ovos, '+stages.larva+' larvas, '+stages.pupa+
   ' pupas · '+c.tunnels.toFixed(2)+' m de túneis · '+c.chambers+
-  ' câmaras · feromônios '+c.pheromones.reduce((a,v)=>a+v,0).toFixed(1);
+  ' câmaras · rainha a '+c.queenDepth.toFixed(2)+' m · 4 níveis de solo'+
+ ' · feromônios '+c.pheromones.reduce((a,v)=>a+v,0).toFixed(1);
 }
 async function setup(){
  await loadMeshes();initializeLandscape();grassShape();rockShape();setupLeafVisuals();initialColonies();visualizeAnimals();
