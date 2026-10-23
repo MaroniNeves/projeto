@@ -144,16 +144,74 @@ function updateFootprints(){
  muddyFootprints.material.opacity=intensity*.70;
 }
 function makeRoad(){
- // Ponte curta — estrada de terra é somente a máscara cromática no solo.
- const bx=-2.15,bz=roadZ(bx);
- const wood=new T.MeshStandardMaterial({color:'#76563d',roughness:1,metalness:0});
- for(let k=-3;k<=3;k++){
-  const plank=new T.Mesh(new T.BoxGeometry(.22,.08,1.42),wood);
-  plank.position.set(bx+k*.24,height(bx,bz)+.15,bz);
-  plank.castShadow=true;plank.receiveShadow=true;roads.add(plank);
+ // Travessia apenas se a ESTRADA cruza um vão REAL do rio. Duas margens
+ // verificadas, tablado com viga por baixo e encontros firmes no terreno.
+ let crossing=null,nearest=Infinity;
+ for(let x=-7;x<7;x+=.06){
+  const z=roadZ(x),k=idx(x,z),river=riverMask[k];
+  if(river>.65&&Math.abs(x-riverX(z))<nearest){
+   crossing=x;nearest=Math.abs(x-riverX(z));
+  }
  }
- muddyFootprints=generateFootprints();
- updateFootprints();
+ if(crossing!==null){
+  function findBank(direction){
+   for(let d=.12;d<2.1;d+=.05){
+    const x=crossing+d*direction,z=roadZ(x),k=idx(x,z);
+    if(riverMask[k]<.08&&api.depth[k]<.045&&roadMask[k]>.45)
+     return {x,z,y:height(x,z)};
+   }
+   return null;
+  }
+  const left=findBank(-1),right=findBank(1);
+  if(left&&right){
+   const length=Math.hypot(right.x-left.x,right.z-left.z);
+   if(length>.7&&length<4.1){
+    const bridge=new T.Group();bridge.name='Ponte com encontros reais nas duas margens';
+    const wood=new T.MeshStandardMaterial({color:'#786047',roughness:1,metalness:0});
+    const edge=new T.MeshStandardMaterial({color:'#4b3729',roughness:1,metalness:0});
+    const midX=(left.x+right.x)*.5,midZ=(left.z+right.z)*.5;
+    const course=Math.atan2(right.z-left.z,right.x-left.x);
+    const up=Math.max(left.y,right.y)+.09;
+    const beamY=up-.075;
+    // Vigas longitudinais conectam as cabeceiras e suportam todas as tábuas.
+    for(const side of [-1,1]){
+     const beam=new T.Mesh(new T.BoxGeometry(length+.22,.13,.10),edge);
+     beam.rotation.y=-course;
+     const lateral=side*.47;
+     beam.position.set(midX-Math.sin(course)*lateral,beamY,midZ+Math.cos(course)*lateral);
+     beam.castShadow=true;bridge.add(beam);
+    }
+    const planks=Math.max(5,Math.ceil(length/.17));
+    for(let i=0;i<planks;i++){
+     const t=(i+.5)/planks;
+     const plank=new T.Mesh(new T.BoxGeometry(length/planks*.92,.075,1.22),wood);
+     plank.rotation.y=-course;
+     plank.position.set(left.x+(right.x-left.x)*t,up,
+      left.z+(right.z-left.z)*t);
+     plank.castShadow=true;plank.receiveShadow=true;bridge.add(plank);
+    }
+    for(const bank of [left,right]){
+     // Encontros enterrados nas duas margens; sem pontas no ar.
+     const base=new T.Mesh(new T.BoxGeometry(.24,.16,1.30),edge);
+     base.rotation.y=-course;
+     base.position.set(bank.x,bank.y+.043,bank.z);
+     base.castShadow=true;base.receiveShadow=true;bridge.add(base);
+     for(const side of [-1,1]){
+      const dx=-Math.sin(course)*side*.47,dz=Math.cos(course)*side*.47;
+      const support=new T.Mesh(new T.BoxGeometry(.095,
+       Math.max(.13,up-bank.y+.13),.095),wood);
+      support.position.set(bank.x+dx,(up+bank.y)*.5-.015,bank.z+dz);
+      support.castShadow=true;bridge.add(support);
+     }
+    }
+    roads.add(bridge);
+    console.info('[Arcano] Ponte ancorada entre margens',left,right,'vão',length.toFixed(2));
+   }
+  }else{
+   console.warn('[Arcano] Sem duas margens válidas: ponte não criada.');
+  }
+ }
+ muddyFootprints=generateFootprints();updateFootprints();
 }
 function initializeLandscape(){
  for(let k=0;k<cells;k++){
@@ -347,11 +405,22 @@ function initialColonies(){
   const c=newColony(x,z,24+colonies.length*12,15,false);
   colonies.push(c);nestSurface(c);
  }
- for(let i=0;i<14;i++){
+ const totalWormSites=mobileDevice?28:48;
+ for(let i=0;i<totalWormSites;i++){
   let x=(random()-.5)*15,z=(random()-.5)*11;
-  // Populações concentram-se perto de solo úmido e rico em húmus.
-  for(let tries=0;tries<14&&goodForWorms(idx(x,z))<.22;tries++){
-   x=(random()-.5)*15;z=(random()-.5)*11;
+  // Favorece lama AREJADA, sem criar minhocas em água funda.
+  // Uma faixa junto ao rio recebe mais grupos que terras secas.
+  let best=-1;
+  for(let tries=0;tries<28;tries++){
+   const tz=(random()-.5)*13;
+   const nearRiver=i%3===0;
+   const tx=nearRiver?riverX(tz)+(random()<.5?-1:1)*(.60+random()*.52):
+     (random()-.5)*18;
+   const kk=idx(tx,tz);
+   const score=goodForWorms(kk)+
+    (nearRiver&&api.depth[kk]<.045?.28:0)-
+    roadMask[kk]*.38;
+   if(score>best){best=score;x=tx;z=tz;}
   }
   worms.push({x,z,adults:3+Math.floor(random()*5),juveniles:2,
    cocoons:[{days:10,count:1,incubation:39+random()*27}],organic:.1,
@@ -363,8 +432,12 @@ function initialColonies(){
 function goodForWorms(k){
  const moist=api.soilMoisture[k]/Math.max(.0001,api.soilCapacity[k]);
  const temp=api.atmosphere.getMetrics().temperature;
- return clamp((moist-.20)/.35,0,1)*clamp((.94-moist)/.24,0,1)*
-   clamp((temp-9)/9,0,1)*clamp((36-temp)/13,0,1);
+ // Lamas oxigenadas próximas das margens são favoráveis; água funda/anóxica
+ // e solo seco NÃO são. A matéria orgânica sustenta a reprodução.
+ const muddy=clamp((moist-.28)/.34,0,1)*clamp((1.13-moist)/.21,0,1);
+ const oxygen=clamp((.085-api.depth[k])/.08,.03,1);
+ const organic=.45+.55*clamp(api.soilOrganic[k]/.25,0,1);
+ return muddy*oxygen*organic*clamp((temp-9)/9,0,1)*clamp((36-temp)/13,0,1);
 }
 function addCarcass(x,z,mass=.03){
  const k=idx(x,z);api.soilLitter[k]=clamp(api.soilLitter[k]+mass,0,1.8);
