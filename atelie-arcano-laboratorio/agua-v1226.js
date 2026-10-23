@@ -2860,12 +2860,23 @@ function rebuild(){
  // Solo vivo e caminho compacto no MESMO buffer de cores da superfície.
  // Não usar uma fita 3D sobre o terreno: forma, elevação e lama vêm do solo.
  const eco=window.arcanoEcoV1232;
- if(eco?.active&&eco.cover){
+ // Camada verde NÃO depende do carregamento assíncrono das formigas.
+ // Assim o solo fica verde desde o primeiro frame mesmo se o módulo
+ // ecológico demorar a carregar ou estiver desativado.
+ {
   for(let k=0;k<size;k++){
-   const health=clamp(eco.cover[k]*(1-eco.traffic[k]),0,1);
-   const greenAmount=clamp(health*.96,0,.94);
-   const road=clamp(eco.roadMask[k],0,1);
-   const abrasion=clamp(eco.traffic[k],0,1);
+   const x=nx(k%NX),z=nz(Math.floor(k/NX));
+   const roadZ=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
+   const roadDistance=Math.abs(z-roadZ);
+   const fade=clamp(1-roadDistance/1.10,0,1);
+   const road=eco?.active?clamp(eco.roadMask[k]||0,0,1):
+     fade*fade*(3-2*fade);
+   const abrasion=eco?.active?clamp(eco.traffic[k]||0,0,1):0;
+   const effectiveCover=eco?.active?eco.cover[k]:cover[k];
+   const vegetated=clamp(soilPlant[k]*.55+effectiveCover*.45,0,1.2);
+   const health=clamp(vegetated*(1-abrasion)*
+     (1-clamp(depth[k]/.065,0,.85)),0,1);
+   const greenAmount=clamp(.36+health*.59,0,.96);
    const saturated=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1.4);
    const mud=clamp((saturated-.20)*.90+depth[k]*6.5,0,1);
    const dirtAmount=clamp(road*(.99+.08*abrasion),0,.99);
