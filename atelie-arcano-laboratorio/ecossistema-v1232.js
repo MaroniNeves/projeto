@@ -738,6 +738,26 @@ function addCarcass(x,z,mass=.03){
 // e dependem de espécies/condições reais, não constituem previsão de campo.
 function lifeDay(days){
  ecologicalDays+=days;
+ // Crescimento em DIAS simulados: avançar o tempo também recupera
+ // gramados e trilhas abandonadas (e não apenas o cronômetro da cena).
+ for(let k=0;k<cells;k++){
+  const sat=api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]);
+  const optimum=clamp(1-Math.abs(.65-sat)/.65,0,1);
+  const fertilizer=clamp((api.soilOrganic[k]+api.soilN[k])*.52,0,1);
+  const growth=optimum*lightField[k]*fertilizer*
+   clamp(1-api.soilSalinity[k],0,1)*(api.depth[k]>.08?.12:1);
+  const recovery=days*(.003+.014*growth);
+  traffic[k]=Math.max(0,traffic[k]-recovery);
+  animalTrail[k]=Math.max(0,animalTrail[k]-recovery*.85);
+  compaction[k]=Math.max(0,compaction[k]-recovery*.45);
+  const wear=Math.max(traffic[k],animalTrail[k]);
+  const factor=clamp((wear-.18)/.65,0,1);
+  roadMask[k]=factor*factor*(3-2*factor);
+  const desired=clamp(growth*1.2-roadMask[k]*.93,0,1);
+  if(desired>cover[k])cover[k]=clamp(cover[k]+days*.014*growth,0,desired);
+  api.soilPlant[k]=clamp(api.soilPlant[k]+days*.003*growth,.025,1.25);
+ }
+ if(days>=1)updateGrassMeshes();
  // Fotossíntese e desenvolvimento da vegetação renovam sementes/néctar;
  // não surgem novas fontes sobre estrada, área alagada ou gramado morto.
  for(let k=0;k<cells;k++){
