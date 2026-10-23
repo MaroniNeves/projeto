@@ -173,8 +173,8 @@ function rockAt(x,z){return rocks.some(([rx,rz,r])=>((x-rx)**2+(z-rz)**2)<(r*.86
 const scene=new T.Scene();scene.background=new T.Color('#b6c6bc');scene.fog=new T.Fog('#b6c6bc',20,39);
 const camera=new T.PerspectiveCamera(46,1,.1,90);
 let renderer;
-try{renderer=new T.WebGLRenderer({canvas:stage,antialias:!mobile,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?1.35:1.8));renderer.outputColorSpace=T.SRGBColorSpace;
+try{renderer=new T.WebGLRenderer({canvas:stage,antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?1.26:1.65));renderer.outputColorSpace=T.SRGBColorSpace;
 renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=T.PCFSoftShadowMap;}catch(e){fail(e);return;}
 const ambientSky=new T.HemisphereLight('#fff5e4','#6c8378',2.2);scene.add(ambientSky);
@@ -893,6 +893,144 @@ function updateMeadowHealth(){
  if(meadowMesh.instanceColor)meadowMesh.instanceColor.needsUpdate=true;
 }
 
+// Qualidade V12.26: jamais reduz vértices das malhas originais. As diferenças são
+// resolução, filtragem, sombras, frequência dos reflexos e densidade na cena.
+const QUALITY_PRESETS={
+ high:{label:'Alta · fidelidade máxima',mobilePixel:1.9,desktopPixel:2.35,
+  shadowsMobile:1024,shadowsDesktop:2048,tree:1,small:1,meadow:1,anisotropy:8,
+  reflectMobile:2.5,reflectDesktop:1.35},
+ balanced:{label:'Equilibrada',mobilePixel:1.26,desktopPixel:1.65,
+  shadowsMobile:512,shadowsDesktop:1024,tree:.88,small:.73,meadow:.69,anisotropy:4,
+  reflectMobile:3.5,reflectDesktop:2.15},
+ low:{label:'Econômica',mobilePixel:.87,desktopPixel:1.05,
+  shadowsMobile:256,shadowsDesktop:512,tree:.65,small:.36,meadow:.29,anisotropy:1,
+  reflectMobile:6.0,reflectDesktop:4.0}
+};
+let graphicsQuality=mobile?'balanced':'high';
+try{const saved=localStorage.getItem('arcano.graphicsQuality');if(QUALITY_PRESETS[saved])graphicsQuality=saved;}catch(_){}
+const fullMeadowCount=meadowMesh.count;
+const originalDetailMaps=new Map(),originalDetailLoading=new Set(),qualityMaterials=new Set();
+const originalTextureFiles={
+ BirchTree_1:'BirchTree_Bark.png',BirchTree_3:'BirchTree_Bark.png',
+ MapleTree_3:'MapleTree_Bark.png',NormalTree_2:'NormalTree_Bark.png',
+ PineTree_2:'PineTree_Bark.png',Rock_3:'Rocks.png',Rock_5:'Rocks.png'
+};
+const originalTextureBase='https://raw.githubusercontent.com/walterpalladino/godot-quaternius-ultimate-stylized-nature/main/ultimate-stylized-nature/sources/Textures/';
+let originalsReady=0,originalsUnavailable=0;
+function visibleByQuality(a){
+ const q=QUALITY_PRESETS[graphicsQuality];
+ const density=(a.type==='tree'||a.type==='pine'||a.type==='rock')?q.tree:q.small;
+ return (forestCollection==='mixed'||forestCollection===a.pack)&&
+  a.qualityRank<=density&&(a.type==='tree'||a.type==='pine'||a.type==='rock'||
+  soilHealth[idx(clamp(Math.round((a.x+W*.5)/dx),0,NX-1),
+                 clamp(Math.round((a.z+L*.5)/dz),0,NZ-1))]>.10);
+}
+function applyForestVisibility(){
+ for(const a of forestInstances)a.obj.visible=visibleByQuality(a);
+ meadowMesh.count=Math.floor(fullMeadowCount*QUALITY_PRESETS[graphicsQuality].meadow);
+ if(meadowMesh.instanceMatrix)meadowMesh.instanceMatrix.needsUpdate=true;
+}
+function registerForestMaterial(item,root){
+ if(item.pack!=='ultimate')return;
+ root.traverse(o=>{
+  if(!o.isMesh)return;
+  const materials=Array.isArray(o.material)?o.material:[o.material];
+  for(const mat of materials){
+   if(!mat||qualityMaterials.has(mat))continue;
+   // Cor e transparência da folhagem permanecem no PNG original local.
+   // Apenas materiais de casca/rocha que tinham substituto 128px recebem
+   // opcionalmente a imagem original do próprio pacote, em qualidade Alta.
+   const original=originalTextureFiles[item.name];
+   const source=mat.map?.image?.currentSrc||mat.map?.image?.src||'';
+   const isProcedural=typeof source==='string'&&source.startsWith('data:image/');
+   const materialName=(mat.name||'')+' '+(o.name||'');
+   if(!original||(!isProcedural&&!/(bark|trunk|wood|rock|stone)/i.test(materialName)))continue;
+   mat.userData.arcanoFallbackMap=mat.map||null;
+   mat.userData.arcanoOriginalTextureFile=original;
+   qualityMaterials.add(mat);
+  }
+ });
+}
+function useOriginalTexture(filename){
+ if(originalDetailMaps.has(filename))return;
+ if(originalDetailLoading.has(filename))return;
+ originalDetailLoading.add(filename);
+ const url=originalTextureBase+encodeURIComponent(filename);
+ const loader=new T.TextureLoader();
+ loader.load(url,texture=>{
+  originalDetailLoading.delete(filename);originalDetailMaps.set(filename,texture);
+  originalsReady++;
+  texture.colorSpace=T.SRGBColorSpace;
+  texture.anisotropy=QUALITY_PRESETS[graphicsQuality].anisotropy;
+  texture.minFilter=T.LinearMipmapLinearFilter;texture.magFilter=T.LinearFilter;
+  texture.needsUpdate=true;
+  if(graphicsQuality==='high')applyQualityMaterials();
+  updateGraphicsStatus();
+ },undefined,err=>{
+  originalDetailLoading.delete(filename);originalsUnavailable++;
+  // Mantém a textura painterly local se a rede bloquear os arquivos opcionais.
+  console.warn('[Arcano V12.26] Textura original opcional indisponível',filename,err);
+  updateGraphicsStatus();
+ });
+}
+function applyQualityMaterials(){
+ const high=graphicsQuality==='high';
+ for(const mat of qualityMaterials){
+  const original=mat.userData.arcanoOriginalTextureFile;
+  const fallback=mat.userData.arcanoFallbackMap;
+  const texture=high&&originalDetailMaps.has(original)?
+    originalDetailMaps.get(original):fallback;
+  if(mat.map!==texture){mat.map=texture;mat.needsUpdate=true;}
+  if(high&&original&&!originalDetailMaps.has(original))useOriginalTexture(original);
+ }
+ // Mantém sempre os PNGs de folhas e flores na resolução original.
+ const seenTextures=new Set();
+ for(const model of Object.values(forestModels))model.traverse(obj=>{
+  if(!obj.isMesh)return;
+  const mats=Array.isArray(obj.material)?obj.material:[obj.material];
+  for(const mat of mats)if(mat?.map&&!seenTextures.has(mat.map)){
+   seenTextures.add(mat.map);
+   mat.map.anisotropy=QUALITY_PRESETS[graphicsQuality].anisotropy;
+   mat.map.needsUpdate=true;
+  }
+ });
+}
+function updateGraphicsStatus(){
+ if(!$('qualityStats'))return;
+ const q=QUALITY_PRESETS[graphicsQuality];
+ $('qualityStats').textContent='🎨 '+q.label+
+  ' · tela '+Math.min(devicePixelRatio||1,mobile?q.mobilePixel:q.desktopPixel).toFixed(2)+'×'+
+  ' · folhagem '+Math.round(q.small*100)+'%'+
+  ' · sombras '+(mobile?q.shadowsMobile:q.shadowsDesktop)+'px'+
+  (graphicsQuality==='high'?' · cascas originais '+originalsReady+
+    (originalDetailLoading.size?' (carregando)':'')+
+    (originalsUnavailable?' · algumas indisponíveis':''):' · PNGs de folhas originais preservados');
+}
+function setGraphicsQuality(next){
+ graphicsQuality=QUALITY_PRESETS[next]?next:'balanced';
+ const q=QUALITY_PRESETS[graphicsQuality];
+ try{localStorage.setItem('arcano.graphicsQuality',graphicsQuality);}catch(_){}
+ if($('graphicsQuality'))$('graphicsQuality').value=graphicsQuality;
+ renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?q.mobilePixel:q.desktopPixel));
+ resize();
+ const shadowSize=mobile?q.shadowsMobile:q.shadowsDesktop;
+ if(light.shadow.mapSize.x!==shadowSize){
+  light.shadow.mapSize.set(shadowSize,shadowSize);
+  if(light.shadow.map){light.shadow.map.dispose();light.shadow.map=null;}
+ }
+ renderer.shadowMap.enabled=true;
+ light.castShadow=graphicsQuality!=='low';
+ renderer.shadowMap.needsUpdate=true;
+ for(const a of forestInstances)a.obj.traverse(obj=>{
+  if(obj.isMesh)obj.castShadow=graphicsQuality==='high'&&
+   (a.type==='tree'||a.type==='pine');
+ });
+ applyForestVisibility();
+ applyQualityMaterials();
+ updateGraphicsStatus();
+ if(typeof reflectionAge!=='undefined')reflectionAge=999;
+}
+
 function forestStatus(state){
  floraState=state;
  if($('floraStatus'))$('floraStatus').textContent=
@@ -901,6 +1039,7 @@ function forestStatus(state){
 }
 function setFloraVisible(v){
  floraWanted=!!v;forestGroup.visible=floraWanted&&floraLoaded>0;
+ applyForestVisibility();
  grass.visible=!forestGroup.visible;sproutGroup.visible=!forestGroup.visible;
  if($('floraToggle'))$('floraToggle').checked=floraWanted;
  forestStatus(floraWanted?(floraLoaded?'ativos':'carregando'):'vegetação clássica');
@@ -1114,6 +1253,7 @@ async function loadPainterlyForest(){
      model=doc.scene;
     }
     forestModels[item.name]=model;
+    registerForestMaterial(item,model);
     placeForestModel(item,model);
     ok++;floraLoaded=ok;
     if(item.pack==='ultimate')ultimateModelsLoaded++;else megaModelsLoaded++;
@@ -1126,6 +1266,7 @@ async function loadPainterlyForest(){
   setFloraVisible(floraWanted);
   setForestCollection(forestCollection);
   updateForestHealth();
+  setGraphicsQuality(graphicsQuality);
   if(typeof reflectionAge!=='undefined')reflectionAge=999;
   forestStatus('floresta carregada ('+forestInstances.length+' objetos)');
  }catch(err){
@@ -1145,6 +1286,7 @@ function updateForestHealth(){
   a.obj.scale.setScalar(a.baseScale*factor);
   snapForestToGround(a);
  }
+ applyForestVisibility();
 }
 function animateForest(dt){
  const t=visualTime;
@@ -1227,7 +1369,7 @@ let reflectionTurn=0;
 function updateReflections(dt){
  if(!reflectionsOn){waterM.uniforms.uReflect.value=0;return;}
  reflectionAge+=dt;
- if(reflectionAge<(mobile?3.2:1.6))return;
+ if(reflectionAge<(mobile?QUALITY_PRESETS[graphicsQuality].reflectMobile:QUALITY_PRESETS[graphicsQuality].reflectDesktop))return;
  reflectionAge=0;
  const previous=[water.visible,foamMesh.visible,splashMesh.visible,halo.visible,streak.visible];
  const ringVisibility=ripplePool.map(mesh=>mesh.visible);
@@ -1750,6 +1892,7 @@ $('physicalWeather').addEventListener('change',e=>{
 $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo(true);});
 $('floraToggle').addEventListener('change',e=>setFloraVisible(e.target.checked));
 $('forestPack').addEventListener('change',e=>setForestCollection(e.target.value));
+$('graphicsQuality').addEventListener('change',e=>setGraphicsQuality(e.target.value));
 $('fogToggle').addEventListener('change',e=>{
  fogEnabled=e.target.checked;
  if(!fogEnabled)fogStrength=fogTarget=0;
@@ -1887,6 +2030,6 @@ let last=performance.now();function loop(now){
 
 window.addEventListener('resize',resize);
 window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1226'))fail(e.error||e.message);});
-window.arcanoWaterV1226={scene,renderer,setForestCollection,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
-try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
+window.arcanoWaterV1226={scene,renderer,setGraphicsQuality,getGraphicsQuality:()=>graphicsQuality,QUALITY_PRESETS,snapForestToGround,setForestCollection,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+try{resize();setMode('puddle');setGraphicsQuality(graphicsQuality);requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
