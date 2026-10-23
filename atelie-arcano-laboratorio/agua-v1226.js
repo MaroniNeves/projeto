@@ -1186,18 +1186,33 @@ function placeForestModel(item,root){
 // Texturas de troncos, cascas e rochas são pintadas procedurais compactas.
 // O Ultimate original usa mapas de casca muito pesados (até ~23MB cada),
 // evitados aqui para manter o navegador Android responsivo.
+// Substitutos painterly de 512px (antes 128px). Alta pode usar os mapas
+// oficiais do Ultimate; Equilibrada conserva um material bem definido offline.
 function materialCanvas(base,accent){
- const c=document.createElement('canvas');c.width=c.height=128;
- const ctx=c.getContext('2d'),rng=rand(base=== '#79624b'?3916:4721);
- ctx.fillStyle=base;ctx.fillRect(0,0,128,128);
- for(let i=0;i<160;i++){
-  const x=rng()*128,y=rng()*128;
-  ctx.globalAlpha=.045+rng()*.18;
-  ctx.strokeStyle=accent;ctx.lineWidth=.6+rng()*3.5;
+ const c=document.createElement('canvas');c.width=c.height=512;
+ const ctx=c.getContext('2d'),rng=rand(base==='#79624b'?3916:4721);
+ const bark=base==='#79624b';
+ ctx.fillStyle=base;ctx.fillRect(0,0,512,512);
+ for(let i=0;i<(bark?1700:1150);i++){
+  const x=rng()*512,y=rng()*512;
+  const stroke=bark?(4+rng()*83):(2+rng()*23);
+  ctx.globalAlpha=.048+rng()*.19;
+  ctx.strokeStyle=i%4===0?'#394b3f':accent;
+  ctx.lineWidth=.65+rng()*(bark?3.2:5.0);
+  ctx.lineCap='round';
   ctx.beginPath();ctx.moveTo(x,y);
-  if(base==='#79624b')ctx.lineTo(x+(rng()-.5)*4,y+4+rng()*33);
-  else ctx.lineTo(x+1+rng()*16,y+2+rng()*4);
+  if(bark){
+   const drift=(rng()-.5)*9;
+   ctx.bezierCurveTo(x+drift,y+stroke*.25,x-drift,y+stroke*.74,
+                     x+(rng()-.5)*11,y+stroke);
+  }else ctx.quadraticCurveTo(x+(rng()-.5)*14,y+stroke*.38,x+stroke*.63,y+stroke*.52);
   ctx.stroke();
+ }
+ // Grão fino e microfissuras dão leitura aos troncos de perto sem ruído agressivo.
+ for(let i=0;i<2100;i++){
+  const x=rng()*512,y=rng()*512,rad=.2+rng()*1.2;
+  ctx.globalAlpha=.065+rng()*.12;ctx.fillStyle=rng()>.5?accent:'#564e44';
+  ctx.fillRect(x,y,rad,bark?rad*(1+rng()*3.5):rad);
  }
  ctx.globalAlpha=1;return c.toDataURL('image/png');
 }
