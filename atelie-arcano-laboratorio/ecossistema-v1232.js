@@ -46,7 +46,7 @@ function height(x,z){
  return A*(1-a)*(1-b)+B*a*(1-b)+C*(1-a)*b+D*a*b;
 }
 const mobileDevice=innerWidth<680;
-const grassBudgets=mobileDevice?{high:52000,balanced:25500,low:7500}:{high:85000,balanced:45000,low:13500};
+const grassBudgets=mobileDevice?{high:72000,balanced:36000,low:9500}:{high:120000,balanced:60000,low:18000};
 let grassDrawn=0,lastGrassQuality='';
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
@@ -272,7 +272,7 @@ function grassShape(){
   meshes.set(name,mesh);dummies.set(name,new T.Object3D());foliage.add(mesh);
  }
  if(!meshes.size)return;
- const lowBudget=Math.floor(budget*.67),tallBudget=budget-lowBudget;
+ const lowBudget=Math.floor(budget*.77),tallBudget=budget-lowBudget;
  let planted=0;
  function plant(name,x,z,k,size=1){
   if(planted>=budget)return false;
@@ -293,7 +293,7 @@ function grassShape(){
  // Passada 1: CAMADA BAIXA distribuída uniformemente por toda a área viva,
  // inclusive clareiras entre tufos altos. A cobertura não é sorteada em
  // grandes blocos vazios (erro da versão anterior).
- const cols=mobileDevice?328:468,rows=mobileDevice?260:368;
+ const cols=mobileDevice?390:550,rows=mobileDevice?306:442;
  const positions=[];
  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
   const x=-W*.48+(i+.5)/cols*W*.96;
@@ -557,7 +557,18 @@ function rockShape(){
   const z=physical?physical.z:(random()-.5)*L*.92,k=idx(x,z);
   // Pedras grandes nunca nascem dentro da estrada ou junto a suas bordas.
   // Rotas novas contornam as rochas existentes.
-  if(roadMask[k]>.12||Math.abs(z-roadZ(x))<1.5)continue;
+  // Excluir rochas grandes de caminhos e suas bordas, incluindo trilhas
+  // recentes de animais. Amostrar todo o perímetro do volume da rocha.
+  const radius=.70+(i%5)*.18;
+  let clashes=false;
+  for(const [ox,oz] of [[0,0],[radius,0],[-radius,0],[0,radius],[0,-radius],
+   [radius*.7,radius*.7],[-radius*.7,-radius*.7]]){
+   const cell=idx(x+ox,z+oz);
+   if(roadMask[cell]>.08||animalTrail[cell]>.16||riverMask[cell]>.75){
+    clashes=true;break;
+   }
+  }
+  if(clashes||Math.abs(z-roadZ(x))<radius+1.1)continue;
   const key=names[i%names.length];const geom=meshLibrary[key];if(!geom)continue;
   const m=new T.Mesh(geom,mat.clone());m.name='Rocks.fbx '+key;
   const scale=.30+random()*.65;
