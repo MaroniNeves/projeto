@@ -1,4 +1,4 @@
-/* Ateliê Arcano V12.32 — ecossistema demonstrativo integrado.
+/* Ateliê Arcano V12.33 — gramados densos e terreno sem piscadas.
  * Malhas FBX/OBJ compactadas dos arquivos do usuário; não simula parâmetros de
  * campo cientificamente calibrados. Conserva modelos invisíveis fora da lupa.
  */
@@ -144,11 +144,11 @@ function grassShape(){
   const x0=-9.35+(i+.5)/cols*18.7,z0=-7.35+(j+.5)/rows*14.7;
   const k0=idx(x0,z0),density=clamp(cover[k0]*(1-traffic[k0]),0,1);
   if(density<.11||api.depth[k0]>.035)continue;
-  const count=density>.70?3:density>.42?2:1;
+  const count=density>.70?4:density>.42?3:2;
   for(let n=0;n<count&&planted<max;n++){
-   const x=x0+(random()-.5)*.27,z=z0+(random()-.5)*.25,k=idx(x,z);
+   const x=x0+(random()-.5)*.21,z=z0+(random()-.5)*.20,k=idx(x,z);
    const life=clamp(cover[k]*(1-traffic[k]),0,1);
-   if(life<.12||random()>life*.97||api.depth[k]>.025)continue;
+   if(life<.12||random()>Math.min(1,life*1.24)||api.depth[k]>.025)continue;
    const roll=random();
    const name=riverMask[k]>.21&&roll<.22?'grassTall1':roll<.40?'grassShort1':
     roll<.76?'grassMixed1':'grassMixed2';
