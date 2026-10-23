@@ -276,7 +276,7 @@ function newColony(x,z,workers=24,food=12,founder=false){
  brood:founder?[]:[{stage:'egg',age:0,count:5},{stage:'larva',age:8,count:4},
   {stage:'pupa',age:18,count:3}],
  scouts:0,foragers:0,nurses:0,builders:0,guards:0,dead:0,
- temperature:23,pheromones:new Float32Array(cells),lastFoodSite:idx(x,z),
+ temperature:23,queenStress:0,pheromones:new Float32Array(cells),lastFoodSite:idx(x,z),
  tunnels:Math.max(.09,workers*.003),chambers:1,spoil:Math.max(.03,workers*.0006),
  foodStored:food*.35,founder, reproductiveCooldown:0,daysWithoutFood:0};
  distributeTasks(c);return c;
@@ -468,7 +468,13 @@ function lifeDay(days){
   if(c.founder&&born>0)recordEcoEvent('Primeiras operárias da colônia '+(c.id+1)+' nasceram.');
   if(c.workers>0)c.founder=false;
   c.queenAge+=days;
-  if(c.queen&&c.queenAge>365*9){
+  // Reservas e proteção das operárias influenciam a sobrevivência da rainha.
+  // Períodos prolongados sem alimentação, água ou oxigênio causam colapso.
+  if(c.queen){
+   const danger=safe<.18||fed<.22?1:safe<.35||fed<.52?.32:-.48;
+   c.queenStress=clamp((c.queenStress||0)+days*danger,0,80);
+  }
+  if(c.queen&&(c.queenAge>365*9||c.queenStress>34)){
    c.queen=false;c.queenFertile=false;
    addCarcass(c.x,c.z,.004);
    recordEcoEvent('Rainha da colônia '+(c.id+1)+' morreu.');
