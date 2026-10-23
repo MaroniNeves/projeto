@@ -298,9 +298,10 @@ function grassShape(){
  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
   const x=-W*.48+(i+.5)/cols*W*.96;
   const z=-L*.48+(j+.5)/rows*L*.96,k=idx(x,z);
-  if(roadMask[k]>.18||riverMask[k]>.66||api.depth[k]>.038)continue;
-  const health=clamp(cover[k]*(1-traffic[k]),0,1);
-  if(health<.16)continue;
+  // Até a trilha antiga recebe grama oculta, que volta após abandono.
+  if(riverMask[k]>.74||api.depth[k]>.08)continue;
+  const health=clamp(api.soilPlant[k]*(1-api.soilSalinity[k]),0,1);
+  if(health<.075)continue;
   positions.push({x,z,k,health});
  }
  // Índices sobre toda a malha (e não sorteio com parada prematura).
@@ -316,7 +317,7 @@ function grassShape(){
  const tallSites=positions.filter(p=>{
   const patch=.5+.5*Math.sin(p.x*1.12+Math.sin(p.z*.55)*1.4)*
    Math.cos(p.z*.84-p.x*.20);
-  return p.health>.42&&patch>.40&&random()<clamp(p.health*.66+patch*.32,.1,.93);
+  return p.health>.24&&patch>.32&&random()<clamp(p.health*.66+patch*.32,.1,.93);
  });
  const tallStep=tallSites.length/Math.max(1,tallBudget);
  for(let n=0;n<tallBudget&&tallSites.length;n++){
@@ -1177,8 +1178,10 @@ function moveAnimals(t){
  const o=new T.Object3D();
  for(const patch of grassPatches){
   if(patch.index>=patch.mesh.count)continue;
-  const k=patch.k,wear=traffic[k],c=cover[k],alive=clamp(c*(1-wear),0,1);
-  const scale=alive>.045?(.25+.75*alive):.0001;
+  const k=patch.k,wear=Math.max(traffic[k],animalTrail[k]),c=cover[k];
+  const hydro=api.depth[k]>.08?0:1;
+  const alive=clamp(c*(1-wear)*hydro,0,1);
+  const scale=alive>.045?(.13+.87*alive):.0001;
   o.matrix.copy(patch.matrix);
   o.matrix.decompose(o.position,o.quaternion,o.scale);
   o.scale.multiplyScalar(scale);o.updateMatrix();
