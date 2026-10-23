@@ -170,16 +170,27 @@ function elevation(x,z){
  return y;
 }
 function rockAt(x,z){return rocks.some(([rx,rz,r])=>((x-rx)**2+(z-rz)**2)<(r*.86)**2);}
+// V12.26: fidelidade original disponível inclusive no celular; redução fica
+// na escolha explícita da pessoa, sem simplificar malhas 3D por padrão.
+const QUALITY_PRESETS={
+ high:{label:'Alta · modelos/texturas originais',pixelMobile:2,pixelDesktop:2.4,
+       shadowsMobile:1024,shadowsDesktop:2048,density:1,grass:1,anisotropy:8,reflect:true},
+ balanced:{label:'Equilibrada · boa qualidade',pixelMobile:1.35,pixelDesktop:1.65,
+       shadowsMobile:512,shadowsDesktop:1024,density:.78,grass:.70,anisotropy:4,reflect:true},
+ low:{label:'Econômica · mais desempenho',pixelMobile:.95,pixelDesktop:1.1,
+       shadowsMobile:0,shadowsDesktop:0,density:.40,grass:.32,anisotropy:1,reflect:false}
+};
+let graphicsQuality='high',qualityFPS=0,qualityFrames=0,qualityWindow=0;
 const scene=new T.Scene();scene.background=new T.Color('#b6c6bc');scene.fog=new T.Fog('#b6c6bc',20,39);
 const camera=new T.PerspectiveCamera(46,1,.1,90);
 let renderer;
-try{renderer=new T.WebGLRenderer({canvas:stage,antialias:!mobile,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?1.35:1.8));renderer.outputColorSpace=T.SRGBColorSpace;
+try{renderer=new T.WebGLRenderer({canvas:stage,antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?2:2.4));renderer.outputColorSpace=T.SRGBColorSpace;
 renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=T.PCFSoftShadowMap;}catch(e){fail(e);return;}
 const ambientSky=new T.HemisphereLight('#fff5e4','#6c8378',2.2);scene.add(ambientSky);
 const light=new T.DirectionalLight('#fff0c8',2.35);light.position.set(-8,13,7);
-light.castShadow=true;light.shadow.mapSize.set(mobile?512:1024,mobile?512:1024);
+light.castShadow=true;light.shadow.mapSize.set(mobile?1024:2048,mobile?1024:2048);
 Object.assign(light.shadow.camera,{left:-13,right:13,top:13,bottom:-13,near:.5,far:38});
 light.shadow.bias=-.00035;scene.add(light);
 // Atmosfera 3D: céu físico estilizado, disco solar e nuvens procedurais animadas.
@@ -1028,7 +1039,7 @@ function placeForestModel(item,root){
   });
   forestGroup.add(obj);
   forestInstances.push({obj,x,z,y:groundY,rotation:rot,baseScale:scale,
-   bottomOffset,bury,groundY,growthFactor:1,pack:item.pack||'mega',
+   bottomOffset,bury,groundY,growthFactor:1,qualityRank:created===0?0:randomForest(),pack:item.pack||'mega',
    type:item.type,phase:randomForest()*Math.PI*2});
   created++;
  }
@@ -1081,17 +1092,20 @@ function modelTextureManager(Module){
  });
  return manager;
 }
+function forestInstanceVisible(a){
+ if(forestCollection!=='mixed'&&a.pack!==forestCollection)return false;
+ if(a.qualityRank>QUALITY_PRESETS[graphicsQuality].density)return false;
+ if(a.type==='rock'||a.type==='tree'||a.type==='pine')return true;
+ const k=idx(clamp(Math.round((a.x+W*.5)/dx),0,NX-1),
+   clamp(Math.round((a.z+L*.5)/dz),0,NZ-1));
+ return soilHealth[k]>.1;
+}
+function applyForestVisibility(){
+ for(const a of forestInstances)a.obj.visible=forestInstanceVisible(a);
+}
 function setForestCollection(value){
  forestCollection=['mixed','mega','ultimate'].includes(value)?value:'mixed';
- for(const a of forestInstances){
-  const allowed=forestCollection==='mixed'||a.pack===forestCollection;
-  if(a.type==='rock'||a.type==='tree'||a.type==='pine')a.obj.visible=allowed;
-  else{
-   const k=idx(clamp(Math.round((a.x+W*.5)/dx),0,NX-1),
-    clamp(Math.round((a.z+L*.5)/dz),0,NZ-1));
-   a.obj.visible=allowed&&soilHealth[k]>.1;
-  }
- }
+ applyForestVisibility();
  if($('forestPack'))$('forestPack').value=forestCollection;
  if(typeof reflectionAge!=='undefined')reflectionAge=999;
  forestStatus('visual '+(forestCollection==='mixed'?'combinado':forestCollection));
@@ -1131,6 +1145,7 @@ async function loadPainterlyForest(){
    if(ok%3===0)await new Promise(resolve=>requestAnimationFrame(resolve));
   }
   if(ok===0)throw new Error('Nenhum modelo de vegetação foi carregado');
+  applyGraphicsQuality(graphicsQuality);
   setFloraVisible(floraWanted);
   setForestCollection(forestCollection);
   updateForestHealth();
@@ -1151,7 +1166,7 @@ function updateForestHealth(){
   const biomass=clamp(soilPlant[k],.12,1.2),health=clamp(soilHealth[k],0,1);
   const factor=.69+biomass*.30;
   setForestGrowthTransform(a,factor);
-  a.obj.visible=health>.10&&(forestCollection==='mixed'||forestCollection===a.pack);
+  a.obj.visible=health>.10&&forestInstanceVisible(a);
  }
 }
 function animateForest(dt){
@@ -1866,6 +1881,12 @@ function updateInfo(force){
 
 let last=performance.now();function loop(now){
  requestAnimationFrame(loop);const dt=Math.min((now-last)/1000,.065);last=now;
+ qualityFrames++;
+ qualityWindow+=dt;
+ if(qualityWindow>=1.2){
+  qualityFPS=Math.round(qualityFrames/qualityWindow);
+  qualityWindow=0;qualityFrames=0;
+ }
  if(!paused&&!document.hidden){
   time+=dt*timeScale;visualTime+=dt*(1+.16*Math.log2(timeScale));
   updateAtmosphere(dt);
