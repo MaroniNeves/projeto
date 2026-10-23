@@ -1654,10 +1654,115 @@ function arcanoPlantBaseY(obj,anchor){
  }
  return seekWood?wood.min.y:bounds.min.y;
 }
+// V12.30: identifica o pé físico da árvore pelos vértices mais BAIXOS de
+// madeira e não pelas folhas, galhos pendentes ou origem arbitrária do FBX.
+const arcanoFootPoint=new T.Vector3();
+function arcanoTrunkRootPoint(obj){
+ obj.updateMatrixWorld(true);
+ const box=arcanoWorldPartBox(obj,'wood');
+ if(!box)return null;
+ const h=Math.max(.001,box.max.y-box.min.y);
+ const limit=box.min.y+Math.min(h*.16,.62);
+ const samples=[],cluster=new Map();
+ obj.traverse(mesh=>{
+  if(!mesh.isMesh||!mesh.visible)return;
+  const geo=mesh.geometry,pos=geo?.getAttribute('position');if(!pos)return;
+  const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+  const indices=geo.getIndex(),groups=geo.groups.length?geo.groups:
+   [{start:0,count:indices?indices.count:pos.count,materialIndex:0}];
+  for(const g of groups){
+   const name=materials[g.materialIndex]?.name||mesh.name||'';
+   if(!arcanoBarkRE.test(name)||arcanoLeafRE.test(name))continue;
+   const end=Math.min(g.start+g.count,indices?indices.count:pos.count);
+   const step=Math.max(1,Math.floor((end-g.start)/3000));
+   for(let i=g.start;i<end;i+=step){
+    arcanoFootPoint.fromBufferAttribute(pos,indices?indices.getX(i):i)
+     .applyMatrix4(mesh.matrixWorld);
+    if(arcanoFootPoint.y>limit)continue;
+    samples.push([arcanoFootPoint.x,arcanoFootPoint.y,arcanoFootPoint.z]);
+   }
+  }
+ });
+ if(!samples.length)return {x:box.getCenter(new T.Vector3()).x,
+  y:box.min.y,z:box.getCenter(new T.Vector3()).z};
+ // Agrupar vértices baixos: o pé do tronco é a REGIÃO conectada mais densa,
+ // não uma ponta de galho que aponta para o chão.
+ const cell=clamp(h*.09,.10,.32);
+ for(const p of samples){
+  const key=Math.floor(p[0]/cell)+','+Math.floor(p[2]/cell);
+  let arr=cluster.get(key);if(!arr){arr=[];cluster.set(key,arr);}arr.push(p);
+ }
+ let best=[];
+ for(const arr of cluster.values())if(arr.length>best.length)best=arr;
+ if(best.length<4)best=samples;
+ let x=0,z=0;const yy=[];
+ for(const p of best){x+=p[0];z+=p[2];yy.push(p[1]);}
+ yy.sort((a,b)=>a-b);
+ return {x:x/best.length,y:yy[Math.min(yy.length-1,Math.floor(yy.length*.06))],
+  z:z/best.length};
+}
+// Autoaprumo limitado à espécie (não altera o vento que age no pai).
+// Calcula vetor do pé central à seção intermediária da madeira e reduz
+// inclinações excessivas sem retificar árvores tortuosas deliberadamente.
+function arcanoStraightenSpecies(item,root,rotation){
+ if(item.type!=='tree'&&item.type!=='pine')return rotation;
+ const probe=new T.Group();probe.quaternion.copy(rotation);
+ probe.add(root.clone(true));probe.updateMatrixWorld(true);
+ const box=arcanoWorldPartBox(probe,'wood');
+ if(!box)return rotation;
+ const h=Math.max(.001,box.max.y-box.min.y);
+ const low=[],middle=[],v=new T.Vector3();
+ probe.traverse(mesh=>{
+  if(!mesh.isMesh||!mesh.visible)return;
+  const geo=mesh.geometry,p=geo?.getAttribute('position');if(!p)return;
+  const ms=Array.isArray(mesh.material)?mesh.material:[mesh.material],idxs=geo.getIndex();
+  const groups=geo.groups.length?geo.groups:[{start:0,count:idxs?idxs.count:p.count,materialIndex:0}];
+  for(const g of groups){
+   const name=ms[g.materialIndex]?.name||mesh.name||'';
+   if(!arcanoBarkRE.test(name)||arcanoLeafRE.test(name))continue;
+   const end=Math.min(g.start+g.count,idxs?idxs.count:p.count);
+   const step=Math.max(1,Math.floor((end-g.start)/1800));
+   for(let k=g.start;k<end;k+=step){
+    v.fromBufferAttribute(p,idxs?idxs.getX(k):k).applyMatrix4(mesh.matrixWorld);
+    const t=(v.y-box.min.y)/h;
+    if(t<.12)low.push([v.x,v.y,v.z]);
+    else if(t>.27&&t<.47)middle.push([v.x,v.y,v.z]);
+   }
+  }
+ });
+ if(low.length<6||middle.length<6)return rotation;
+ const center=pts=>{const sum=new T.Vector3();for(const p of pts)sum.add(new T.Vector3(...p));return sum.divideScalar(pts.length);};
+ const a=center(low),b=center(middle),dir=b.sub(a);
+ if(dir.length()<.15)return rotation;
+ const tilt=Math.atan2(Math.hypot(dir.x,dir.z),Math.max(.01,dir.y));
+ // Mantém o caráter natural das copas: corrigir só troncos claramente caídos.
+ if(tilt<.31)return rotation;
+ const corrected=dir.clone().normalize(),upright=new T.Vector3(0,1,0);
+ const full=new T.Quaternion().setFromUnitVectors(corrected,upright);
+ const amt=clamp((tilt-.18)/Math.max(.01,tilt),0,.75);
+ const tweak=new T.Quaternion().slerp(full,amt);
+ return tweak.multiply(rotation.clone()).normalize();
+}
 function snapForestToGround(anchor){
  const a=anchor,obj=a.obj;
  let foot=solidForestFootY(obj,a);
- if(a.type==='flower'||a.type==='bush'||a.type==='fern'||a.type==='grass'){
+ if(a.type==='tree'||a.type==='pine'){
+  const root=arcanoTrunkRootPoint(obj);
+  if(root){
+   // Compensar o desvio da base do tronco no eixo XZ: modelos inclinados
+   // não devem ter seu ponto de contato em uma encosta diferente.
+   const diff=new T.Vector3(a.x-root.x,0,a.z-root.z);
+   if(diff.length()<a.crownWidth*.8){
+    const inv=new T.Quaternion().copy(obj.quaternion).invert();
+    diff.applyQuaternion(inv).divideScalar(Math.max(.0001,Math.abs(obj.scale.x)));
+    a.orientationNode.position.x+=diff.x;
+    a.orientationNode.position.z+=diff.z;
+    obj.updateMatrixWorld(true);
+   }
+   const aligned=arcanoTrunkRootPoint(obj);
+   if(aligned)foot=aligned.y;
+  }
+ }else if(a.type==='flower'||a.type==='bush'||a.type==='fern'||a.type==='grass'){
   foot=arcanoPlantBaseY(obj,a);
  }
  if(!Number.isFinite(foot))return;
@@ -1712,7 +1817,7 @@ function placeForestModel(item,root){
   const obj=new T.Group(),correction=new T.Group(),visualRoot=root.clone(true);
   obj.name='Raiz no chão '+item.name;
   correction.name='Correção de orientação '+item.name;
-  correction.quaternion.copy(orientation.quaternion);
+  correction.quaternion.copy(arcanoStraightenSpecies(item,root,orientation.quaternion));
   correction.add(visualRoot);
   if(item.type==='grass'){
    // Cada instância é uma moita de quatro peças GLTF/FBX originais.
