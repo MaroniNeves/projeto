@@ -2045,7 +2045,7 @@ $('climate').addEventListener('change',e=>{
 $('reflectionToggle').addEventListener('change',e=>{
  reflectionsOn=e.target.checked;
  reflectionAge=999;
- waterM.uniforms.uReflect.value=(reflectionsOn&&reflectionReady)?.78:0;
+ waterM.uniforms.uReflect.value=(reflectionsOn&&reflectionReady)?.94:0;
  updateInfo(true);
 });
 $('physicalWeather').addEventListener('change',e=>{
@@ -2058,6 +2058,15 @@ $('rainStyle').addEventListener('change',e=>{rainStyle=e.target.value;updateInfo
 $('floraToggle').addEventListener('change',e=>setFloraVisible(e.target.checked));
 $('forestPack').addEventListener('change',e=>setForestCollection(e.target.value));
 $('graphicsQuality').addEventListener('change',e=>setGraphicsQuality(e.target.value));
+if($('windIntensity')){
+ $('windIntensity').value=String(windUserPower);
+ $('windIntensity').addEventListener('input',e=>{
+  windUserPower=clamp(Number(e.target.value)||0,0,100);
+  if($('windValue'))$('windValue').textContent=windUserPower+'%';
+  // Recalcula a direção, o efeito térmico e o movimento da vegetação.
+  atmosphereStep(.1);reflectionAge=999;updateInfo(true);
+ });
+}
 $('fogToggle').addEventListener('change',e=>{
  fogEnabled=e.target.checked;
  if(!fogEnabled)fogStrength=fogTarget=0;
@@ -2118,7 +2127,9 @@ function updateInfo(force){
  $('plantStats').textContent='🌱 Biomassa '+asPct(growthAvg)+'% · condição de crescimento '+asPct(healthAvg)+
   '% · principal limitante: '+SOIL_LIMITS[mainLimit]+' · pH '+(phAvg/size).toFixed(1)+' · salinidade '+asPct(salAvg)+'% · biota '+asPct(biotaAvg)+'%';
  $('windStatus').textContent='🍃 Vento '+atmWindMean.toFixed(2)+
-  ' (índice de jogo) · folhas '+(forestGroup.visible?'animadas na GPU':'floresta anterior')+
+  ' (índice de jogo) · potência '+windUserPower+'% · '+
+  (atmWindMean<.16?'aragem':atmWindMean<.46?'brisa':atmWindMean<.95?'moderado':atmWindMean<1.55?'forte':'rajadas intensas')+
+  ' · folhas '+(forestGroup.visible?'animadas na GPU':'floresta anterior')+
   ' · direção '+Math.round((atmWindHeading*180/Math.PI+360)%360)+'°'+
   ' · '+(climate==='storm'||stormActive()?'rajadas fortes':'rajadas variáveis');
  $('fogStatus').textContent='🌫 Neblina '+Math.round(fogStrength*100)+
@@ -2128,8 +2139,8 @@ function updateInfo(force){
  $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
  $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondas · '+foamCount+' manchas de espuma/sujeira';
   $('reflectionStats').textContent='Superfície '+VIS_NX+'×'+VIS_NZ+
-  ' · reflexos '+(reflectionsOn?(reflectionReady?'ativos':'preparando'):'desligados')+
-  ' · '+(mobile?'1 captura':'2 regiões')+' · '+reflectionFrames+' atualizações';
+  ' · espelho da câmera '+(reflectionsOn?(reflectionReady?'ativo':'preparando'):'desligado')+
+  ' · '+planarRT.width+'×'+planarRT.height+' · '+reflectionFrames+' capturas';
  $('climateStats').textContent='Céu: '+(weatherCfg?weatherCfg.name:'preparando')+
   (climateChoice==='auto'?' (automático)':'')+
   ' · '+Math.round((weatherCfg?weatherCfg.coverage:0)*100)+'% nuvens · sol e reflexos climáticos';
