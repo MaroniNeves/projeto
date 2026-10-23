@@ -7,7 +7,7 @@
 const T=window.THREE,api=window.arcanoWaterV1226,raw=window.ARCANO_ASSETS_V1232;
 const $=id=>document.getElementById(id);
 if(!T||!api||!raw){console.warn('[Arcano Ecologia] Cena ou pacote ainda não disponível.');return;}
-const NX=innerWidth<680?68:96,NZ=innerWidth<680?56:78,W=20,L=16,dx=W/(NX-1),dz=L/(NZ-1);
+const NX=innerWidth<680?136:192,NZ=innerWidth<680?112:156,W=40,L=32,dx=W/(NX-1),dz=L/(NZ-1);
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),rand=(seed)=>()=>((seed=(seed*1664525+1013904223)>>>0)/4294967296);
 const random=rand(6232026),cells=NX*NZ,cover=new Float32Array(cells),traffic=new Float32Array(cells),roadMask=new Float32Array(cells),riverMask=new Float32Array(cells);
 const green=new T.Color('#477e3d'),roadColor=new T.Color('#9e7954');
@@ -42,7 +42,7 @@ function height(x,z){
  return A*(1-a)*(1-b)+B*a*(1-b)+C*(1-a)*b+D*a*b;
 }
 const mobileDevice=innerWidth<680;
-const grassBudgets=mobileDevice?{high:14000,balanced:7800,low:1600}:{high:23000,balanced:13000,low:3200};
+const grassBudgets=mobileDevice?{high:20000,balanced:10000,low:2800}:{high:32000,balanced:17500,low:4500};
 let grassDrawn=0,lastGrassQuality='';
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
@@ -284,11 +284,11 @@ function grassShape(){
  // Passada 1: CAMADA BAIXA distribuída uniformemente por toda a área viva,
  // inclusive clareiras entre tufos altos. A cobertura não é sorteada em
  // grandes blocos vazios (erro da versão anterior).
- const cols=mobileDevice?142:190,rows=mobileDevice?112:152;
+ const cols=mobileDevice?190:260,rows=mobileDevice?156:216;
  const positions=[];
  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
-  const x=-9.45+(i+.5)/cols*18.9;
-  const z=-7.40+(j+.5)/rows*14.8,k=idx(x,z);
+  const x=-W*.48+(i+.5)/cols*W*.96;
+  const z=-L*.48+(j+.5)/rows*L*.96,k=idx(x,z);
   if(roadMask[k]>.18||riverMask[k]>.66||api.depth[k]>.038)continue;
   const health=clamp(cover[k]*(1-traffic[k]),0,1);
   if(health<.16)continue;
@@ -370,8 +370,8 @@ function spawnFallingLeaf(){
  const a=trees[Math.floor(random()*trees.length)];
  const width=clamp(a.crownWidth*.25,.20,.95),angle=random()*6.283;
  const radial=Math.sqrt(random())*width;
- const x=clamp(a.x+Math.cos(angle)*radial,-9.5,9.5);
- const z=clamp(a.z+Math.sin(angle)*radial,-7.5,7.5);
+ const x=clamp(a.x+Math.cos(angle)*radial,-W*.48,W*.48);
+ const z=clamp(a.z+Math.sin(angle)*radial,-L*.48,L*.48);
  const ground=height(x,z),startY=Math.max(ground+.22,
   (a.dropY||ground+2.3)-random()*.9);
  fallingLeaves.push({kind:treeLeafKind(a),x,z,y:startY,ground,
@@ -409,8 +409,8 @@ function animateLeafFall(dt){
   leaf.age+=dt;
   if(leaf.stage==='falling'){
    leaf.y-=dt*(.38+wind*.18);
-   leaf.x=clamp(leaf.x+dt*(wind*.06+Math.sin(leaf.phase+leaf.age*2)*.06),-9.7,9.7);
-   leaf.z=clamp(leaf.z+dt*Math.cos(leaf.phase+leaf.age*2)*.055,-7.7,7.7);
+   leaf.x=clamp(leaf.x+dt*(wind*.06+Math.sin(leaf.phase+leaf.age*2)*.06),-W*.49,W*.49);
+   leaf.z=clamp(leaf.z+dt*Math.cos(leaf.phase+leaf.age*2)*.055,-L*.49,L*.49);
    leaf.rotX+=dt*2.6;leaf.rotZ+=dt*1.8;leaf.turn+=dt*.6;
    leaf.ground=height(leaf.x,leaf.z);
    if(leaf.y<=leaf.ground+.02){
@@ -455,8 +455,8 @@ function rockShape(){
  const mat=material('rock');
  for(let i=0;i<45;i++){
   const physical=api.rockSolids[i%Math.max(1,api.rockSolids.length)];
-  const x=physical?physical.x:(random()-.5)*18.4;
-  const z=physical?physical.z:(random()-.5)*14.4,k=idx(x,z);
+  const x=physical?physical.x:(random()-.5)*W*.92;
+  const z=physical?physical.z:(random()-.5)*L*.92,k=idx(x,z);
   if(roadMask[k]>.65)continue;
   const key=names[i%names.length];const geom=meshLibrary[key];if(!geom)continue;
   const m=new T.Mesh(geom,mat.clone());m.name='Rocks.fbx '+key;
@@ -1000,8 +1000,8 @@ function moveAnimals(t){
      const nest=i%4===0||random()<.42,baseX=nest?c.x:foragingSite.x;
      const baseZ=nest?c.z:foragingSite.z,ang=random()*Math.PI*2;
      const radius=.08+random()*(nest?.35:1.10);
-     agent.targetX=clamp(baseX+Math.cos(ang)*radius,-9.45,9.45);
-     agent.targetZ=clamp(baseZ+Math.sin(ang)*radius,-7.40,7.40);
+     agent.targetX=clamp(baseX+Math.cos(ang)*radius,-W*.48,W*.48);
+     agent.targetZ=clamp(baseZ+Math.sin(ang)*radius,-L*.48,L*.48);
      agent.goalAt=t+4+random()*9;
     }
     const vx=agent.targetX-x,vz=agent.targetZ-z;
@@ -1243,7 +1243,7 @@ async function setup(){
  const mag=$('ecoMagnify');if(mag)mag.onchange=e=>{previewMagnification=e.target.checked?4:1;};
  const sim=$('ecoTraffic');if(sim)sim.onclick=()=>{
   for(let i=0;i<36;i++){
-   const x=-8+random()*16;
+   const x=-W*.42+random()*W*.84;
    trample(x,roadZ(x)+(random()-.5)*.8,.12);
   }
   status();
@@ -1255,7 +1255,7 @@ async function setup(){
   const c=colonies.find(x=>x.id===id);if(!c)return;
   // Resíduos orgânicos alimentam microrganismos e as forrageadoras reais.
   for(let j=-4;j<=4;j++)for(let i=-4;i<=4;i++){
-   const x=clamp(c.x+i*dx,-9.5,9.5),z=clamp(c.z+j*dz,-7.5,7.5);
+   const x=clamp(c.x+i*dx,-W*.48,W*.48),z=clamp(c.z+j*dz,-L*.48,L*.48);
    const k=idx(x,z),dist=Math.hypot(i,j);
    if(dist<1||dist>5||api.depth[k]>.07)continue;
    api.soilLitter[k]=clamp(api.soilLitter[k]+.035/(1+dist),0,1.8);
