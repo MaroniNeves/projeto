@@ -106,6 +106,24 @@ function generateFootprints(){
  return stamps;
 }
 let muddyFootprints=null;
+function markFootprint(x,z){
+ if(!muddyFootprints)return;
+ const k=idx(x,z),moist=api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]);
+ if(moist<.33||api.depth[k]>.045)return;
+ const o=new T.Object3D();
+ for(const offset of [-.09,.09]){
+  const fx=x+.048*(random()-.5),fz=z+offset;
+  o.position.set(fx,height(fx,fz)+.017,fz);
+  o.rotation.set(-Math.PI/2,0,random()*.36-.18);
+  o.scale.set(.85+random()*.45,1.1+random()*.45,1);o.updateMatrix();
+  footprintSites.push(o.matrix.clone());
+  if(footprintSites.length>160)footprintSites.shift();
+ }
+ for(let i=0;i<footprintSites.length;i++)muddyFootprints.setMatrixAt(i,footprintSites[i]);
+ muddyFootprints.count=footprintSites.length;
+ muddyFootprints.instanceMatrix.needsUpdate=true;
+ updateFootprints();
+}
 function updateFootprints(){
  if(!muddyFootprints)return;
  let wet=0;for(let k=0;k<cells;k+=7){
@@ -141,7 +159,7 @@ function initializeLandscape(){
    api.permeability[k]*=(1-roadMask[k]*.44);}
   const shade=.5+.5*Math.sin(x*.85+z*.34)*Math.cos(z*.6);
   const moist=api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]);
-  cover[k]=clamp(.56+.28*shade+.17*moist-roadMask[k]*.92-riverMask[k]*.92,0,1);
+  cover[k]=clamp(.77+.17*shade+.15*moist-roadMask[k]*.96-riverMask[k]*.91,0,1);
  }
  const geom=api.terrain.geometry,positionAttribute=geom.getAttribute('position');
  for(let k=0;k<cells;k++)positionAttribute.setY(k,api.soil[k]);
@@ -610,6 +628,7 @@ function moveAnimals(t){
 }
 function trample(x,z,weight=.22){
  if(!trampleEnabled)return;
+ markFootprint(x,z);
  const centerX=clamp(Math.round((x+W*.5)/dx),0,NX-1),centerZ=clamp(Math.round((z+L*.5)/dz),0,NZ-1);
  for(let j=-2;j<=2;j++)for(let i=-2;i<=2;i++){
   const ix=centerX+i,iz=centerZ+j;if(ix<0||iz<0||ix>=NX||iz>=NZ)continue;
@@ -629,6 +648,7 @@ function update(dt){
  if(grassAccumulator>.7){
   grassAccumulator=0;
   if(api.getGraphicsQuality()!==lastGrassQuality)applyGrassQuality();
+  updateFootprints();
   // Alimentação distribuída ao longo da entrada do canal.
   // A célula única forçada a 9 cm criava um disco azul desconectado no canto.
   // Adiciona pequenas parcelas sem substituir a profundidade existente.
