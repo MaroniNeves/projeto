@@ -7,9 +7,13 @@
 const T=window.THREE,api=window.arcanoWaterV1226,raw=window.ARCANO_ASSETS_V1232;
 const $=id=>document.getElementById(id);
 if(!T||!api||!raw){console.warn('[Arcano Ecologia] Cena ou pacote ainda não disponível.');return;}
-const NX=innerWidth<680?108:192,NZ=innerWidth<680?88:156,W=40,L=32,dx=W/(NX-1),dz=L/(NZ-1);
+// Área 10x e grade adaptativa compartilhada com a hidrologia.
+const NX=innerWidth<680?174:286,NZ=innerWidth<680?138:228,W=128,L=100,dx=W/(NX-1),dz=L/(NZ-1);
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),rand=(seed)=>()=>((seed=(seed*1664525+1013904223)>>>0)/4294967296);
-const random=rand(6232026),cells=NX*NZ,cover=new Float32Array(cells),traffic=new Float32Array(cells),roadMask=new Float32Array(cells),riverMask=new Float32Array(cells);
+const random=rand(6232026),cells=NX*NZ,cover=new Float32Array(cells),
+ traffic=new Float32Array(cells),roadMask=new Float32Array(cells),
+ riverMask=new Float32Array(cells),animalTrail=new Float32Array(cells),
+ compaction=new Float32Array(cells),lightField=new Float32Array(cells);
 const green=new T.Color('#477e3d'),roadColor=new T.Color('#9e7954');
 // Pequenas fontes renováveis de sementes e néctar das plantas; se esgotam
 // localmente quando as operárias forrageiam e se recuperam com vegetação viva.
@@ -42,7 +46,7 @@ function height(x,z){
  return A*(1-a)*(1-b)+B*a*(1-b)+C*(1-a)*b+D*a*b;
 }
 const mobileDevice=innerWidth<680;
-const grassBudgets=mobileDevice?{high:20000,balanced:10000,low:2800}:{high:32000,balanced:17500,low:4500};
+const grassBudgets=mobileDevice?{high:52000,balanced:25500,low:7500}:{high:85000,balanced:45000,low:13500};
 let grassDrawn=0,lastGrassQuality='';
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
@@ -284,7 +288,7 @@ function grassShape(){
  // Passada 1: CAMADA BAIXA distribuída uniformemente por toda a área viva,
  // inclusive clareiras entre tufos altos. A cobertura não é sorteada em
  // grandes blocos vazios (erro da versão anterior).
- const cols=mobileDevice?190:260,rows=mobileDevice?156:216;
+ const cols=mobileDevice?328:468,rows=mobileDevice?260:368;
  const positions=[];
  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
   const x=-W*.48+(i+.5)/cols*W*.96;
@@ -983,8 +987,14 @@ function visualizeAnimals(){
   const mesh=new T.InstancedMesh(geo,new T.MeshStandardMaterial({
    color:c.id%2?'#a3533b':'#49332b',roughness:1,metalness:0,side:T.DoubleSide}),max);
   mesh.name='Operárias · reconhecimento, coleta, retorno · colônia '+(c.id+1);
-  mesh.count=Math.min(max,Math.ceil(c.workers*.2));
-  mesh.frustumCulled=false;mesh.castShadow=false;animals.add(mesh);
+  mesh.count=0;
+  mesh.frustumCulled=false;mesh.castShadow=false;
+  // A InstancedMesh nasce com matrizes IDENTIDADE. Sem esta inicialização,
+  // uma formiga pode aparecer gigante no (0,0,0) enquanto o módulo carrega.
+  const hidden=new T.Matrix4().makeScale(.0000001,.0000001,.0000001);
+  hidden.setPosition(0,-500,0);
+  for(let instance=0;instance<max;instance++)mesh.setMatrixAt(instance,hidden);
+  mesh.instanceMatrix.needsUpdate=true;animals.add(mesh);
   // Os OBJ enviados são estáticos, sem clips rigados de morte.
   // O corpo morto será achatado e tombado antes de sumir.
   const cargo=new T.InstancedMesh(leafGeometry(),
