@@ -19,6 +19,28 @@ const green=new T.Color('#477e3d'),roadColor=new T.Color('#9e7954');
 // Pequenas fontes renováveis de sementes e néctar das plantas; se esgotam
 // localmente quando as operárias forrageiam e se recuperam com vegetação viva.
 const foodResources=new Float32Array(cells);
+// Clareiras de terra escavada: 0..255. Persistem junto aos formigueiros,
+// mas não eliminam cobertura verde nas outras áreas do mapa.
+const nestBareMask=new Uint8Array(cells);
+function paintNestBareSoil(x,z){
+ const radius=.91,inner=.52;
+ const i0=Math.max(0,Math.floor((x-radius+W*.5)/dx));
+ const i1=Math.min(NX-1,Math.ceil((x+radius+W*.5)/dx));
+ const j0=Math.max(0,Math.floor((z-radius+L*.5)/dz));
+ const j1=Math.min(NZ-1,Math.ceil((z+radius+L*.5)/dz));
+ for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){
+  const px=-W*.5+i*dx,pz=-L*.5+j*dz,k=j*NX+i;
+  const d=Math.hypot(px-x,pz-z);
+  if(d>=radius)continue;
+  const mask=clamp((radius-d)/(radius-inner),0,1);
+  const eased=mask*mask*(3-2*mask);
+  nestBareMask[k]=Math.max(nestBareMask[k],Math.round(255*eased));
+  cover[k]=Math.min(cover[k],1-eased);
+  foodResources[k]*=1-eased;
+ }
+ // Força uma atualização das instâncias sem esperar uma nova geração de grama.
+ grassRefreshRequested=true;
+}
 const realm=new T.Group();realm.name='V12.32 | Rio estrada grama e fauna do solo';api.scene.add(realm);
 const foliage=new T.Group(),rocks=new T.Group(),animals=new T.Group(),roads=new T.Group();
 foliage.name='Tufos reais de grama Quaternius';rocks.name='Cinco geometrias de pedras Rocks.fbx';
@@ -47,7 +69,7 @@ function height(x,z){
  return A*(1-a)*(1-b)+B*a*(1-b)+C*(1-a)*b+D*a*b;
 }
 const mobileDevice=innerWidth<680;
-const grassBudgets=mobileDevice?{high:150000,balanced:122000,low:42000}:{high:240000,balanced:190000,low:62000};
+const grassBudgets=mobileDevice?{high:260000,balanced:205000,low:70000}:{high:390000,balanced:315000,low:110000};
 let grassDrawn=0,lastGrassQuality='';
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
@@ -328,14 +350,14 @@ function grassShape(){
   if(!group){group={name,instances:[]};groups.set(key,group);}
   return group;
  }
- const lowBudget=Math.round(budget*.34),highBudget=budget-lowBudget;
+ const lowBudget=Math.round(budget*.55),highBudget=budget-lowBudget;
  const pool=[],color=new T.Color();
  let planted=0;
  function suitable(x,z){
   if(Math.abs(x)>W*.49||Math.abs(z)>L*.49)return null;
   const k=idx(x,z);
   if(fixedRoadMask[k]>.045||Math.abs(z-roadZ(x))<1.10||
-    riverMask[k]>.73||api.depth[k]>.068)return null;
+    riverMask[k]>.73||api.depth[k]>.068||nestBareMask[k]>20)return null;
   const life=clamp(cover[k]*(1-traffic[k])*
     (.5+.5*clamp(api.soilPlant[k],0,1)),0,1);
   if(life<.13)return null;
@@ -360,7 +382,7 @@ function grassShape(){
  // Cobertura irregular estratificada em TODA a área verde. As posições
  // são embaralhadas antes da criação para que Alta/Equilibrada/Baixa
  // preservem gramado em todos os lados, sem fileiras nem faixa vazia.
- const cellsTarget=Math.round(lowBudget*1.65);
+ const cellsTarget=Math.round(lowBudget*1.22);
  const cols=Math.ceil(Math.sqrt(cellsTarget*W/L));
  const rows=Math.ceil(cellsTarget/cols);
  const order=new Uint32Array(cols*rows);
@@ -392,7 +414,7 @@ function grassShape(){
   const biome=api.biomeField?.(base.x,base.z)||0;
   const groupSize=2+Math.floor(random()*3);
   for(let t=0;t<groupSize&&tall<highBudget;t++){
-   const angle=random()*6.283,rad=Math.sqrt(random())*.34;
+   const angle=random()*6.283,rad=Math.sqrt(random())*.39;
    const p=suitable(base.x+Math.cos(angle)*rad,
                      base.z+Math.sin(angle)*rad);
    if(!p)continue;
@@ -412,7 +434,7 @@ function grassShape(){
   m.frustumCulled=true;
   m.castShadow=false;m.receiveShadow=true;
   m.userData.planted=entries.length;
-  m.name='Grama setorizada V12.46 · '+group.name;
+  m.name='Grama setorizada densa V12.48 · '+group.name;
   for(let i=0;i<entries.length;i++){
    const p=entries[i];
    m.setMatrixAt(i,p.matrix);
@@ -426,7 +448,7 @@ function grassShape(){
   foliage.add(m);
  }
  applyGrassQuality();
- console.info('[Arcano V12.46] Gramado Quaternius em setores visíveis',
+ console.info('[Arcano V12.48] Gramado volumoso em todos os setores visíveis',
   {planted,chunks:groups.size,short:pool.length,tall,quality:lastGrassQuality});
 }
 // FOLHAS: pequena malha 3D low-poly de seis faces (nervura central elevada),
@@ -737,6 +759,7 @@ function distributeTasks(c){
 function nestSurface(c){
  const anchor=position(idx(c.x,c.z)),y=height(c.x,c.z);
  if(nestDisplays.has(c.id))return nestDisplays.get(c.id);
+ paintNestBareSoil(c.x,c.z);
  const g=new T.Group();g.name='Formigueiro colônia '+(c.id+1);g.position.set(c.x,y,c.z);
  const granules=new T.MeshStandardMaterial({color:'#98764e',roughness:1,metalness:0});
  const mound=new T.Mesh(new T.ConeGeometry(.18,.085,16,3),granules);
@@ -862,7 +885,7 @@ function lifeDay(days){
   const wear=Math.max(traffic[k],animalTrail[k]);
   const factor=clamp((wear-.18)/.65,0,1);
   roadMask[k]=Math.max(fixedRoadMask[k],factor*factor*(3-2*factor));
-  const permanent=fixedRoadMask[k]>.06;
+  const permanent=fixedRoadMask[k]>.06||nestBareMask[k]>105;
   const desired=permanent?0:clamp(growth*1.2-roadMask[k]*.93,0,1);
   if(permanent)cover[k]=0;
   else if(desired>cover[k])cover[k]=clamp(cover[k]+days*.014*growth,0,desired);
@@ -1370,7 +1393,7 @@ function moveAnimals(t){
   if(patch.index>=patch.mesh.count)continue;
   const k=patch.k,wear=Math.max(traffic[k],animalTrail[k]),c=cover[k];
   const hydro=api.depth[k]>.08?0:1;
-  const alive=fixedRoadMask[k]>.06?0:clamp((.26+.74*c)*(1-wear)*hydro,0,1);
+  const alive=fixedRoadMask[k]>.06?0:clamp((.26+.74*c)*(1-wear)*hydro*(1-nestBareMask[k]/255),0,1);
   const scale=alive>.11?(.62+.38*alive):.0001;
   if(Math.abs(scale-patch.lastScale)<.019)continue;
   patch.lastScale=scale;
@@ -1512,7 +1535,7 @@ function update(dt){
    const wear=Math.max(traffic[cell],animalTrail[cell]);
    const normalized=clamp((wear-.18)/.65,0,1);
    roadMask[cell]=Math.max(fixedRoadMask[cell],normalized*normalized*(3-2*normalized));
-   const isPermanentRoad=fixedRoadMask[cell]>.06;
+   const isPermanentRoad=fixedRoadMask[cell]>.06||nestBareMask[cell]>105;
    const desired=isPermanentRoad?0:clamp(.22+.87*suitability-roadMask[cell]*1.1,0,1);
    const growthRate=desired>cover[cell]?.0035*suitability:.028*roadMask[cell]+.001;
    cover[cell]=isPermanentRoad?0:clamp(cover[cell]+(desired-cover[cell])*growthRate*dtBio,0,1);
@@ -1656,7 +1679,7 @@ function updateColonyInspector(){
  ' · feromônios '+c.pheromones.reduce((a,v)=>a+v,0).toFixed(1);
 }
 async function setup(){
- await loadMeshes();initializeLandscape();grassShape();rockShape();setupLeafVisuals();setupFruits();initialColonies();visualizeAnimals();initializeLargeAnimalRoutes();
+ await loadMeshes();initializeLandscape();initialColonies();grassShape();rockShape();setupLeafVisuals();setupFruits();visualizeAnimals();initializeLargeAnimalRoutes();
  drawNestCutaway();hideDetachedAntModels();
  const board=$('ecoStatus');if(board)board.textContent='Pacotes enviados integrados: '+Object.keys(meshLibrary).length+' malhas · '+colonies.length+' colônias.';
  const s=$('ecoSpeed');if(s){s.oninput=e=>{biologicalSpeed=clamp(+e.target.value,1,200);$('ecoSpeedVal').textContent=biologicalSpeed+'×';};}
@@ -1737,7 +1760,7 @@ async function setup(){
  };
  const original=api.grass;if(original)original.visible=false;
  for(const obj of targetNativeGrass)obj.obj.visible=false;
- window.arcanoEcoV1232={active:true,cover,traffic,roadMask,animalTrail,riverMask,colonies,worms,
+ window.arcanoEcoV1232={active:true,cover,traffic,roadMask,animalTrail,riverMask,nestBareMask,colonies,worms,
   registerAnimalFootfall,movementCost,largeAnimals,
   trample,addCarcass,update,status,api,ready:()=>ready,setMagnification:n=>previewMagnification=n,
   getColony:id=>colonies.find(c=>c.id===id),getWorms:()=>worms,inspectColony:updateColonyInspector,
