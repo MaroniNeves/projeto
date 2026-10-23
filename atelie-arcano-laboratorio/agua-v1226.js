@@ -2024,9 +2024,10 @@ function updateInfo(force){
 }
 
 let last=performance.now();function loop(now){
- requestAnimationFrame(loop);const dt=Math.min((now-last)/1000,.065);last=now;
+ requestAnimationFrame(loop);const realDt=Math.min(Math.max((now-last)/1000,0),.8);
+ const dt=Math.min(realDt,.065);last=now;
  qualityFrames++;
- qualityWindow+=dt;
+ qualityWindow+=realDt;
  if(qualityWindow>=1.2){
   qualityFPS=Math.round(qualityFrames/qualityWindow);
   qualityWindow=0;qualityFrames=0;
