@@ -1169,7 +1169,7 @@ function applyForestVisibility(){
  // durante troca de qualidade, fallback e recarregamento de assets.
  grass.visible=false;grass.count=0;
  meadowMesh.visible=false;meadowMesh.count=0;
- sproutGroup.visible=forestGroup.visible?false:sproutGroup.visible;
+
 }
 
 // V12.26 / reparo de folhagens: vincula o PNG correto e conserva recortes alpha.
@@ -1421,8 +1421,8 @@ function forestStatus(state){
  ).map(a=>a.modelName)).size;
  if($('floraStatus'))$('floraStatus').textContent=
   '🌳 '+loadedSpecies+'/'+treeModels.length+' espécies de árvores carregadas · '+
-  nearRoadSpecies+' espécies perto da estrada · Mega '+megaModelsLoaded+'/12 · Ultimate '+
-  ultimateModelsLoaded+'/11 · '+state;
+  nearRoadSpecies+' espécies perto da estrada · Mega '+megaModelsLoaded+'/11 · Ultimate '+
+  ultimateModelsLoaded+'/10 · '+state;
 }
 function setFloraVisible(v){
  floraWanted=!!v;forestGroup.visible=floraWanted&&floraLoaded>0&&
