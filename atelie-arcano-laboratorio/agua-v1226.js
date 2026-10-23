@@ -662,11 +662,37 @@ function soilGranularTexture(profile,quality){
  tex.colorSpace=T.SRGBColorSpace;tex.anisotropy=quality==='high'?8:4;
  soilImageCache.set(key,tex);return tex;
 }
+// Poly Haven CC0 (1K albedo). Apenas o modo Alta solicita esses PNGs;
+// a textura granular offline permanece como fallback para rede lenta/Android.
+const soilRemoteTextures=new Map();
+const soilRemoteAsset={
+ arenoso:'dirt_aerial_02',argiloso:'dirt_floor',siltoso:'dirt_floor',
+ humoso:'dirt_aerial_02',aluvial:'dirt_aerial_02',pedregoso:'gravel_ground_01',
+ compactado:'dirt_floor',lateritico:'dirt_floor',calcario:'gravel_ground_01',
+ salino:'dirt_floor',franco:'dirt_floor'
+};
 function applySoilTexture(){
  if(!land?.material)return;
  const key=soilType==='mosaico'?'franco':soilType;
- const mapped=soilGranularTexture(key,graphicsQuality);
+ const local=soilGranularTexture(key,graphicsQuality);
+ const asset=soilRemoteAsset[key]||soilRemoteAsset.franco;
+ const remote=graphicsQuality==='high'?soilRemoteTextures.get(asset):null;
+ const mapped=remote?.isTexture?remote:local;
  if(land.material.map!==mapped){land.material.map=mapped;land.material.needsUpdate=true;}
+ if(graphicsQuality!=='high'||soilRemoteTextures.has(asset))return;
+ soilRemoteTextures.set(asset,null); // download apenas uma vez por material
+ const url='https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/'+
+  asset+'/'+asset+'_diff_1k.png';
+ new T.TextureLoader().load(url,tex=>{
+  tex.colorSpace=T.SRGBColorSpace;tex.wrapS=tex.wrapT=T.RepeatWrapping;
+  tex.repeat.set(5.2,4.1);tex.anisotropy=8;
+  soilRemoteTextures.set(asset,tex);
+  if(graphicsQuality==='high'&&(soilRemoteAsset[soilType]||soilRemoteAsset.franco)===asset){
+   land.material.map=tex;land.material.needsUpdate=true;
+  }
+ },undefined,error=>{
+  console.info('[Arcano] Solo CC0 remoto indisponível, usando textura local',asset,error);
+ });
 }
 const landG=grid(),landP=landG.attributes.position.array,colors=new Float32Array(size*3),dry=new Float32Array(size*3);
 for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
@@ -2721,8 +2747,11 @@ function updateInfo(force){
   '% · '+fogCause+' · solo '+Math.round(fogWetness*100)+
   '% úmido · ar-superfície/orvalho '+fogDewGap.toFixed(1)+' °C';
  $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
- $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+' m² · infiltração acumulada '+stats.infiltrated.toFixed(1)+' m³ · subterrâneo '+ground.toFixed(1)+' m³';
- $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+' partículas · '+ripples.length+' ondas · '+foamCount+' manchas de espuma/sujeira';
+ $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+
+  ' m² · infiltração '+stats.infiltrated.toFixed(1)+' m³ · aquífero '+ground.toFixed(1)+' m³';
+ $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+
+  ' partículas · '+ripples.length+' ondas · '+leafDripTotal+
+  ' gotas pós-chuva · '+foamCount+' manchas de espuma';
   $('reflectionStats').textContent='Superfície '+VIS_NX+'×'+VIS_NZ+
   ' · espelho da câmera '+(reflectionsOn?(reflectionReady?'ativo':'preparando'):'desligado')+
   ' · '+planarRT.width+'×'+planarRT.height+' · '+reflectionFrames+' capturas';
