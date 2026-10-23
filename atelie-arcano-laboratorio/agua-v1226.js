@@ -977,29 +977,44 @@ async function arcanoFoliageTexture(filename){
  }
  return arcanoFoliageTextureCache.get(filename);
 }
+// V12.27.3: o FBX pode usar Phong com brilho especular.
+ // Converter para Standard preserva a imagem mas remove o aspecto metálico.
 async function arcanoRepairForestMaterials(item,root){
  const leafFile=item.pack==='ultimate'?arcanoLeafFiles[item.name]:null;
  const leafMap=leafFile?await arcanoFoliageTexture(leafFile):null;
  root.traverse(obj=>{
   if(!obj.isMesh)return;
-  const materials=Array.isArray(obj.material)?obj.material:[obj.material];
-  for(const mat of materials){
-   if(!mat)return;
-   const materialName=(mat.name||'').toLowerCase();
-   const name=materialName+' '+(obj.name||'').toLowerCase();
-   const foliage=/(leaves|leaf|foliage|canopy|flower|petal|grass|fern|plant|bush)/.test(name);
-   const bark=/(bark|trunk|wood|stem|rock|stone)/.test(materialName);
-   if(!foliage||bark)continue;
-   if(item.pack==='ultimate'&&leafMap){
-    mat.map=leafMap;
-    if(mat.color)mat.color.set('#ffffff');
-   }else if(!mat.map&&mat.color){
-    mat.color.set(item.type==='flower'?'#a48d65':'#638344');
+  const source=Array.isArray(obj.material)?obj.material:[obj.material];
+  const fixed=source.map(old=>{
+   if(!old)return old;
+   const name=(old.name||'').toLowerCase();
+   const foliage=/(leaves|leaf|foliage|canopy|flower|petal|grass|fern|plant|bush)/.test(name)
+     && !/(bark|trunk|wood|stem|rock|stone)/.test(name);
+   const wood=/(bark|trunk|wood|stem|branch)/.test(name);
+   const rock=/(rock|stone)/.test(name);
+   let map=old.map||null;
+   if(foliage&&leafMap&&item.pack==='ultimate')map=leafMap;
+   const tint=map&&item.pack==='ultimate'?
+    new T.Color('#ffffff'):(old.color?.clone?.()||new T.Color('#ffffff'));
+   const material=new T.MeshStandardMaterial({
+    name:old.name||'',color:tint,map:map,
+    roughness:1,metalness:0,
+    transparent:false,opacity:1,depthWrite:true,
+    alphaTest:foliage?0.42:0,
+    side:foliage?T.DoubleSide:T.FrontSide,
+    fog:true,toneMapped:true,
+    vertexColors:!!old.vertexColors,flatShading:!!old.flatShading
+   });
+   material.userData={...old.userData,arcanoNaturalMaterial:true,
+    arcanoMaterialType:foliage?'leaf':wood?'wood':rock?'stone':'other'};
+   material.emissive.set('#000000');material.emissiveIntensity=0;
+   if(map){
+    map.colorSpace=T.SRGBColorSpace;
+    map.anisotropy=QUALITY_PRESETS[graphicsQuality].anisotropy;
    }
-   if(mat.map)mat.map.colorSpace=T.SRGBColorSpace;
-   mat.side=T.DoubleSide;mat.alphaTest=.42;mat.transparent=false;
-   mat.opacity=1;mat.depthWrite=true;mat.roughness=.94;mat.metalness=0;mat.needsUpdate=true;
-  }
+   return material;
+  });
+  obj.material=Array.isArray(obj.material)?fixed:fixed[0];
  });
 }
 
@@ -1450,7 +1465,9 @@ function placeForestModel(item,root){
    o.receiveShadow=false;
    const materials=Array.isArray(o.material)?o.material:[o.material];
    for(const mat of materials)if(mat){
-    mat.side=T.DoubleSide;mat.roughness=.90;mat.metalness=0;
+    const isLeaf=mat.userData?.arcanoMaterialType==='leaf';
+    mat.side=isLeaf?T.DoubleSide:T.FrontSide;
+    mat.roughness=1;mat.metalness=0;
    }
   });
   forestGroup.add(obj);
