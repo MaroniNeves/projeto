@@ -1996,7 +1996,7 @@ function placeForestModel(item,root){
    if(item.name!==first&&item.name!==second&&randomForest()<.82)continue;
   }
   if((item.type==='bush'||item.type==='flower'||item.type==='fern'||item.type==='grass')&&
-     pathDistance<(item.type==='bush'?1.10:item.type==='grass'?1.11:.72))continue;
+     pathDistance<(item.type==='bush'?1.70:item.type==='grass'?1.28:1.06))continue;
   if(item.type==='bush'||item.type==='flower'||item.type==='fern'){
    // Evitar que a base da planta afunde em barrancos de grande inclinação.
    const rr=item.type==='bush'?.24:.12;
@@ -2044,6 +2044,21 @@ function placeForestModel(item,root){
   // O fuste da árvore com copa vermelha/laranja fica perpendicular ao solo.
   // Rotação de vento é aplicada SOMENTE ao pivô de chão, não à pose FBX.
   const projected=Math.max(worldBox.max.x-worldBox.min.x,worldBox.max.z-worldBox.min.z);
+  // A exclusão pelo centro não bastava: arbustos largos e moitas
+  // invadiam a pista. Verificar o raio REAL da geometria já dimensionada
+  // e deixar espaço para a curva e para as bordas da estrada fixa.
+  if(item.type==='bush'||item.type==='flower'||item.type==='fern'||item.type==='grass'){
+   const radius=projected*.55+(item.type==='bush'?.48:.22);
+   const margin=item.type==='bush'?1.22:1.10;
+   if(pathDistance<margin+radius)continue;
+   // Verifica a curvatura do centro do caminho sob as extremidades da copa.
+   const rx=Math.min(radius,2.4);
+   const leftX=x-rx,rightX=x+rx;
+   const leftCenter=.92-.70*Math.sin(leftX*.47+.6)+.17*Math.sin(leftX*1.34);
+   const rightCenter=.92-.70*Math.sin(rightX*.47+.6)+.17*Math.sin(rightX*1.34);
+   if(Math.abs(z-leftCenter)<margin+radius*.72||
+      Math.abs(z-rightCenter)<margin+radius*.72)continue;
+  }
   // Importações com conversão de eixo inadequada geram toras horizontais
   // gigantes no lugar de árvores: não as espalhar pela cena.
   if((item.type==='tree'||item.type==='pine')&&projected>desired*2.35)continue;
@@ -2982,7 +2997,10 @@ function rebuild(){
    const greenAmount=clamp(.36+health*.59,0,.96);
    const saturated=clamp(soilMoisture[k]/Math.max(.001,soilCapacity[k]),0,1.4);
    const mud=clamp((saturated-.20)*.90+depth[k]*6.5,0,1);
-   const dirtAmount=clamp(road*(.99+.08*abrasion),0,.99);
+   // Pequena área marrom de solo escavado ao redor de cada formigueiro.
+   // Não é trilha de tráfego; fica descoberta mesmo quando a grama cresce.
+   const nestDirt=eco?.active?(eco.nestBareMask?.[k]||0)/255:0;
+   const dirtAmount=clamp(Math.max(road*(.99+.08*abrasion),nestDirt*.995),0,.995);
    // O mapa do chão é multiplicativo (tons ocres); verde vivo para que
    // o substrato sob a grama curta realmente PAREÇA um gramado contínuo.
    const meadow=biomeField(x,z);
@@ -3275,9 +3293,11 @@ function updateGame(dt){
   // Movimento RELATIVO à direção da câmera: a seta para cima sempre
   // avança na direção em que o jogador está olhando.
   const forward=-control.y,strafe=control.x;
-  const dirX=Math.sin(game.camHeading)*forward+
+  // Vetor direito é (-cos, sin) na câmera que olha para (sin, cos).
+  // O sinal antigo fazia joystick D/direita mover o jogador para esquerda.
+  const dirX=Math.sin(game.camHeading)*forward-
    Math.cos(game.camHeading)*strafe;
-  const dirZ=Math.cos(game.camHeading)*forward-
+  const dirZ=Math.cos(game.camHeading)*forward+
    Math.sin(game.camHeading)*strafe;
   const speed=control.run?3.25:1.65;
   const nx=clamp(game.position.x+dirX*dt*speed*length,-W*.48,W*.48);
