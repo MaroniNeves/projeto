@@ -7,7 +7,9 @@ const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max
 const diag=$('diag'),stage=$('stage');
 function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.26]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
-const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
+// V12.39: 2x largura e 2x profundidade = quatro vezes a superfície.
+// Densidade de células comparável ao mapa anterior, com LOD em aparelhos móveis.
+const mobile=innerWidth<680, NX=mobile?136:192,NZ=mobile?112:156,W=40,L=32;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
 const soil=new Float32Array(size),depth=new Float32Array(size),delta=new Float32Array(size),blocked=new Uint8Array(size);
 const soilMoisture=new Float32Array(size),soilCapacity=new Float32Array(size),deepWater=new Float32Array(size);
@@ -173,7 +175,7 @@ function elevation(x,z){
 }
 function rockAt(x,z){return rocks.some(([rx,rz,r])=>((x-rx)**2+(z-rz)**2)<(r*.86)**2);}
 const scene=new T.Scene();scene.background=new T.Color('#b6c6bc');scene.fog=new T.Fog('#b6c6bc',20,39);
-const camera=new T.PerspectiveCamera(46,1,.1,90);
+const camera=new T.PerspectiveCamera(46,1,.1,135);
 let renderer;
 try{renderer=new T.WebGLRenderer({canvas:stage,antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?1.26:1.65));renderer.outputColorSpace=T.SRGBColorSpace;
@@ -182,7 +184,7 @@ renderer.shadowMap.type=T.PCFSoftShadowMap;}catch(e){fail(e);return;}
 const ambientSky=new T.HemisphereLight('#fff5e4','#6c8378',1.45);scene.add(ambientSky);
 const light=new T.DirectionalLight('#fff0c8',1.60);light.position.set(-8,13,7);
 light.castShadow=true;light.shadow.mapSize.set(mobile?512:1024,mobile?512:1024);
-Object.assign(light.shadow.camera,{left:-13,right:13,top:13,bottom:-13,near:.5,far:38});
+Object.assign(light.shadow.camera,{left:-25,right:25,top:25,bottom:-25,near:.5,far:68});
 light.shadow.bias=-.00035;scene.add(light);
 // Atmosfera 3D: céu físico estilizado, disco solar e nuvens procedurais animadas.
 // O mesmo céu é visível à câmera do jogador e capturado pelos cubemaps da água.
@@ -205,7 +207,7 @@ const skyM=new T.ShaderMaterial({
  ].join('\n'),
  fragmentShader:"precision highp float;\nvarying vec3 vSkyDir;\nuniform float uTime,uCoverage,uWind,uSunVisible,uNight;\nuniform vec3 uTop,uHorizon,uCloud,uSunColor,uSunDir;\n// Camadas de estratocúmulos e cumulonimbus: sem sementes de círculos/bolinhas.\n// Ruído coerente com deformação, faixas frontais e erosão da silhueta.\nfloat hash21(vec2 p){\n vec3 q=fract(vec3(p.xyx)*.1031);\n q+=dot(q,q.yzx+33.33);\n return fract((q.x+q.y)*q.z);\n}\nfloat noise2(vec2 p){\n vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);\n float a=hash21(i),b=hash21(i+vec2(1.,0.));\n float c=hash21(i+vec2(0.,1.)),d=hash21(i+vec2(1.,1.));\n return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);\n}\nfloat fbm3(vec2 p){\n float v=0.;\n v+=.54*noise2(p);\n p=mat2(1.81,-.43,.43,1.81)*p+vec2(4.7,1.3);\n v+=.29*noise2(p);\n p=mat2(1.85,.38,-.38,1.85)*p+vec2(2.1,8.3);\n v+=.17*noise2(p);\n return v;\n}\nvoid main(){\n vec3 d=normalize(vSkyDir);\n float y=d.y;\n vec3 sky=mix(uHorizon,uTop,smoothstep(-.06,.82,y));\n sky=mix(sky,vec3(.008,.017,.041),uNight*.92);\n float horizonMist=1.-smoothstep(.01,.28,abs(y));\n sky=mix(sky,mix(uHorizon,vec3(.050,.075,.11),uNight),horizonMist*.22);\n float cover=clamp(uCoverage,0.,1.);\n float storm=smoothstep(.62,.97,cover);\n float t=uTime*(.016+.055*uWind);\n // Nuvens são largas no horizonte e mais altas no zênite.\n vec2 uv=d.xz*1.47/max(.19,y+.28);\n vec2 wind=vec2(t,-t*.32);\n // Ondas de turbulência quebram bordas e conectam volumes sem simetria circular.\n vec2 distortion=vec2(\n  fbm3(uv*.51+wind*.31),\n  fbm3(uv*.51+vec2(6.2,4.1)-wind*.24)\n );\n vec2 p=uv+wind*.38+(distortion-.5)*1.28;\n // Corpos largos e irregulares; cisalhamento horizontal aumenta no temporal.\n vec2 shear=vec2(p.x*.62+p.y*(.18+.34*storm),p.y*(.93-.34*storm));\n float macro=fbm3(shear*.64);\n float mid=fbm3(p*1.41+wind*.18);\n float erosion=noise2(p*4.1-wind*.62);\n float body=macro*.71+mid*.25+erosion*.04;\n float threshold=mix(.66,.35,cover);\n float bank=smoothstep(threshold-.065,threshold+.105,body);\n // Bordas quebradas por erosão fina, conservando miolo denso e sombreado.\n float edge=fbm3(p*3.7+wind*.13);\n bank*=mix(.76,1.,edge);\n // Nuvens altas, alongadas pelo vento e distribuídas em faixas largas.\n float bands=fbm3(vec2(p.x*.37+p.y*.25,p.y*1.09)+wind*.31);\n float shelf=smoothstep(.42,.67,bands+.14*(mid-.5));\n float frontal=storm*(.44+.46*shelf);\n // Cúmulos crescem e fundem-se nas formações da frente.\n float cloud=1.-(1.-bank)*(1.-frontal);\n float far=fbm3(uv*.86-wind*.22+vec2(12.4,-5.2));\n float distant=smoothstep(.48,.76,far)*(.07+.11*cover);\n float alpha=1.-(1.-cloud)*(1.-distant);\n alpha*=smoothstep(-.075,.15,y);\n alpha=clamp(alpha,0.,.995);\n // Base da frente fria mais pesada e escura; topo iluminado com gradiente\n // vertical, sem círculo branco de \"silver lining\" em todas as bordas.\n vec3 sunDir=normalize(uSunDir);\n float lightFacing=clamp(dot(d,sunDir)*.5+.5,0.,1.);\n float roof=smoothstep(.05,.65,y);\n float core=smoothstep(.42,.96,cloud);\n float shade=.73+.16*roof+.14*lightFacing+.10*(edge-.5)\n            -.15*core-.26*storm*(1.-roof);\n vec3 cloudColor=uCloud*clamp(shade,.35,1.05);\n cloudColor=mix(cloudColor,vec3(.029,.043,.074),uNight*.92);\n float contour=clamp((1.-cloud)*cloud*3.0,0.,1.);\n float sunRim=pow(max(dot(d,sunDir),0.),4.)*contour*uSunVisible;\n cloudColor+=uSunColor*sunRim*.23*(1.-storm*.83);\n sky=mix(sky,cloudColor,alpha);\n // A tempestade esconde o sol, mas deixa alguns volumes legíveis.\n float sunDot=max(dot(d,sunDir),0.);\n float sunDisc=smoothstep(.9987,.99985,sunDot);\n float glow=pow(sunDot,140.)*.23;\n sky+=uSunColor*(sunDisc*.90+glow)*uSunVisible*(1.-alpha*.97);\n float moonDot=max(dot(d,-sunDir),0.);\n float moonDisc=smoothstep(.9987,.99967,moonDot);\n float stars=step(.9945,hash21(floor(d.xz*314.0+d.y*219.0)))*\n             smoothstep(.5,.95,y);\n sky+=vec3(.47,.56,.70)*moonDisc*uNight*(1.-alpha*.92);\n sky+=vec3(.37,.48,.64)*stars*uNight*(1.-alpha*.94)*.32;\n gl_FragColor=vec4(clamp(sky,0.,1.),1.);\n}"
 });
-const skyDome=new T.Mesh(new T.SphereGeometry(40,mobile?36:56,mobile?24:36),skyM);
+const skyDome=new T.Mesh(new T.SphereGeometry(65,mobile?36:56,mobile?24:36),skyM);
 skyDome.name='Céu 3D V12.20 com estratocúmulos irregulares, frentes densas e bases sombreadas';
 skyDome.frustumCulled=false;skyDome.renderOrder=-10;scene.add(skyDome);
 let climate='partlyCloudy',climateChoice='auto',weatherCfg=null,weatherTime=0;
@@ -992,11 +994,11 @@ const forestGroup=new T.Group();forestGroup.name='Floresta Quaternius CC0 — pa
 const forestInstances=[],forestModels={};let floraWanted=true,floraLoaded=0,floraState='Preparando',forestCollection='mixed';
 let ultimateModelsLoaded=0,megaModelsLoaded=0;
 const FOREST_MODELS=[
- {name:'CommonTree_1',type:'tree',pack:'mega',mobile:5,desktop:10,height:4.4},
- {name:'CommonTree_2',type:'tree',pack:'mega',mobile:4,desktop:7,height:4.0},
+ {name:'CommonTree_1',type:'tree',pack:'mega',mobile:10,desktop:20,height:4.4},
+ {name:'CommonTree_2',type:'tree',pack:'mega',mobile:8,desktop:14,height:4.0},
  {name:'Pine_2',type:'pine',pack:'mega',mobile:2,desktop:3,height:4.7},
- {name:'Bush_Common_Flowers',type:'bush',pack:'mega',mobile:5,desktop:13,height:.95},
- {name:'Flower_3_Group',type:'flower',pack:'mega',mobile:8,desktop:23,height:.47},
+ {name:'Bush_Common_Flowers',type:'bush',pack:'mega',mobile:14,desktop:36,height:.95},
+ {name:'Flower_3_Group',type:'flower',pack:'mega',mobile:32,desktop:80,height:.47},
  {name:'Grass_Common_Short',type:'grass',pack:'mega',mobile:10,desktop:25,height:.29},
  {name:'Fern_1',type:'fern',pack:'mega',mobile:5,desktop:11,height:.61},
  {name:'Rock_Medium_2',type:'rock',pack:'mega',mobile:5,desktop:8,height:.70},
@@ -1007,9 +1009,9 @@ const FOREST_MODELS=[
  {name:'MapleTree_3',type:'tree',pack:'ultimate',mobile:3,desktop:6,height:4.4},
  {name:'NormalTree_2',type:'tree',pack:'ultimate',mobile:3,desktop:6,height:4.8},
  {name:'PineTree_2',type:'pine',pack:'ultimate',mobile:1,desktop:3,height:5.0},
- {name:'Bush_Large_Flowers',type:'bush',pack:'ultimate',mobile:5,desktop:11,height:1.10},
- {name:'Flower_1_Clump',type:'flower',pack:'ultimate',mobile:9,desktop:20,height:.46},
- {name:'Plant_Flowers',type:'flower',pack:'ultimate',mobile:6,desktop:14,height:.51},
+ {name:'Bush_Large_Flowers',type:'bush',pack:'ultimate',mobile:14,desktop:32,height:1.10},
+ {name:'Flower_1_Clump',type:'flower',pack:'ultimate',mobile:32,desktop:72,height:.46},
+ {name:'Plant_Flowers',type:'flower',pack:'ultimate',mobile:24,desktop:56,height:.51},
  {name:'Grass_Large_Extruded',type:'grass',pack:'ultimate',mobile:8,desktop:20,height:.35},
  {name:'Rock_3',type:'rock',pack:'ultimate',mobile:3,desktop:7,height:.83},
  {name:'Rock_5',type:'rock',pack:'ultimate',mobile:3,desktop:6,height:.62}
