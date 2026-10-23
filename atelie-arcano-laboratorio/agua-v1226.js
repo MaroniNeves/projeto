@@ -2988,11 +2988,49 @@ function tapAdd(event){
   for(let i=0;i<25;i++){const a=random()*Math.PI*2,r=random()*.6;add(p.x+Math.cos(a)*r,p.z+Math.sin(a)*r,.105);}
  rebuild();updateInfo(true);}
 }
-stage.addEventListener('pointerdown',e=>{drag=true;moved=false;prevX=e.clientX;prevY=e.clientY;try{stage.setPointerCapture(e.pointerId);}catch(_){}});
-stage.addEventListener('pointermove',e=>{if(!drag)return;const a=e.clientX-prevX,b=e.clientY-prevY;if(Math.abs(a)+Math.abs(b)>3)moved=true;
- yaw-=a*.006;pitch=clamp(pitch+b*.004,.22,1.46);prevX=e.clientX;prevY=e.clientY;});
-stage.addEventListener('pointerup',e=>{if(drag&&!moved)tapAdd(e);drag=false;});
-stage.addEventListener('pointercancel',()=>drag=false);
+// Modo caminhada: com o dedo pressionado, cada passo afeta a vegetação,
+// compacta o solo e deixa marcas SOMENTE quando a lama pode retê-las.
+// Em modo normal, o mesmo gesto continua rotacionando a câmera.
+const pressedPointers=new Set(),ecoWalkRay=new T.Raycaster(),ecoWalkPos=new T.Vector2();
+let lastEcoWalkStamp=0,lastEcoWalkX=NaN,lastEcoWalkZ=NaN;
+function paintWalkingStep(e){
+ if(!$('ecoWalkMode')?.checked||!window.arcanoEcoV1232?.active)return false;
+ if(pressedPointers.size>1)return true;
+ const rect=stage.getBoundingClientRect();
+ ecoWalkPos.set((e.clientX-rect.left)/Math.max(1,rect.width)*2-1,
+  -(e.clientY-rect.top)/Math.max(1,rect.height)*2+1);
+ ecoWalkRay.setFromCamera(ecoWalkPos,camera);
+ const hit=ecoWalkRay.intersectObject(land,false)[0];
+ if(!hit)return true;
+ const p=hit.point,now=performance.now();
+ const distance=Math.hypot(p.x-lastEcoWalkX,p.z-lastEcoWalkZ);
+ if(now-lastEcoWalkStamp>145&&(!Number.isFinite(distance)||distance>.12)){
+  window.arcanoEcoV1232.trample(p.x,p.z,.19);
+  lastEcoWalkX=p.x;lastEcoWalkZ=p.z;lastEcoWalkStamp=now;
+ }
+ return true;
+}
+stage.addEventListener('pointerdown',e=>{
+ pressedPointers.add(e.pointerId);drag=true;moved=false;
+ prevX=e.clientX;prevY=e.clientY;
+ lastEcoWalkX=NaN;lastEcoWalkZ=NaN;
+ if(paintWalkingStep(e))moved=true;
+ try{stage.setPointerCapture(e.pointerId);}catch(_){}
+});
+stage.addEventListener('pointermove',e=>{
+ if(!drag)return;
+ if(paintWalkingStep(e)){moved=true;prevX=e.clientX;prevY=e.clientY;return;}
+ const a=e.clientX-prevX,b=e.clientY-prevY;
+ if(Math.abs(a)+Math.abs(b)>3)moved=true;
+ yaw-=a*.006;pitch=clamp(pitch+b*.004,.22,1.46);
+ prevX=e.clientX;prevY=e.clientY;
+});
+stage.addEventListener('pointerup',e=>{
+ pressedPointers.delete(e.pointerId);
+ if(drag&&!moved)tapAdd(e);
+ drag=false;
+});
+stage.addEventListener('pointercancel',e=>{pressedPointers.delete(e.pointerId);drag=false;});
 stage.addEventListener('wheel',e=>{e.preventDefault();radius=clamp(radius+Math.sign(e.deltaY)*1.5,11,34);},{passive:false});
 stage.addEventListener('touchmove',e=>{if(e.touches.length!==2){pinch=0;return;}
  const a=e.touches[0],b=e.touches[1],dist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
