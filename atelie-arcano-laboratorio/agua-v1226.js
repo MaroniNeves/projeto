@@ -1965,6 +1965,15 @@ function placeForestModel(item,root){
   const roadCenter=.92-.70*Math.sin(x*.47+.6)+.17*Math.sin(x*1.34);
   const pathDistance=Math.abs(z-roadCenter);
   if((item.type==='tree'||item.type==='pine')&&pathDistance<1.16)continue;
+  // Cada trecho curto da estrada reserva espaço para OUTRA espécie.
+  // Isso impede que CommonTree (carregada primeiro) ocupe todos os
+  // pontos visíveis antes da chegada dos bordos, bétulas e pinheiros.
+  if((item.type==='tree'||item.type==='pine')&&pathDistance<5.0){
+   const roadsideSpecies=['CommonTree_1','BirchTree_1','MapleTree_3',
+    'CommonTree_2','NormalTree_2','BirchTree_3','PineTree_2','Pine_2'];
+   const slot=(Math.floor((x+W*.49)/3.6)+(z>roadCenter?3:0))%roadsideSpecies.length;
+   if(roadsideSpecies[slot]!==item.name&&randomForest()<.96)continue;
+  }
   if((item.type==='bush'||item.type==='flower'||item.type==='fern'||item.type==='grass')&&
      pathDistance<(item.type==='bush'?1.10:item.type==='grass'?1.11:.72))continue;
   if(item.type==='bush'||item.type==='flower'||item.type==='fern'){
@@ -3129,11 +3138,220 @@ function resize(){
  const w=innerWidth,h=innerHeight;
  renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
 }
+
+/* V12.44: terceira pessoa só quando Jogar está ativo.
+   Referência 3D pública: three.js Xbot.glb (idle/walk/run).
+   Um manequim procedural leve funciona caso o GLB esteja offline. */
+const game={
+ active:false,root:null,character:null,mixer:null,actions:{},animation:'',
+ heading:Math.PI,position:new T.Vector3(),camHeading:Math.PI,
+ input:{x:0,y:0,run:false},keys:new Set(),touch:false,
+ elapsed:0,steps:0,loading:false,hasModel:false,openedFullscreen:false
+};
+function gameStatus(message){
+ if($('gameStatus'))$('gameStatus').textContent=message;
+}
+function gameFallback(){
+ const g=new T.Group(),cloth=new T.MeshStandardMaterial({color:'#4b4e3c',roughness:1,metalness:0});
+ const skin=new T.MeshStandardMaterial({color:'#ac8d71',roughness:1,metalness:0});
+ const pants=new T.MeshStandardMaterial({color:'#39372f',roughness:1,metalness:0});
+ function part(name,material,w,h,d,x,y,z){
+  const mesh=new T.Mesh(new T.BoxGeometry(w,h,d),material);
+  mesh.name=name;mesh.position.set(x,y,z);g.add(mesh);return mesh;
+ }
+ part('corpo',cloth,.53,.66,.29,0,1.05,0);
+ part('cabeça',skin,.29,.32,.29,0,1.59,0);
+ const leftArm=part('braço esquerdo',cloth,.17,.63,.19,-.38,1.02,0);
+ const rightArm=part('braço direito',cloth,.17,.63,.19,.38,1.02,0);
+ const leftLeg=part('perna esquerda',pants,.20,.73,.24,-.14,.36,0);
+ const rightLeg=part('perna direita',pants,.20,.73,.24,.14,.36,0);
+ g.userData.limbs={leftArm,rightArm,leftLeg,rightLeg};
+ return g;
+}
+async function loadGameCharacter(){
+ if(game.loading||game.hasModel)return;
+ game.loading=true;
+ gameStatus('Carregando personagem 3D…');
+ try{
+  const {GLTFLoader}=await import('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js');
+  const gltf=await new GLTFLoader().loadAsync(
+   'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Xbot.glb'
+  );
+  const model=gltf.scene;
+  model.updateMatrixWorld(true);
+  const box=new T.Box3().setFromObject(model),sz=box.getSize(new T.Vector3());
+  const length=Math.max(.001,sz.y),center=box.getCenter(new T.Vector3());
+  model.scale.multiplyScalar(1.73/length);
+  model.position.set(-center.x*model.scale.x,-box.min.y*model.scale.y,-center.z*model.scale.z);
+  model.traverse(o=>{
+   if(o.isMesh||o.isSkinnedMesh){o.castShadow=false;o.receiveShadow=false;}
+  });
+  const old=game.character;
+  game.root.add(model);if(old)game.root.remove(old);
+  game.character=model;
+  game.mixer=new T.AnimationMixer(model);
+  game.actions={};
+  for(const clip of gltf.animations){
+   const label=clip.name.toLowerCase();
+   if(/walk/.test(label))game.actions.walk=game.mixer.clipAction(clip);
+   if(/run/.test(label))game.actions.run=game.mixer.clipAction(clip);
+   if(/idle/.test(label))game.actions.idle=game.mixer.clipAction(clip);
+  }
+  game.animation='';game.hasModel=true;
+  chooseGameAnimation('idle');
+  gameStatus('Personagem carregado · WASD ou direcional');
+ }catch(error){
+  console.warn('[Arcano] Manequim de reserva no modo Jogar:',error);
+  gameStatus('Manequim simples · modo offline');
+ }finally{game.loading=false;}
+}
+function chooseGameAnimation(name){
+ if(!game.mixer||game.animation===name)return;
+ const next=game.actions[name]||game.actions.walk||game.actions.idle;
+ if(!next)return;
+ const prev=game.actions[game.animation];
+ if(prev&&prev!==next)prev.fadeOut(.20);
+ next.reset().fadeIn(.20).play();game.animation=name;
+}
+function gameInput(){
+ let x=game.input.x,y=game.input.y;
+ if(game.keys.has('a')||game.keys.has('arrowleft'))x-=1;
+ if(game.keys.has('d')||game.keys.has('arrowright'))x+=1;
+ if(game.keys.has('w')||game.keys.has('arrowup'))y-=1;
+ if(game.keys.has('s')||game.keys.has('arrowdown'))y+=1;
+ const norm=Math.max(1,Math.hypot(x,y));
+ return {x:x/norm,y:y/norm,run:game.input.run||game.keys.has('shift')};
+}
+function updateGame(dt){
+ if(!game.active||!game.root)return;
+ const control=gameInput(),length=Math.hypot(control.x,control.y);
+ if(length>.08){
+  // Mapa visto por trás: joystick para cima caminha para Z negativo.
+  const angle=Math.atan2(control.x,-control.y);
+  const dirX=Math.sin(angle),dirZ=-Math.cos(angle);
+  const speed=control.run?3.25:1.65;
+  const nx=clamp(game.position.x+dirX*dt*speed*length,-W*.48,W*.48);
+  const nz=clamp(game.position.z+dirZ*dt*speed*length,-L*.48,L*.48);
+  const y=terrainContact(nx,nz),oldY=terrainContact(game.position.x,game.position.z);
+  // Impedir passagem por rochas, troncos e água profunda/encostas altas.
+  if(Math.abs(y-oldY)<.43&&!rockAt(nx,nz)&&sample(depth,nx,nz)<.18){
+   const blockedTree=forestInstances.some(a=>
+    (a.type==='tree'||a.type==='pine')&&
+    Math.pow(a.x-nx,2)+Math.pow(a.z-nz,2)<.19);
+   if(!blockedTree){game.position.x=nx;game.position.z=nz;}
+  }
+  const newHeading=Math.atan2(dirX,dirZ);
+  game.heading+=Math.atan2(Math.sin(newHeading-game.heading),
+   Math.cos(newHeading-game.heading))*Math.min(1,dt*8);
+  game.elapsed+=dt*speed*length;
+  if(game.elapsed>1.1){
+   game.elapsed=0;game.steps++;
+   window.arcanoEcoV1232?.trample?.(game.position.x,game.position.z,.10);
+  }
+ }
+ game.position.y=terrainContact(game.position.x,game.position.z);
+ game.root.position.copy(game.position);
+ game.root.rotation.y=game.heading;
+ const anim=length>.1?(control.run?'run':'walk'):'idle';
+ chooseGameAnimation(anim);
+ if(game.mixer)game.mixer.update(Math.min(dt,.065));
+ else if(game.character?.userData.limbs){
+  const parts=game.character.userData.limbs,t=performance.now()*.008;
+  const gait=length?Math.sin(t*(control.run?2.2:1.4))*.48*length:0;
+  parts.leftLeg.rotation.x=gait;
+  parts.rightLeg.rotation.x=-gait;
+  parts.leftArm.rotation.x=-gait*.65;
+  parts.rightArm.rotation.x=gait*.65;
+ }
+}
+function applyGameCamera(){
+ const goal=game.position;
+ // Câmera de terceira pessoa: sempre atrás do personagem.
+ game.camHeading+=Math.atan2(Math.sin(game.heading-game.camHeading),
+  Math.cos(game.heading-game.camHeading))*.08;
+ const behind=new T.Vector3(-Math.sin(game.camHeading)*4.7,2.90,
+  -Math.cos(game.camHeading)*4.7);
+ const cameraGoal=new T.Vector3(goal.x+behind.x,
+   Math.max(terrainContact(goal.x+behind.x,goal.z+behind.z)+1.4,goal.y+behind.y),
+   goal.z+behind.z);
+ camera.position.lerp(cameraGoal,.22);
+ camera.lookAt(goal.x,goal.y+1.18,goal.z);
+}
+async function setPlayActive(active){
+ if(game.active===active)return;
+ game.active=active;
+ document.body.classList.toggle('play-active',active);
+ if($('gameHUD'))$('gameHUD').setAttribute('aria-hidden',String(!active));
+ game.keys.clear();game.input.x=0;game.input.y=0;game.input.run=false;
+ if(active){
+  if(!game.root){
+   game.root=new T.Group();game.root.name='Personagem jogável';
+   game.character=gameFallback();game.root.add(game.character);scene.add(game.root);
+   game.position.set(0,terrainContact(0,.92),.92);
+   game.heading=Math.PI;game.camHeading=Math.PI;
+  }
+  game.root.visible=true;
+  // Fullscreen e rotação são tentativas; o navegador pode negar.
+  try{
+   if(!document.fullscreenElement&&document.documentElement.requestFullscreen){
+    await document.documentElement.requestFullscreen();
+    game.openedFullscreen=true;
+   }
+  }catch(error){console.info('[Arcano] Tela cheia não autorizada:',error);}
+  try{await screen.orientation?.lock?.('landscape');}
+  catch(error){console.info('[Arcano] Gire o celular manualmente:',error);}
+  loadGameCharacter();
+ }else{
+  if(game.root)game.root.visible=false;
+  if(game.openedFullscreen&&document.fullscreenElement){
+   try{await document.exitFullscreen();}catch(_){}
+  }
+  game.openedFullscreen=false;
+  try{screen.orientation?.unlock?.();}catch(_){}
+  if($('gameStick'))$('gameStick').style.transform='translate(0,0)';
+ }
+}
+if($('playEntry'))$('playEntry').addEventListener('click',()=>setPlayActive(true));
+if($('gameExit'))$('gameExit').addEventListener('click',()=>setPlayActive(false));
+window.addEventListener('keydown',ev=>{
+ if(!game.active)return;
+ const key=ev.key.toLowerCase();
+ if(key==='escape'){setPlayActive(false);ev.preventDefault();return;}
+ if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','shift',' '].includes(key)){
+  game.keys.add(key);ev.preventDefault();
+ }
+});
+window.addEventListener('keyup',ev=>game.keys.delete(ev.key.toLowerCase()));
+window.addEventListener('blur',()=>{game.keys.clear();game.input.x=game.input.y=0;game.input.run=false;});
+if($('gameJoystick')){
+ const pad=$('gameJoystick'),nub=$('gameStick');
+ const touchMove=ev=>{
+  const r=pad.getBoundingClientRect();
+  const x=ev.clientX-(r.left+r.width/2),y=ev.clientY-(r.top+r.height/2);
+  const limit=r.width*.31,dist=Math.max(1,Math.hypot(x,y));
+  const amount=Math.min(1,dist/limit);
+  game.input.x=x/dist*amount;game.input.y=y/dist*amount;
+  nub.style.transform='translate('+Math.round(game.input.x*limit)+'px,'+
+   Math.round(game.input.y*limit)+'px)';
+ };
+ pad.addEventListener('pointerdown',ev=>{if(!game.active)return;game.touch=true;pad.setPointerCapture(ev.pointerId);touchMove(ev);});
+ pad.addEventListener('pointermove',ev=>{if(game.touch)touchMove(ev);});
+ const end=()=>{game.touch=false;game.input.x=game.input.y=0;nub.style.transform='translate(0,0)';};
+ pad.addEventListener('pointerup',end);pad.addEventListener('pointercancel',end);
+}
+if($('gameRun')){
+ const b=$('gameRun');
+ b.addEventListener('pointerdown',ev=>{b.setPointerCapture(ev.pointerId);game.input.run=true;});
+ b.addEventListener('pointerup',()=>game.input.run=false);
+ b.addEventListener('pointercancel',()=>game.input.run=false);
+}
+
 let yaw=.83,pitch=.79,radius=39,drag=false,moved=false,prevX=0,prevY=0,pinch=0;
 let pinchX=0,pinchY=0;
 const target=new T.Vector3(0,-.12,0);
 let lastViewVisibilityUpdate=0;
 function setView(){
+ if(game.active){applyGameCamera();return;}
  camera.position.set(target.x+radius*Math.cos(pitch)*Math.sin(yaw),target.y+radius*Math.sin(pitch),target.z+radius*Math.cos(pitch)*Math.cos(yaw));
  camera.lookAt(target);
  // Árvores fora do alcance deixam de gerar draw calls; atualizar devagar
@@ -3144,6 +3362,7 @@ function setView(){
  }
 }
 function tapAdd(event){
+ if(game.active)return;
  const rect=stage.getBoundingClientRect(),mouse=new T.Vector2((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
  const ray=new T.Raycaster();ray.setFromCamera(mouse,camera);const found=ray.intersectObject(land);
  if(found.length){
@@ -3182,6 +3401,7 @@ function paintWalkingStep(e){
  return true;
 }
 stage.addEventListener('pointerdown',e=>{
+ if(game.active)return;
  pressedPointers.add(e.pointerId);drag=true;moved=false;
  prevX=e.clientX;prevY=e.clientY;
  lastEcoWalkX=NaN;lastEcoWalkZ=NaN;
@@ -3189,7 +3409,7 @@ stage.addEventListener('pointerdown',e=>{
  try{stage.setPointerCapture(e.pointerId);}catch(_){}
 });
 stage.addEventListener('pointermove',e=>{
- if(!drag)return;
+ if(game.active||!drag)return;
  if(pressedPointers.size>1){moved=true;return;} // multitoque: panorâmica e zoom
  if(paintWalkingStep(e)){moved=true;prevX=e.clientX;prevY=e.clientY;return;}
  const a=e.clientX-prevX,b=e.clientY-prevY;
@@ -3198,18 +3418,21 @@ stage.addEventListener('pointermove',e=>{
  prevX=e.clientX;prevY=e.clientY;
 });
 stage.addEventListener('pointerup',e=>{
+ if(game.active)return;
  pressedPointers.delete(e.pointerId);
  if(drag&&!moved)tapAdd(e);
  drag=false;
 });
 stage.addEventListener('pointercancel',e=>{pressedPointers.delete(e.pointerId);drag=false;});
 stage.addEventListener('wheel',e=>{
+ if(game.active)return;
  e.preventDefault();
  // Roda: zoom. Shift+roda: desloca pelo mapa grande.
  if(e.shiftKey)target.z=clamp(target.z+Math.sign(e.deltaY)*radius*.07,-L*.42,L*.42);
  else radius=clamp(radius+Math.sign(e.deltaY)*Math.max(1.2,radius*.095),9,135);
 },{passive:false});
 stage.addEventListener('touchmove',e=>{
+ if(game.active)return;
  if(e.touches.length!==2){pinch=0;return;}
  e.preventDefault();
  const a=e.touches[0],b=e.touches[1];
@@ -3390,6 +3613,7 @@ function updateInfo(force){
 
 let last=performance.now();function loop(now){
  requestAnimationFrame(loop);const dt=Math.min((now-last)/1000,.065);last=now;
+ updateGame(dt);
  if(!paused&&!document.hidden){
   time+=dt*timeScale;visualTime+=dt*(1+.16*Math.log2(timeScale));
   updateAtmosphere(dt);
