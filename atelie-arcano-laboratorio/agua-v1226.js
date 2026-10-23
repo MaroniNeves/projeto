@@ -3668,7 +3668,7 @@ function updateInfo(force){
 
 let last=performance.now();const gamePerf={elapsed:0,frames:0,lastFps:0};
 function loop(now){
- requestAnimationFrame(loop);const dt=Math.min((now-last)/1000,.065);last=now;
+ requestAnimationFrame(loop);const rawDt=Math.max(0,(now-last)/1000),dt=Math.min(rawDt,.065);last=now;
  updateGame(dt);
  if(!paused&&!document.hidden){
   time+=dt*timeScale;visualTime+=dt*(1+.16*Math.log2(timeScale));
@@ -3695,7 +3695,7 @@ function loop(now){
   updateInfo(false);
  }
  setView();renderer.render(scene,camera);
- gamePerf.elapsed+=dt;gamePerf.frames++;
+ gamePerf.elapsed+=rawDt;gamePerf.frames++;
  if(gamePerf.elapsed>=1.25){
   gamePerf.lastFps=Math.round(gamePerf.frames/gamePerf.elapsed);
   const info=renderer.info.render;
