@@ -994,7 +994,8 @@ async function arcanoRepairForestMaterials(item,root){
   const fixed=source.map(old=>{
    if(!old)return old;
    const name=(old.name||'').toLowerCase();
-   const foliage=/(leaves|leaf|foliage|canopy|flower|petal|grass|fern|plant|bush)/.test(name)
+   const visualName=name+' '+(obj.name||'').toLowerCase();
+   const foliage=/(leaves|leaf|foliage|canopy|flower|petal|grass|fern|plant|bush)/.test(visualName)
      && !/(bark|trunk|wood|stem|rock|stone)/.test(name);
    const wood=/(bark|trunk|wood|stem|branch)/.test(name);
    const rock=/(rock|stone)/.test(name);
@@ -1127,14 +1128,16 @@ function applyQualityMaterials(){
 }
 function updateGraphicsStatus(){
  if(!$('qualityStats'))return;
- const q=QUALITY_PRESETS[graphicsQuality];
+ const q=QUALITY_PRESETS[graphicsQuality],resolution=arcanoBarkResolution();
  $('qualityStats').textContent='🎨 '+q.label+
   ' · tela '+Math.min(devicePixelRatio||1,mobile?q.mobilePixel:q.desktopPixel).toFixed(2)+'×'+
   ' · folhagem '+Math.round(q.small*100)+'%'+
   ' · sombras '+(mobile?q.shadowsMobile:q.shadowsDesktop)+'px'+
-  (graphicsQuality==='high'?' · cascas originais '+originalsReady+
-    (originalDetailLoading.size?' (carregando)':'')+
-    (originalsUnavailable?' · algumas indisponíveis':''):' · PNGs de folhas originais preservados');
+  ' · cascas originais '+originalsReady+
+  (resolution?' ('+resolution+'px)': ' (reserva leve)')+
+  (originalDetailLoading.size?' · baixando':'')+
+  (originalsUnavailable?' · algumas indisponíveis':'')+
+  ' · madeira fosca, metalness 0';
 }
 function setGraphicsQuality(next){
  graphicsQuality=QUALITY_PRESETS[next]?next:'balanced';
