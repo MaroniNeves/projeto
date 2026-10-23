@@ -1,4 +1,4 @@
-/* Ateliê Arcano V12.33 — gramados densos e terreno sem piscadas.
+/* Ateliê Arcano V12.36 — folhas, fauna na chuva, túneis vivos e ponte ancorada.
  * Malhas FBX/OBJ compactadas dos arquivos do usuário; não simula parâmetros de
  * campo cientificamente calibrados. Conserva modelos invisíveis fora da lupa.
  */
