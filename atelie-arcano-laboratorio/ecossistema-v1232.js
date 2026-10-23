@@ -283,6 +283,135 @@ function grassShape(){
  for(const mesh of meshes.values())mesh.instanceMatrix.needsUpdate=true;
  applyGrassQuality();
 }
+// FOLHAS: pequena malha 3D low-poly de seis faces (nervura central elevada),
+// nas cores dos modelos Quaternius já carregados. O próprio MegaKit/Ultimate
+// possui texturas de folha; este fragmento usa geometria pequena isolada para
+// queda individual sem carregar centenas de FBX/GLB adicionais.
+const fallingLeaves=[],leafLitterField=new Float32Array(cells);
+const leafMeshes=[],leafGroup=new T.Group();
+leafGroup.name='Queda de folhas, serrapilheira e decomposição';realm.add(leafGroup);
+let leafClock=0,leafVisualClock=0,leafDeposited=0,leafCollected=0;
+function leafGeometry(){
+ const geo=new T.BufferGeometry();
+ const v=[
+  0,0,-.08, -.039,0,-.018, 0,.012,.020,
+  0,0,-.08,0,.012,.020,.039,0,-.018,
+  -.039,0,-.018,-.049,0,.052,0,.012,.020,
+  0,.012,.020,-.049,0,.052,0,0,.092,
+  0,.012,.020,0,0,.092,.049,0,.052,
+  .039,0,-.018,0,.012,.020,.049,0,.052
+ ];
+ geo.setAttribute('position',new T.Float32BufferAttribute(v,3));
+ geo.computeVertexNormals();return geo;
+}
+function setupLeafVisuals(){
+ const geometry=leafGeometry(),palette=[
+  '#598739','#c8ab54','#b96443','#5b7140'
+ ];
+ const capacity=mobileDevice?260:520;
+ for(let kind=0;kind<4;kind++){
+  const material=new T.MeshStandardMaterial({color:palette[kind],
+   roughness:1,metalness:0,side:T.DoubleSide,depthWrite:true});
+  const m=new T.InstancedMesh(geometry,material,capacity);
+  m.name=['Folhas verdes','Folhas amarelas','Folhas outonais',
+   'Agulhas de pinheiro'][kind];
+  m.count=0;m.frustumCulled=false;m.castShadow=false;
+  leafGroup.add(m);leafMeshes.push(m);
+ }
+}
+function treeLeafKind(a){
+ const n=(a.modelName||'').toLowerCase();
+ if(a.type==='pine'||/pine/.test(n))return 3;
+ if(/maple|bordo|red/.test(n))return 2;
+ if(/birch|bétula|yellow/.test(n))return 1;
+ return 0;
+}
+function spawnFallingLeaf(){
+ const trees=api.forestInstances.filter(a=>(a.type==='tree'||a.type==='pine')&&a.obj.visible);
+ if(!trees.length||fallingLeaves.length>=(mobileDevice?230:460))return;
+ const a=trees[Math.floor(random()*trees.length)];
+ const width=clamp(a.crownWidth*.25,.20,.95),angle=random()*6.283;
+ const radial=Math.sqrt(random())*width;
+ const x=clamp(a.x+Math.cos(angle)*radial,-9.5,9.5);
+ const z=clamp(a.z+Math.sin(angle)*radial,-7.5,7.5);
+ const ground=height(x,z),startY=Math.max(ground+.22,
+  (a.dropY||ground+2.3)-random()*.9);
+ fallingLeaves.push({kind:treeLeafKind(a),x,z,y:startY,ground,
+  age:0,mass:.0006+random()*.0006,stage:'falling',
+  turn:random()*6.28,phase:random()*6.28,
+  rotX:random()*6.28,rotZ:random()*6.28,scale:.45+random()*.65});
+}
+function collectLeafFragments(k,limit){
+ if(limit<=0||leafLitterField[k]<=0)return 0;
+ let remaining=Math.min(limit,leafLitterField[k]),picked=0;
+ for(const leaf of fallingLeaves){
+  if(leaf.stage!=='ground'||idx(leaf.x,leaf.z)!==k||leaf.mass<=0)continue;
+  const take=Math.min(leaf.mass,remaining);
+  leaf.mass-=take;picked+=take;remaining-=take;
+  if(leaf.mass<.000008)leaf.stage='picked';
+  if(remaining<.000005)break;
+ }
+ leafLitterField[k]=Math.max(0,leafLitterField[k]-picked);
+ leafCollected+=picked;return picked;
+}
+function animateLeafFall(dt){
+ if(!leafMeshes.length)return;
+ const atm=api.atmosphere.getMetrics();
+ const rain=api.getRainLevel?.()||0;
+ const wind=clamp((atm.wind||0)/3,0,1.4);
+ leafClock+=dt*(1+wind*.7+(rain>=3?.45:0));
+ while(leafClock>1.0){
+  leafClock-=1.0;spawnFallingLeaf();
+ }
+ const compostMult=1+(rain>0?.45:0)+
+  clamp((atm.humidity||.5),0,1)*.5;
+ for(let i=fallingLeaves.length-1;i>=0;i--){
+  const leaf=fallingLeaves[i];
+  if(leaf.stage==='picked'){fallingLeaves.splice(i,1);continue;}
+  leaf.age+=dt;
+  if(leaf.stage==='falling'){
+   leaf.y-=dt*(.38+wind*.18);
+   leaf.x=clamp(leaf.x+dt*(wind*.06+Math.sin(leaf.phase+leaf.age*2)*.06),-9.7,9.7);
+   leaf.z=clamp(leaf.z+dt*Math.cos(leaf.phase+leaf.age*2)*.055,-7.7,7.7);
+   leaf.rotX+=dt*2.6;leaf.rotZ+=dt*1.8;leaf.turn+=dt*.6;
+   leaf.ground=height(leaf.x,leaf.z);
+   if(leaf.y<=leaf.ground+.02){
+    leaf.y=leaf.ground+.018;leaf.stage='ground';
+    const k=idx(leaf.x,leaf.z);leafLitterField[k]+=leaf.mass;
+    leaf.age=0;
+   }
+  }else{
+   const k=idx(leaf.x,leaf.z),water=clamp(api.soilMoisture[k]/
+    Math.max(.001,api.soilCapacity[k]),0,1.4);
+   // Serrapilheira apodrece gradualmente; solo úmido acelera a conversão.
+   const decomposed=Math.min(leaf.mass,dt*(.0000009+.0000025*water)*compostMult);
+   leaf.mass-=decomposed;
+   leafLitterField[k]=Math.max(0,leafLitterField[k]-decomposed);
+   api.soilLitter[k]=clamp(api.soilLitter[k]+decomposed*.76,0,1.8);
+   api.soilOrganic[k]=clamp(api.soilOrganic[k]+decomposed*.24,0,1.8);
+   leafDeposited+=decomposed;
+   leaf.y=height(leaf.x,leaf.z)+.019;
+   if(leaf.mass<.00001){fallingLeaves.splice(i,1);continue;}
+  }
+ }
+ leafVisualClock+=dt;
+ if(leafVisualClock<.055)return;
+ leafVisualClock=0;
+ const counts=[0,0,0,0],obj=new T.Object3D();
+ for(const leaf of fallingLeaves){
+  const kind=leaf.kind,m=leafMeshes[kind],index=counts[kind]++;
+  if(index>=m.instanceMatrix.count){counts[kind]--;continue;}
+  obj.position.set(leaf.x,leaf.y,leaf.z);
+  obj.rotation.set(leaf.stage==='falling'?leaf.rotX:-Math.PI/2,leaf.turn,
+   leaf.stage==='falling'?leaf.rotZ:0);
+  const size=leaf.scale*(kind===3?.48:1);
+  obj.scale.setScalar(size);obj.updateMatrix();m.setMatrixAt(index,obj.matrix);
+ }
+ for(let kind=0;kind<4;kind++){
+  const m=leafMeshes[kind];m.count=counts[kind];
+  m.instanceMatrix.needsUpdate=true;
+ }
+}
 function rockShape(){
  api.stones.visible=false;const names=['rock1','rock2','rock3','rock4','rock5'];
  const mat=material('rock');
@@ -319,7 +448,7 @@ function chooseFoodSites(c){
   const x=clamp(Math.round((c.x+W*.5)/dx)+ix,0,NX-1);
   const z=clamp(Math.round((c.z+L*.5)/dz)+iz,0,NZ-1),k=z*NX+x;
   const site=position(k),distance=Math.hypot(o.x-site.x,o.z-site.z);
-  const food=foodResources[k]+api.soilLitter[k]*.55;
+  const food=foodResources[k]+api.soilLitter[k]*.55+leafLitterField[k]*.85;
   const pheromone=c.pheromones[k];
   const submerged=api.depth[k]>.06;
   sites.push({k,score:(food*1.85+pheromone*.26)/(1+distance*.27)
@@ -476,14 +605,17 @@ function lifeDay(days){
   for(const item of sites){
    if(searchBudget<=0)break;
    const site=item.k;
-   const available=foodResources[site]+api.soilLitter[site]*.70;
+   const available=foodResources[site]+api.soilLitter[site]*.70+leafLitterField[site]*.85;
    const possible=Math.min(available,searchBudget);
    if(possible<.000015)continue;
    const take=possible*Math.min(1,.55+.35*c.pheromones[site]);
    const plantFood=Math.min(foodResources[site],take);
    foodResources[site]-=plantFood;
-   const litterFood=Math.min(api.soilLitter[site],(take-plantFood));
-   api.soilLitter[site]-=litterFood;searchBudget-=take;
+   const leafTaken=collectLeafFragments(site,Math.max(0,take-plantFood));
+   c.leafCargo=clamp((c.leafCargo||0)+leafTaken*125,0,1.0);
+   const litterFood=Math.min(api.soilLitter[site],Math.max(0,take-plantFood-leafTaken));
+   api.soilLitter[site]-=litterFood;
+   searchBudget-=take;
    gathered+=take;
    reinforceTrail(c,site,Math.min(1,take*30));
   }
@@ -768,6 +900,7 @@ let ecologicalAccumulator=0,time=0,grassAccumulator=0,uiAccumulator=0;
 function update(dt){
  if(!ready)return;
  dt=Math.min(dt,.09);time+=dt;ecologicalAccumulator+=ecologicalDayRate(dt);
+ animateLeafFall(dt);
  grassAccumulator+=dt;uiAccumulator+=dt;
  // Recarrega o rio somente pela fonte a montante, sem água infinita em toda a cena.
  if(grassAccumulator>.7){
@@ -856,7 +989,7 @@ function updateColonyInspector(){
   ' câmaras · feromônios '+c.pheromones.reduce((a,v)=>a+v,0).toFixed(1);
 }
 async function setup(){
- await loadMeshes();initializeLandscape();grassShape();rockShape();initialColonies();visualizeAnimals();
+ await loadMeshes();initializeLandscape();grassShape();rockShape();setupLeafVisuals();initialColonies();visualizeAnimals();
  drawNestCutaway();
  const board=$('ecoStatus');if(board)board.textContent='Pacotes enviados integrados: '+Object.keys(meshLibrary).length+' malhas · '+colonies.length+' colônias.';
  const s=$('ecoSpeed');if(s){s.oninput=e=>{biologicalSpeed=clamp(+e.target.value,1,200);$('ecoSpeedVal').textContent=biologicalSpeed+'×';};}
