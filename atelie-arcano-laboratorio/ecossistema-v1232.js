@@ -311,16 +311,21 @@ function excavateNest(c,days,safe){
  updateNestSurface(c);
 }
 function initialColonies(){
- const locations=[[-6,2.5],[4.5,2.9],[-2,-4.1]];
- for(let i=0;i<locations.length;i++){
-  const [x,z]=locations[i];colonies.push({id:i,queen:true,queenAge:0,x,z,workers:24+i*12,
-   food:12,deathProgress:0,brood:[{stage:'egg',age:0,count:5},{stage:'larva',age:8,count:4},{stage:'pupa',age:18,count:3}],
-   scouts:4,foragers:12,nurses:5,builders:4,guards:3,dead:0,foodGathered:0,temperature:23});
+ for(const [x,z] of [[-6,2.5],[4.5,2.9],[-2,-4.1]]){
+  const c=newColony(x,z,24+colonies.length*12,15,false);
+  colonies.push(c);nestSurface(c);
  }
  for(let i=0;i<14;i++){
-  const x=(random()-.5)*16,z=(random()-.5)*12;
-  worms.push({x,z,adults:2+Math.floor(random()*4),juveniles:2,
-    cocoons:[{days:10,count:1}],organic:0.1,burrows:0,matureProgress:0,deathProgress:0});
+  let x=(random()-.5)*15,z=(random()-.5)*11;
+  // Populações concentram-se perto de solo úmido e rico em húmus.
+  for(let tries=0;tries<14&&goodForWorms(idx(x,z))<.22;tries++){
+   x=(random()-.5)*15;z=(random()-.5)*11;
+  }
+  worms.push({x,z,adults:3+Math.floor(random()*5),juveniles:2,
+   cocoons:[{days:10,count:1,incubation:39+random()*27}],organic:.1,
+   burrows:0,matureProgress:0,deathProgress:0,pairProgress:0,
+   juvenileMaturityDays:55+random()*22,locomotion:random()*6.28,
+   depth:.14+random()*.23,castings:0,age:30+random()*180});
  }
 }
 function goodForWorms(k){
@@ -334,92 +339,173 @@ function addCarcass(x,z,mass=.03){
  api.soilOrganic[k]=clamp(api.soilOrganic[k]+mass*.15,0,1.8);
  return k;
 }
+// Passos ecológicos discretos por dia simulado; parâmetros são didáticos
+// e dependem de espécies/condições reais, não constituem previsão de campo.
 function lifeDay(days){
- const temp=api.atmosphere.getMetrics().temperature;
- for(const c of colonies){
-  const k=idx(c.x,c.z),moist=api.soilMoisture[k]/Math.max(.0001,api.soilCapacity[k]);
-  c.temperature=temp;
-  const safe=clamp(1-Math.max(0,moist-.84)*3,0,1)*clamp((temp-12)/11,0,1)*clamp((37-temp)/12,0,1);
-  // Forrageadoras exploram células vizinhas, não apenas a entrada do ninho.
-  const sites=[];
-  for(let iz=-5;iz<=5;iz+=2)for(let ix=-5;ix<=5;ix+=2){
-   const x=clamp(Math.round((c.x+W*.5)/dx)+ix,0,NX-1);
-   const z=clamp(Math.round((c.z+L*.5)/dz)+iz,0,NZ-1);sites.push(z*NX+x);
+ ecologicalDays+=days;
+ const climate=api.atmosphere.getMetrics(),temp=climate.temperature;
+ for(const c of [...colonies]){
+  if(!c.pheromones)c.pheromones=new Float32Array(cells);
+  const k=idx(c.x,c.z);
+  const moist=clamp(api.soilMoisture[k]/Math.max(.0001,api.soilCapacity[k]),0,1.8);
+  const flooded=api.depth[k]>.075;
+  c.temperature=temp;c.reproductiveCooldown=Math.max(0,c.reproductiveCooldown-days);
+  const safe=clamp((temp-10)/10,0,1)*clamp((39-temp)/10,0,1)*
+   clamp((moist-.04)/.28,0,1)*clamp((1.16-moist)/.4,0,1)*
+   (flooded?.13:1);
+  // Feromônios evaporam e são lavados pela água superficial/chuva.
+  const decay=clamp((.13+Math.max(0,moist-.7)*.18)*days,0,.85);
+  for(let i=0;i<cells;i++)c.pheromones[i]*=(1-decay);
+  distributeTasks(c);
+  let gathered=0,searchBudget=days*(.014+.00085*c.foragers)*safe;
+  const sites=chooseFoodSites(c);
+  for(const item of sites){
+   if(searchBudget<=0)break;
+   const site=item.k;
+   const possible=Math.min(api.soilLitter[site],searchBudget);
+   if(possible<.000015)continue;
+   const take=possible*Math.min(1,.55+.35*c.pheromones[site]);
+   api.soilLitter[site]-=take;searchBudget-=take;
+   gathered+=take;
+   reinforceTrail(c,site,Math.min(1,take*30));
   }
-  sites.sort((a,b)=>api.soilLitter[b]-api.soilLitter[a]);
-  let budget=days*(.014+.0007*c.foragers)*safe,gathered=0;
-  for(const place of sites){
-   if(budget<=0)break;
-   const taken=Math.min(api.soilLitter[place],budget);
-   api.soilLitter[place]-=taken;budget-=taken;gathered+=taken;
-  }
-  c.food+=gathered*27;c.foodGathered+=gathered;
-  // Fezes, limpeza do ninho e restos de alimento voltam à matéria orgânica.
-  api.soilOrganic[k]=clamp(api.soilOrganic[k]+gathered*.12,0,1.7);
-  c.food=Math.max(0,c.food-days*(.14+.015*c.workers));
-  c.deathProgress=(c.deathProgress||0)+days*c.workers*(.004+(1-safe)*.016);
+  c.food=clamp(c.food+gathered*35,0,360);
+  c.foodGathered+=gathered;c.foodStored=clamp(c.foodStored+gathered*7,0,120);
+  // Fezes e restos da alimentação entram novamente na camada orgânica.
+  const detritus=gathered*.13+days*c.workers*.000012;
+  api.soilOrganic[k]=clamp(api.soilOrganic[k]+detritus*.75,0,1.8);
+  api.soilLitter[k]=clamp(api.soilLitter[k]+detritus*.25,0,1.8);
+  castsReturned+=detritus;
+  const broodFood=c.brood.reduce((sum,g)=>sum+(g.stage==='larva'?g.count:0),0)*.004;
+  const need=days*(.19+.015*c.workers+broodFood);
+  const ration=Math.min(c.food,need);c.food-=ration;
+  const fed=need>0?ration/need:1;
+  c.daysWithoutFood=fed<.38?c.daysWithoutFood+days:Math.max(0,c.daysWithoutFood-days*.25);
+  // Morte de operárias, agravada por escassez, calor, enchentes e idade.
+  c.deathProgress+=days*c.workers*
+   (.0028+(1-safe)*.013+Math.max(0,.62-fed)*.034);
   const casualties=Math.min(c.workers,Math.floor(c.deathProgress));
   c.deathProgress-=casualties;
-  if(casualties){c.workers-=casualties;c.dead+=casualties;addCarcass(c.x,c.z,casualties*.0014);}
-  // Operárias não botam ovos. A rainha fértil inicia todas as coortes.
-  if(c.queen&&c.food>1.1&&safe>.32){
-   c.brood.push({stage:'egg',age:0,count:Math.max(1,Math.round(days*(.85+.021*c.workers)*safe))});
-   c.food-=days*.32;
+  if(casualties){
+   c.workers-=casualties;c.dead+=casualties;
+   addCarcass(c.x,c.z,casualties*.0018);
+  }
+  const nurseEfficiency=clamp(c.nurses/Math.max(1,c.brood.length*1.3),0,1);
+  if(c.queen&&c.queenFertile&&safe>.42&&fed>.50&&c.food>1.2){
+   // Rainha põe ovos; operárias estéreis não se tornam rainhas.
+   c.eggProgress+=days*(.72+c.workers*.026)*safe;
+   const eggs=Math.min(9,Math.floor(c.eggProgress));
+   if(eggs>0){
+    c.eggProgress-=eggs;
+    c.brood.push({stage:'egg',age:0,count:eggs});
+    c.food=Math.max(0,c.food-eggs*.028);
+   }
   }
   let born=0;const next=[];
-  for(const group of c.brood){
-   group.age+=days;
-   if(group.stage==='egg'&&group.age>=8)group.stage='larva';
-   if(group.stage==='larva'&&group.age>=20)group.stage='pupa';
-   if(group.stage==='pupa'&&group.age>=34){born+=group.count;continue;}
-   next.push(group);
+  const development=clamp((temp-11)/16,.18,1.25)*clamp(fed*.75+nurseEfficiency*.25,.12,1);
+  for(const cohort of c.brood){
+   cohort.age+=days*development;
+   if(cohort.stage==='egg'&&cohort.age>=9)cohort.stage='larva';
+   if(cohort.stage==='larva'&&cohort.age>=24)cohort.stage='pupa';
+   if(cohort.stage==='pupa'&&cohort.age>=40){born+=cohort.count;continue;}
+   if(fed<.3&&random()<days*.08){
+    const lost=Math.min(cohort.count,Math.max(1,Math.ceil(cohort.count*.12)));
+    cohort.count-=lost;addCarcass(c.x,c.z,lost*.00024);
+   }
+   if(cohort.count>0)next.push(cohort);
   }
-  c.workers=clamp(c.workers+born,0,240);c.brood=next;
+  c.brood=next.slice(-96);
+  c.workers=clamp(c.workers+born,0,240);
   c.queenAge+=days;
-  if(c.queenAge>365*9){c.queen=false;}
-  const n=c.workers;
-  // As funções são tarefas, não castas obrigatórias e imutáveis.
-  c.foragers=Math.round(n*.45);c.nurses=Math.round(n*.22);
-  c.builders=Math.round(n*.17);c.guards=Math.round(n*.10);
-  c.scouts=Math.max(0,n-c.foragers-c.nurses-c.builders-c.guards);
-  api.soilBiota[k]=clamp(api.soilBiota[k]+days*.0012*c.builders,0,1);
-  api.permeability[k]=clamp(api.permeability[k]*(1+days*.0003*c.builders),.000001,.16);
-  // Fundação de nova colônia por voo nupcial de alados (modelo simplificado).
-  // Não cria rainha fértil a partir de uma operária comum.
-  const matingWeather=temp>21&&temp<31&&moist>.25&&moist<.80;
-  if(c.queen&&c.workers>185&&c.food>60&&c.queenAge>120&&matingWeather&&
-     colonies.length<5&&random()<days*.006){
-   const nearby={...c,id:colonies.length,x:clamp(c.x+4*(random()-.5),-8,8),
-    z:clamp(c.z+4*(random()-.5),-6,6),workers:0,deathProgress:0,
-    queen:true,queenAge:0,food:8,brood:[],dead:0,foodGathered:0};
-   c.food-=4;colonies.push(nearby);
+  if(c.queen&&c.queenAge>365*9){
+   c.queen=false;c.queenFertile=false;
+   addCarcass(c.x,c.z,.004);
+  }
+  distributeTasks(c);
+  excavateNest(c,days,safe);
+  const nuptialWeather=temp>21&&temp<31&&moist>.25&&moist<.8&&!flooded;
+  if(c.queen&&c.workers>140&&c.food>36&&c.queenAge>110&&
+   nuptialWeather&&c.reproductiveCooldown===0&&colonies.length<6&&
+   random()<days*.018){
+   let fx=c.x,fz=c.z,found=false;
+   for(let tries=0;tries<24;tries++){
+    const angle=random()*Math.PI*2,dist=2.2+random()*3.8;
+    const px=clamp(c.x+Math.cos(angle)*dist,-9,9);
+    const pz=clamp(c.z+Math.sin(angle)*dist,-7,7),newK=idx(px,pz);
+    if(roadMask[newK]>.38||riverMask[newK]>.36||api.depth[newK]>.035)continue;
+    if(colonies.some(other=>Math.hypot(other.x-px,other.z-pz)<1.45))continue;
+    fx=px;fz=pz;found=true;break;
+   }
+   if(found){
+    // Rainha jovem fecundada em voo nupcial, de forma probabilística.
+    const daughter=newColony(fx,fz,0,8,true);
+    daughter.brood.push({stage:'egg',age:0,count:3});
+    colonies.push(daughter);nestSurface(daughter);visualizeAnimals();
+    c.food-=7;c.reproductiveCooldown=110;
+   }
   }
  }
  for(const w of worms){
   const k=idx(w.x,w.z),safe=goodForWorms(k);
-  const litter=Math.min(api.soilLitter[k],days*w.adults*.0019*safe);
+  const moist=clamp(api.soilMoisture[k]/Math.max(.0001,api.soilCapacity[k]),0,1.8);
+  const wetEnough=moist>.35&&moist<1.13;
+  // Alimentam-se do detrito e dos microrganismos que o colonizam.
+  const litter=Math.min(api.soilLitter[k],days*w.adults*.0017*safe);
   api.soilLitter[k]-=litter;
-  api.soilOrganic[k]=clamp(api.soilOrganic[k]+litter*.80,0,1.6);
-  api.soilN[k]=clamp(api.soilN[k]+litter*.12,0,1.3);
-  api.soilP[k]=clamp(api.soilP[k]+litter*.045,0,1.3);
-  api.soilBiota[k]=clamp(api.soilBiota[k]+days*w.adults*.0003*safe,0,1);
-  api.permeability[k]=clamp(api.permeability[k]*(1+days*w.adults*.00017*safe),.000001,.16);
-  w.burrows+=days*w.adults*.001*safe;
-  // Minhocas: hermafroditas, mas tipicamente acasalam em pares e formam casulos.
-  if(w.adults>=2&&safe>.46&&random()<days*clamp(w.adults*.07,0,.5)){
-   w.cocoons.push({days:0,count:1+Math.floor(random()*2)});
+  const casts=litter*.80+days*w.adults*.000018*safe;
+  w.castings+=casts;castsReturned+=casts;
+  api.soilOrganic[k]=clamp(api.soilOrganic[k]+casts*.62,0,1.8);
+  api.soilN[k]=clamp(api.soilN[k]+casts*.14,0,1.3);
+  api.soilP[k]=clamp(api.soilP[k]+casts*.051,0,1.3);
+  api.soilBiota[k]=clamp(api.soilBiota[k]+days*w.adults*.00028*safe,0,1);
+  const work=days*w.adults*.00125*safe;
+  w.burrows+=work;burrowLength+=work;
+  api.permeability[k]=clamp(api.permeability[k]*(1+work*.022),.000001,.16);
+  // Hermafroditas com fecundação cruzada: exigem >= 2 adultos para casulos.
+  if(w.adults>=2&&safe>.42){
+   w.pairProgress+=days*Math.min(w.adults/4,2)*.082*safe;
+   const pairings=Math.min(2,Math.floor(w.pairProgress));
+   if(pairings>0){
+    w.pairProgress-=pairings;
+    for(let i=0;i<pairings;i++)w.cocoons.push({
+     days:0,count:1+Math.floor(random()*3),incubation:31+random()*43
+    });
+   }
   }
-  let hatch=0;
-  w.cocoons=w.cocoons.filter(co=>{co.days+=days;if(co.days>29){hatch+=co.count;return false;}return true;});
-  w.juveniles+=hatch;
-  w.matureProgress=(w.matureProgress||0)+days*.085*w.juveniles*safe;
-  const grow=Math.min(w.juveniles,Math.floor(w.matureProgress));
-  w.matureProgress-=grow;w.juveniles-=grow;w.adults+=grow;
-  w.deathProgress+=w.adults*days*(safe<.15?.04:.003);
-  const death=Math.min(w.adults,Math.floor(w.deathProgress));
-  w.deathProgress-=death;
-  if(death){w.adults-=death;addCarcass(w.x,w.z,.002*death);}
-  w.adults=Math.min(w.adults,85);w.juveniles=Math.min(w.juveniles,95);
+  let hatch=0;const cocoons=[];
+  for(const cocoon of w.cocoons){
+   cocoon.days+=days*(safe>.22?1:.25);
+   if(cocoon.days>=cocoon.incubation)hatch+=cocoon.count;
+   else cocoons.push(cocoon);
+  }
+  w.cocoons=cocoons.slice(-40);
+  w.juveniles=Math.min(130,w.juveniles+hatch);
+  w.matureProgress+=days*w.juveniles/Math.max(40,w.juvenileMaturityDays)*safe;
+  const mature=Math.min(w.juveniles,Math.floor(w.matureProgress));
+  w.matureProgress-=mature;w.juveniles-=mature;w.adults+=mature;
+  // Mortalidade e reciclagem orgânica com pouca umidade ou inundação anóxica.
+  w.deathProgress+=w.adults*days*(safe<.13?.034:.0027);
+  const deaths=Math.min(w.adults,Math.floor(w.deathProgress));
+  w.deathProgress-=deaths;
+  if(deaths){w.adults-=deaths;addCarcass(w.x,w.z,deaths*.003);}
+  w.adults=Math.min(95,w.adults);w.age+=days;
+  // Migração lenta das galerias entre células à procura de alimento e umidade.
+  if(w.adults>0){
+   const heading=position(k),options=[k,k-1,k+1,k-NX,k+NX];
+   let best=k,bestScore=-1;
+   for(const near of options){
+    if(near<0||near>=cells)continue;
+    const target=position(near);
+    if(Math.hypot(target.x-heading.x,target.z-heading.z)>Math.max(dx,dz)*1.3)continue;
+    const score=goodForWorms(near)+api.soilLitter[near]*.35+
+      (near===k?.14:0)+random()*.075;
+    if(score>bestScore){bestScore=score;best=near;}
+   }
+   const target=position(best),step=Math.min(1,days*.18);
+   w.x+=(target.x-w.x)*step;w.z+=(target.z-w.z)*step;
+  }
+  // Enterram-se mais quando o ar seca; aproximam-se da superfície após chuva.
+  w.depth=clamp(w.depth+(wetEnough&&safe>.4?-.013:.023)*days,.016,.48);
  }
 }
 function visualizeAnimals(){
