@@ -7,7 +7,7 @@
 const T=window.THREE,api=window.arcanoWaterV1226,raw=window.ARCANO_ASSETS_V1232;
 const $=id=>document.getElementById(id);
 if(!T||!api||!raw){console.warn('[Arcano Ecologia] Cena ou pacote ainda não disponível.');return;}
-const NX=innerWidth<680?136:192,NZ=innerWidth<680?112:156,W=40,L=32,dx=W/(NX-1),dz=L/(NZ-1);
+const NX=innerWidth<680?108:192,NZ=innerWidth<680?88:156,W=40,L=32,dx=W/(NX-1),dz=L/(NZ-1);
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),rand=(seed)=>()=>((seed=(seed*1664525+1013904223)>>>0)/4294967296);
 const random=rand(6232026),cells=NX*NZ,cover=new Float32Array(cells),traffic=new Float32Array(cells),roadMask=new Float32Array(cells),riverMask=new Float32Array(cells);
 const green=new T.Color('#477e3d'),roadColor=new T.Color('#9e7954');
