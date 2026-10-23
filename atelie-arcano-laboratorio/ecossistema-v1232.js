@@ -184,7 +184,7 @@ function initialColonies(){
  for(let i=0;i<14;i++){
   const x=(random()-.5)*16,z=(random()-.5)*12;
   worms.push({x,z,adults:2+Math.floor(random()*4),juveniles:2,
-    cocoons:[{days:10,count:1}],organic:0.1,burrows:0,matureProgress:0});
+    cocoons:[{days:10,count:1}],organic:0.1,burrows:0,matureProgress:0,deathProgress:0});
  }
 }
 function goodForWorms(k){
@@ -279,43 +279,53 @@ function lifeDay(days){
   w.matureProgress=(w.matureProgress||0)+days*.085*w.juveniles*safe;
   const grow=Math.min(w.juveniles,Math.floor(w.matureProgress));
   w.matureProgress-=grow;w.juveniles-=grow;w.adults+=grow;
-  const death=Math.min(w.adults,Math.floor(w.adults*days*(safe<.15?.04:.003)));
+  w.deathProgress+=w.adults*days*(safe<.15?.04:.003);
+  const death=Math.min(w.adults,Math.floor(w.deathProgress));
+  w.deathProgress-=death;
   if(death){w.adults-=death;addCarcass(w.x,w.z,.002*death);}
   w.adults=Math.min(w.adults,85);w.juveniles=Math.min(w.juveniles,95);
  }
 }
 function visualizeAnimals(){
- for(const child of [...animals.children])animals.remove(child);
- const optionsAnt=['ant1','ant2','ant3','antRed','ant4','ant5'];
- for(let j=0;j<colonies.length;j++){
-  const c=colonies[j],geo=meshLibrary[optionsAnt[j%optionsAnt.length]];
+ animals.clear();antDraws.length=0;wormDraws.length=0;
+ const variants=['ant1','ant2','ant3','antRed','ant4','ant5'];
+ for(let j=0;j<colonies.length;j++)for(let v=0;v<2;v++){
+  const c=colonies[j],key=variants[(j*2+v)%variants.length],geo=meshLibrary[key];
   if(!geo)continue;
-  const max=innerWidth<680?16:30,m=new T.InstancedMesh(geo,
-   new T.MeshStandardMaterial({color:j===2?'#aa4c37':'#43342d',roughness:1,metalness:0,side:T.DoubleSide}),max);
-  m.name='Operárias microscópicas, colônia '+(j+1);m.count=Math.min(max,c.foragers);
-  m.castShadow=false;m.frustumCulled=false;animals.add(m);antDraws.push({m,c});
+  const count=innerWidth<680?7:14;
+  const m=new T.InstancedMesh(geo,
+   new T.MeshStandardMaterial({color:(j===2||key==='antRed')?'#a3533b':'#49332b',
+    roughness:1,metalness:0,side:T.DoubleSide}),count);
+  m.name='Operárias minúsculas · '+key+' · colônia '+(j+1);
+  m.count=Math.min(count,Math.ceil(c.foragers/2));
+  m.castShadow=false;m.frustumCulled=false;animals.add(m);antDraws.push({m,c,variant:v});
  }
- const wormGeo=meshLibrary.worm1;
- if(wormGeo){
-  const m=new T.InstancedMesh(wormGeo,new T.MeshStandardMaterial({color:'#94726d',roughness:1,metalness:0,side:T.DoubleSide}),innerWidth<680?14:24);
-  m.count=Math.min(m.instanceMatrix.count,worms.length);m.castShadow=false;
-  m.name='Minhocas minúsculas, parcialmente subterrâneas';animals.add(m);wormDraws.push(m);
+ const variantsWorm=['worm1','worm2','worm3'];
+ for(let kind=0;kind<variantsWorm.length;kind++){
+  const geo=meshLibrary[variantsWorm[kind]];if(!geo)continue;
+  const max=innerWidth<680?5:8;
+  const m=new T.InstancedMesh(geo,
+   new T.MeshStandardMaterial({color:kind===0?'#9b736c':kind===1?'#86645e':'#ab877c',
+    roughness:1,metalness:0,side:T.DoubleSide}),max);
+  m.count=Math.min(max,Math.ceil(worms.length/3));
+  m.name='Minhocas minúsculas · '+variantsWorm[kind];m.castShadow=false;
+  animals.add(m);wormDraws.push({m,offset:kind});
  }
 }
 function moveAnimals(t){
  const obj=new T.Object3D(),magnify=previewMagnification;
- for(const {m,c} of antDraws){
+ for(const {m,c,variant} of antDraws){
   for(let i=0;i<m.count;i++){
-   const theta=t*.27+i*2.399+c.id*.91,dist=.25+.75*((i%7)/7);
+   const theta=t*.27+i*2.399+c.id*.91+variant*1.23,dist=.25+.75*((i%7)/7);
    const x=c.x+Math.cos(theta)*dist,z=c.z+Math.sin(theta)*dist;
    obj.position.set(x,height(x,z)+.008,z);obj.rotation.set(0,-theta,0);
    obj.scale.setScalar(.016*magnify);obj.updateMatrix();m.setMatrixAt(i,obj.matrix);
   }
   m.instanceMatrix.needsUpdate=true;
  }
- for(const m of wormDraws){
+ for(const {m,offset} of wormDraws){
   for(let i=0;i<m.count;i++){
-   const w=worms[i],k=idx(w.x,w.z),safe=goodForWorms(k);
+   const w=worms[(i*3+offset)%worms.length],k=idx(w.x,w.z),safe=goodForWorms(k);
    const visible=safe>.42&&Math.sin(t*.08+i)>.35;
    obj.position.set(w.x+.12*Math.sin(t*.05+i),height(w.x,w.z)-(visible?.02:.12),w.z);
    obj.rotation.set(0,i*2.13,0);obj.scale.setScalar(.065*magnify);
@@ -396,6 +406,9 @@ async function setup(){
  };
  const toggle=$('ecoToggle');if(toggle)toggle.onchange=e=>{
   realm.visible=e.target.checked;
+  window.arcanoEcoV1232.active=e.target.checked;
+  api.stones.visible=!e.target.checked;
+  if(api.grass)api.grass.visible=!e.target.checked&&!api.forestGroup.visible;
  };
  const original=api.grass;if(original)original.visible=false;
  for(const obj of targetNativeGrass)obj.obj.visible=false;
