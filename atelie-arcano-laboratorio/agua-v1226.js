@@ -11,6 +11,8 @@ const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
 const soil=new Float32Array(size),depth=new Float32Array(size),delta=new Float32Array(size),blocked=new Uint8Array(size);
 const soilMoisture=new Float32Array(size),soilCapacity=new Float32Array(size),deepWater=new Float32Array(size);
+// Vazão lateral em aquífero raso — transferência conservativa em células vizinhas.
+const aquiferFlux=new Float32Array(size);
 const canopy=new Float32Array(size),cover=new Float32Array(size),permeability=new Float32Array(size);
 const area=dx*dz,stats={rain:0,infiltrated:0,evaporated:0,transpired:0,outflow:0};
 const mudRGB=[.18,.11,.075];
@@ -647,8 +649,26 @@ for(let k=0;k<size;k++)permeability[k]=basePermeability[k]*1.45;
 landG.setAttribute('color',new T.BufferAttribute(colors,3));landG.computeVertexNormals();
 const land=new T.Mesh(landG,new T.MeshStandardMaterial({map:groundTexture(),vertexColors:true,roughness:1,side:T.DoubleSide}));
 land.receiveShadow=true;land.name='Terra absorvente e barro V12.12';scene.add(land);
-const slab=new T.Mesh(new T.BoxGeometry(W,.52,L),new T.MeshStandardMaterial({color:'#614832',roughness:1}));
-slab.position.y=Math.min(...soil)-.55;slab.receiveShadow=true;scene.add(slab);
+// Estratos demonstrativos sob o relevo; sem malhas caras ou superfícies expostas.
+const soilBaseY=Math.min(...soil)-.13;
+const soilStrata=new T.Group();soilStrata.name='Horizontes O/A/B/C · aquífero · rocha matriz';scene.add(soilStrata);
+const strata=[
+ ['O · matéria orgânica',.12,'#4d3827'],
+ ['A · solo superficial',.21,'#836047'],
+ ['B · argila acumulada',.25,'#ad7053'],
+ ['C · material de origem',.29,'#c0a183'],
+ ['Aquífero poroso',.26,'#657a7f'],
+ ['Rocha matriz',.30,'#736b62']
+];
+let stratumTop=soilBaseY;
+for(const [name,height,color] of strata){
+ const mesh=new T.Mesh(new T.BoxGeometry(W,height,L),
+  new T.MeshStandardMaterial({color,roughness:1,metalness:0}));
+ mesh.name=name;mesh.position.y=stratumTop-height*.5;
+ mesh.receiveShadow=true;soilStrata.add(mesh);
+ stratumTop-=height;
+}
+const slab=soilStrata;
 // Rochas anime: silhuetas orgânicas sem faces quadradas, paleta envelhecida e musgo discreto.
 // Modelos procedurais locais: sem download externo, acessíveis também em Android/offline.
 const stones=new T.Group();stones.name='Rochas dos pacotes Quaternius';scene.add(stones);
@@ -2163,7 +2183,11 @@ function hydrologyStep(dt){
  const speed=process==='runoff'?1.65:1;
  for(let k=0;k<size;k++){
   // Precipitação regional derivada de nuvens, umidade e transporte pelo vento.
-  const rain=physicalWeather?rainRateFromAtmos(rainField[k])*dt:manualRain;
+  // Mesmo com céu parcialmente limpo, a seleção manual de garoa/fraca
+ // garante precipitação real mínima; temporais continuam regionais.
+ const atmospheric=physicalWeather?rainRateFromAtmos(rainField[k]):rainMeters[level];
+ const weakFloor=physicalWeather&&level>0&&level<=2?rainMeters[level]*.24:0;
+ const rain=Math.max(atmospheric,weakFloor)*dt;
   if(rain>0){
    const canopyCap=.007+cover[k]*.037;
    const retained=Math.min(rain*cover[k]*.55*interp,Math.max(0,canopyCap-canopy[k]));
@@ -2173,7 +2197,10 @@ function hydrologyStep(dt){
   if(enableInfiltration&&depth[k]>.000001){
    const remaining=soilCapacity[k]-soilMoisture[k];
    const intake=Math.min(depth[k],Math.max(0,remaining),
-     permeability[k]*infiltrate*(.13+1.37*(1-sat)**1.4)*Math.max(.19,1.65-1.80*basinHold[k])*dt);
+     // Chuva intensa recarrega poros abertos mais depressa enquanto o solo
+     // ainda tem capacidade disponível; solo encharcado continua limitado.
+     permeability[k]*infiltrate*(.13+1.37*(1-sat)**1.4)*
+     (1+Math.min(1.15,rainMeters[level]*125))*Math.max(.19,1.65-1.80*basinHold[k])*dt);
    depth[k]-=intake;soilMoisture[k]+=intake;stats.infiltrated+=intake*area;
   }
   // Parte da água sai dos poros superficiais e alimenta a camada subterrânea.
@@ -2200,6 +2227,35 @@ function hydrologyStep(dt){
   turbidity[k]=clamp(turbidity[k]+stirred+runoffStir-settle,0,clamp(profile.erosion*.90+.12,.16,1));
  }
  flowStep(dt,speed);
+ aquiferStep(dt);
+}
+// Aquífero pedagógico: a percolação existente chega ao lençol, que escoa
+// lentamente de cotas altas para baixas e pode alimentar nascentes em vales.
+function aquiferStep(dt){
+ aquiferFlux.fill(0);
+ const speed=.036*dt;
+ for(let j=1;j<NZ-1;j++)for(let i=1;i<NX-1;i++){
+  const k=idx(i,j),store=deepWater[k];
+  if(store<.000001)continue;
+  const neighbours=[k-1,k+1,k-NX,k+NX];
+  const head=soil[k]-1.15+store*1.6;
+  let available=Math.min(store,.0045*dt);
+  for(const q of neighbours){
+   if(available<=0)break;
+   const nextHead=soil[q]-1.15+deepWater[q]*1.6;
+   const transfer=Math.min(available,Math.max(0,head-nextHead)*speed*.25);
+   aquiferFlux[k]-=transfer;aquiferFlux[q]+=transfer;
+   available-=transfer;
+  }
+  // Exsudação pontual SOMENTE em solos baixos + lençol elevado + saturados.
+  const lowland=soil[k]<-.23&&basinHold[k]>.38;
+  const excess=deepWater[k]-.23;
+  if(lowland&&excess>0&&soilMoisture[k]>.73*soilCapacity[k]){
+   const spring=Math.min(Math.max(0,excess)*.005*dt,.0022*dt);
+   aquiferFlux[k]-=spring;depth[k]+=spring;
+  }
+ }
+ for(let k=0;k<size;k++)deepWater[k]=Math.max(0,deepWater[k]+aquiferFlux[k]);
 }
 function flowStep(dt,multiplier){
  delta.fill(0);const speed=(.62+rainLevels[level]*.07)*dt*2.0*multiplier;
