@@ -825,7 +825,17 @@ function visualizeAnimals(){
   mesh.name='Operárias · reconhecimento, coleta, retorno · colônia '+(c.id+1);
   mesh.count=Math.min(max,Math.ceil(c.workers*.2));
   mesh.frustumCulled=false;mesh.castShadow=false;animals.add(mesh);
-  antDraws.push({m:mesh,c,max});
+  // Os OBJ enviados são estáticos, sem clips rigados de morte.
+  // O corpo morto será achatado e tombado antes de sumir.
+  const cargo=new T.InstancedMesh(leafGeometry(),
+   new T.MeshStandardMaterial({color:'#baa458',roughness:1,side:T.DoubleSide}),max);
+  cargo.name='Fragmentos de folhas transportados';cargo.count=0;
+  cargo.frustumCulled=false;animals.add(cargo);
+  const agents=Array.from({length:max},(_,i)=>({
+   dead:false,deadUntil:0,retreatAt:-1,
+   originX:c.x,originZ:c.z,retreatDuration:1,x:c.x,z:c.z,phase:random()*2
+  }));
+  antDraws.push({m,c,max,agents,cargo});
  }
  const wormModels=['worm1','worm2','worm3'];
  for(let i=0;i<worms.length;i++){
@@ -847,24 +857,90 @@ function visualizeAnimals(){
   wormDraws.push({m,w,pos,orig:Float32Array.from(pos.array),
    axis,side,span:Math.max(.0001,high-low),low,phase:random()*6.28});
  }
-}let wormVisualFrame=0;
+}let lastAntImpactReport=-999,antsDrowned=0,antsCrushed=0;
+function killSurfaceAnt(item,agent,x,z,cause){
+ if(agent.dead)return;
+ agent.dead=true;agent.deadUntil=time+3.4;agent.x=x;agent.z=z;
+ item.c.workers=Math.max(0,item.c.workers-1);item.c.dead++;
+ distributeTasks(item.c);
+ addCarcass(x,z,.0012);
+ if(cause==='pisoteio')antsCrushed++;else antsDrowned++;
+ if(time-lastAntImpactReport>8){
+  lastAntImpactReport=time;
+  recordEcoEvent('Operária da colônia '+(item.c.id+1)+
+   (cause==='pisoteio'?' morreu esmagada.':' não retornou antes da chuva forte.'));
+ }
+}
+function checkAntTrampling(x,z,weight){
+ const radius=.12+Math.min(.14,weight*.12);
+ for(const item of antDraws)for(const agent of item.agents){
+  if(agent.dead||!Number.isFinite(agent.x))continue;
+  if(Math.hypot(agent.x-x,agent.z-z)<radius&&random()<.38+weight*.36)
+   killSurfaceAnt(item,agent,agent.x,agent.z,'pisoteio');
+ }
+}
+let wormVisualFrame=0;
 function moveAnimals(t){
  const o=new T.Object3D(),magnify=previewMagnification;
- for(const {m,c,max} of antDraws){
+ const rainLevel=api.getRainLevel?.()||0,heavy=rainLevel>=3,storm=rainLevel>=4;
+ for(const {m,c,max,agents,cargo} of antDraws){
+  cargo.count=0;
   m.count=Math.min(max,Math.max(0,Math.ceil(c.workers*.2)));
   const target=position(c.lastFoodSite??idx(c.x,c.z));
   for(let i=0;i<m.count;i++){
-   const cycle=(t*(.10+.014*(i%4))+i*.17+c.id*.13)%2;
+   const agent=agents[i];
+   if(agent.dead){
+    const remaining=agent.deadUntil-t;
+    if(remaining>0){
+     o.position.set(agent.x,height(agent.x,agent.z)+.003,agent.z);
+     o.rotation.set(.65,0,1.18);
+     o.scale.set(.013*magnify,.001*magnify,.012*magnify*
+      clamp(remaining/3.4,.04,1));
+    }else{o.position.set(agent.x,-100,agent.z);o.scale.setScalar(.0000001);}
+    o.updateMatrix();m.setMatrixAt(i,o.matrix);continue;
+   }
+   const cycle=(t*(.10+.014*(i%4))+i*.17+c.id*.13+agent.phase)%2;
    const outward=cycle<1,along=outward?cycle:2-cycle;
    const swing=.03*Math.sin(t*2.2+i*2.7);
-   const x=c.x+(target.x-c.x)*along+Math.sin(i*1.7)*swing;
-   const z=c.z+(target.z-c.z)*along+Math.cos(i*1.7)*swing;
+   let x=c.x+(target.x-c.x)*along+Math.sin(i*1.7)*swing;
+   let z=c.z+(target.z-c.z)*along+Math.cos(i*1.7)*swing;
+   if(heavy){
+    if(agent.retreatAt<0){
+     agent.retreatAt=t;agent.originX=agent.x;agent.originZ=agent.z;
+     const dist=Math.hypot(agent.x-c.x,agent.z-c.z);
+     agent.retreatDuration=1.5+dist*(storm?4.2:5.8);
+    }
+    const pct=clamp((t-agent.retreatAt)/agent.retreatDuration,0,1);
+    x=agent.originX+(c.x-agent.originX)*pct;
+    z=agent.originZ+(c.z-agent.originZ)*pct;
+    if(pct>=1){
+     // As formigas refugiadas permanecem abaixo do solo.
+     o.position.set(c.x,-100,c.z);o.scale.setScalar(.0000001);
+     o.updateMatrix();m.setMatrixAt(i,o.matrix);
+     agent.x=c.x;agent.z=c.z;continue;
+    }
+    if(api.depth[idx(x,z)]>.052||
+       (storm&&pct>.70&&random()<.0015)){
+     killSurfaceAnt({m,c},agent,x,z,'chuva');
+     o.position.set(x,-100,z);o.scale.setScalar(.0000001);
+     o.updateMatrix();m.setMatrixAt(i,o.matrix);continue;
+    }
+   }else if(agent.retreatAt>=0)agent.retreatAt=-1;
+   agent.x=x;agent.z=z;
    o.position.set(x,height(x,z)+.008,z);
    o.rotation.set(0,Math.atan2(target.x-c.x,target.z-c.z)+(outward?0:Math.PI),0);
    o.scale.setScalar((api.depth[idx(x,z)]>.06?.006:.014)*magnify);
    o.updateMatrix();m.setMatrixAt(i,o.matrix);
+   // Folhas de serrapilheira reais acompanham as operárias retornando.
+   if(!heavy&&!outward&&c.leafCargo>.004&&i%3===0){
+    const tiny=new T.Object3D();
+    tiny.position.set(x,height(x,z)+.02,z);
+    tiny.rotation.y=o.rotation.y;tiny.scale.setScalar(.20*magnify);
+    tiny.updateMatrix();
+    cargo.setMatrixAt(cargo.count++,tiny.matrix);
+   }
   }
-  m.instanceMatrix.needsUpdate=true;
+  m.instanceMatrix.needsUpdate=true;cargo.instanceMatrix.needsUpdate=true;
  }
  wormVisualFrame++;
  for(const item of wormDraws){
@@ -912,6 +988,7 @@ function moveAnimals(t){
 function trample(x,z,weight=.22){
  if(!trampleEnabled)return;
  markFootprint(x,z);
+ checkAntTrampling(x,z,weight);
  const centerX=clamp(Math.round((x+W*.5)/dx),0,NX-1),centerZ=clamp(Math.round((z+L*.5)/dz),0,NZ-1);
  for(let j=-2;j<=2;j++)for(let i=-2;i<=2;i++){
   const ix=centerX+i,iz=centerZ+j;if(ix<0||iz<0||ix>=NX||iz>=NZ)continue;
