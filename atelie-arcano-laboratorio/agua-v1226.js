@@ -1946,48 +1946,85 @@ function registerImportedRock(item,root){
  importedRockModels.push({item,root});
  rebuildImportedRocks();
 }
+// Variação de pigmentos minerais — materiais leves e reutilizáveis.
+const rockVariantMaps=[];
+function rockSurfaceVariant(id){
+ if(rockVariantMaps[id])return rockVariantMaps[id];
+ const colors=[
+  ['#767a71','#91988d','#4a554e','#ada99b'],
+  ['#847b70','#a89c89','#58514a','#c1b49d'],
+  ['#5e6663','#838a83','#414e4a','#adb3aa'],
+  ['#777361','#a39b80','#575443','#c4b9a4'],
+  ['#69675f','#8e897c','#464943','#b9b4a2'],
+  ['#727d75','#8a9992','#455a53','#c0c1ae']
+ ][id%6];
+ const c=document.createElement('canvas');c.width=c.height=384;
+ const ctx=c.getContext('2d'),r=rand(4153+id*1013);
+ ctx.fillStyle=colors[0];ctx.fillRect(0,0,384,384);
+ for(let i=0;i<4900;i++){
+  const x=r()*384,y=r()*384,d=.5+r()*6.5;
+  ctx.fillStyle=colors[Math.floor(r()*colors.length)];
+  ctx.globalAlpha=.12+r()*.36;
+  ctx.beginPath();ctx.ellipse(x,y,d*(.4+r()),d*(.3+r()),r()*6.28,0,6.28);ctx.fill();
+ }
+ ctx.globalAlpha=1;
+ const map=new T.CanvasTexture(c);map.colorSpace=T.SRGBColorSpace;
+ map.wrapS=map.wrapT=T.RepeatWrapping;
+ map.repeat.set(1.0+(id%3)*.31,1.08+(id%2)*.44);
+ map.anisotropy=mobile?2:4;rockVariantMaps[id]=map;return map;
+}
 function rebuildImportedRocks(){
  if(!importedRockModels.length)return;
+ importedStoneVisuals.traverse(o=>{
+  if(!o.isMesh)return;
+  const mats=Array.isArray(o.material)?o.material:[o.material];
+  for(const mat of mats)if(mat?.userData?.arcanoRockInstance)mat.dispose();
+ });
  importedStoneVisuals.clear();
  const safe=new T.Box3(),size=new T.Vector3();
  const placed=[];
  for(let i=0;i<rocks.length;i++){
-  const [x,z,r]=rocks[i];
-  const selected=importedRockModels[i%importedRockModels.length];
+  const [x,z,r]=rocks[i],seeded=rand(5839+i*7603);
+  const selected=importedRockModels[(i*7+Math.floor(seeded()*11))%importedRockModels.length];
   const visual=selected.root.clone(true);
-  visual.name='Rocha original '+selected.item.name+'/'+i;
+  visual.name='Pedra original '+selected.item.name+' / variação '+(i+1);
   visual.position.set(0,0,0);
-  visual.rotation.y=(i*2.399963229728653)%6.28318530718;
-  visual.scale.setScalar(1);
-  visual.updateMatrixWorld(true);
+  visual.rotation.set((seeded()-.5)*.33,seeded()*6.283,(seeded()-.5)*.31);
+  visual.scale.setScalar(1);visual.updateMatrixWorld(true);
   safe.setFromObject(visual);safe.getSize(size);
-  const horizontal=Math.max(.0001,size.x,size.z);
-  const scalar=clamp((r*1.9)/horizontal,.03,12);
-  visual.scale.multiplyScalar(scalar);
+  const scalar=clamp((r*1.9)/Math.max(.0001,size.x,size.z),.03,12)*
+    (.66+seeded()*.79);
+  visual.scale.set(
+   scalar*(.79+seeded()*.65),
+   scalar*(.45+seeded()*.74),
+   scalar*(.75+seeded()*.74)
+  );
   visual.updateMatrixWorld(true);safe.setFromObject(visual);
   if(!Number.isFinite(safe.min.y))continue;
-  // Contato na malha do solo; leve imersão evita aspecto de pedra suspensa.
-  visual.position.set(x,terrainContact(x,z)-safe.min.y-.045*r,z);
+  visual.position.set(x,terrainContact(x,z)-safe.min.y-.05*r,z);
+  const variant=i%6;
   visual.traverse(obj=>{
    if(!obj.isMesh)return;
    obj.castShadow=!mobile;obj.receiveShadow=true;
-   const materials=Array.isArray(obj.material)?obj.material:[obj.material];
-   for(const mat of materials){
-    if(!mat)continue;
-    mat.metalness=0;mat.roughness=1;
-    mat.side=T.FrontSide;
-    mat.needsUpdate=true;
-   }
+   const original=Array.isArray(obj.material)?obj.material:[obj.material];
+   const mats=original.map(mat=>{
+    if(!mat)return mat;
+    const m=mat.clone();
+    m.userData={...mat.userData,arcanoRockInstance:true};
+    m.map=rockSurfaceVariant(variant);
+    m.color.set('#dfded7');
+    m.metalness=0;m.roughness=1;m.side=T.FrontSide;m.needsUpdate=true;
+    return m;
+   });
+   obj.material=Array.isArray(obj.material)?mats:mats[0];
   });
-  importedStoneVisuals.add(visual);
-  placed.push(visual);
+  importedStoneVisuals.add(visual);placed.push(visual);
  }
  if(placed.length){
-  proceduralStoneVisuals.visible=false;
-  importedStoneVisuals.visible=true;
+  proceduralStoneVisuals.visible=false;importedStoneVisuals.visible=true;
   if(typeof reflectionAge!=='undefined')reflectionAge=999;
-  console.info('[Arcano V12.28] Pedras dos assets originais:',placed.length,
-   'modelos:',importedRockModels.map(x=>x.item.name).join(', '));
+  console.info('[Arcano V12.30] Rochas originais variadas:',
+   placed.length,importedRockModels.map(x=>x.item.name).join(', '));
  }
 }
 function setForestCollection(value){
