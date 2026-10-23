@@ -175,10 +175,10 @@ const camera=new T.PerspectiveCamera(46,1,.1,90);
 let renderer;
 try{renderer=new T.WebGLRenderer({canvas:stage,antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?1.26:1.65));renderer.outputColorSpace=T.SRGBColorSpace;
-renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;renderer.shadowMap.enabled=true;
+renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=.88;renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=T.PCFSoftShadowMap;}catch(e){fail(e);return;}
-const ambientSky=new T.HemisphereLight('#fff5e4','#6c8378',2.2);scene.add(ambientSky);
-const light=new T.DirectionalLight('#fff0c8',2.35);light.position.set(-8,13,7);
+const ambientSky=new T.HemisphereLight('#fff5e4','#6c8378',1.45);scene.add(ambientSky);
+const light=new T.DirectionalLight('#fff0c8',1.60);light.position.set(-8,13,7);
 light.castShadow=true;light.shadow.mapSize.set(mobile?512:1024,mobile?512:1024);
 Object.assign(light.shadow.camera,{left:-13,right:13,top:13,bottom:-13,near:.5,far:38});
 light.shadow.bias=-.00035;scene.add(light);
@@ -454,8 +454,9 @@ function updateAtmosphere(dt){
  light.position.set(sunX*22,Math.max(.08,sunY)*22,sunZ*22);
  const shade=Math.max(.72,1-atmCloudMean*.12*(.5+.5*Math.sin(weatherTime*.16+
     Math.sin(weatherTime*.065)*1.4)));
- light.intensity=(weatherCfg?weatherCfg.sunPower:2.0)*dayLight*shade;
- ambientSky.intensity=(weatherCfg?weatherCfg.ambientPower:2.1)*(.17+.83*dayLight);
+ light.intensity=Math.min(1.70,(weatherCfg?weatherCfg.sunPower:2.0)*.67)*dayLight*shade;
+ ambientSky.intensity=Math.min(1.45,(weatherCfg?weatherCfg.ambientPower:2.1)*.68)*(.30+.70*dayLight);
+ renderer.toneMappingExposure=.86+.05*dayLight;
  if(typeof waterM!=='undefined'){
   waterM.uniforms.uSun.value.copy(skySunDir);
   waterM.uniforms.uSunPower.value=(weatherCfg?weatherCfg.sunVisible:1)*dayLight;
@@ -968,7 +969,10 @@ function visibleByQuality(a){
 }
 function applyForestVisibility(){
  for(const a of forestInstances)a.obj.visible=visibleByQuality(a);
- meadowMesh.count=Math.floor(fullMeadowCount*QUALITY_PRESETS[graphicsQuality].meadow);
+ // Só exibir os triângulos provisórios se nenhum asset de capim estiver ativo.
+ const originalGrass=forestInstances.some(a=>a.type==='grass'&&a.obj.visible);
+ meadowMesh.visible=!originalGrass;
+ meadowMesh.count=originalGrass?0:Math.floor(fullMeadowCount*QUALITY_PRESETS[graphicsQuality].meadow);
  if(meadowMesh.instanceMatrix)meadowMesh.instanceMatrix.needsUpdate=true;
 }
 
@@ -1436,7 +1440,12 @@ function arcanoBestOrientation(item,root){
   : normalRatio<.38;
  const materiallyBetter=best.index!==0 && best.score>normal.score+
   (isTree?.26:.36) && bestRatio>normalRatio*(isTree?1.27:1.55);
- const chosen=needsCorrection&&materiallyBetter?best:normal;
+ const visiblyFallen=isTree&&(normal.hasWood?normal.woodRatio<1.22:
+  normal.overallRatio<.84);
+ const convincingUpright=best.index!==0 && best.score>normal.score+.18 &&
+  (best.hasWood?best.woodRatio>.94:best.overallRatio>.95) &&
+  best.canopyRise>=normal.canopyRise-.12;
+ const chosen=(needsCorrection&&materiallyBetter)||(visiblyFallen&&convincingUpright)?best:normal;
  const invalid=isTree?
   (chosen.hasWood&&chosen.woodRatio<.38&&chosen.overallRatio<.53):
   (chosen.overallRatio<.105);
@@ -1560,6 +1569,17 @@ function placeForestModel(item,root){
   correction.name='Correção de orientação '+item.name;
   correction.quaternion.copy(orientation.quaternion);
   correction.add(visualRoot);
+  if(item.type==='grass'){
+   // Cada instância é uma moita de quatro peças GLTF/FBX originais.
+   for(let stem=0;stem<3;stem++){
+    const tuft=root.clone(true),a=stem*2.39996;
+    tuft.position.x+=Math.cos(a)*.16;
+    tuft.position.z+=Math.sin(a)*.16;
+    tuft.rotation.y+=a;
+    tuft.scale.multiplyScalar(.72+randomForest()*.24);
+    correction.add(tuft);
+   }
+  }
   obj.add(correction);
   obj.position.set(x,0,z);
   obj.rotation.y=rot;
@@ -2077,6 +2097,7 @@ const RAIN_SCALE=[
 ];
 const rainLevels=[0,.18,.38,.66,.87,1];
 const rainMeters=RAIN_SCALE.map(p=>p.rate);
+const MIN_RAIN_VISUAL=[0,.26,.32,.14,.08,.05];
 // A atmosfera decide ONDE chove; a escala decide QUANTO cai naquele local.
 function rainRateFromAtmos(source,selected=level){
  if(selected===0||source<=.0000001)return 0;
@@ -2304,11 +2325,12 @@ function dropStep(dt){
  // A densidade visual segue o MESMO nível aplicado à física.
  // O clima só modula o número de gotas e a distribuição entre as regiões.
  const severe=stormActive(),profile=RAIN_SCALE[level];
- const availability=physicalWeather?(level===0||appliedRainPeak<.0000001?0:
-   clamp(Math.pow(appliedRainMean/Math.max(.0000001,profile.rate),.48),0,1)):1;
+ const availability=level===0?0:!physicalWeather?1:
+   Math.max(MIN_RAIN_VISUAL[level],
+    clamp(Math.pow(appliedRainMean/Math.max(.0000001,profile.rate),.48),0,1));
  const dropsPerSecond=(mobile?profile.dropsM:profile.dropsD)*availability;
  if(dropsPerSecond===0)spawnAcc=0;
- else spawnAcc=Math.min(MAX_DROPS,spawnAcc+dropsPerSecond*dt);
+ else spawnAcc=Math.min(MAX_DROPS,spawnAcc+Math.max(level>0?8:0,dropsPerSecond)*dt);
  const toSpawn=Math.min(severe?(mobile?95:145):65,Math.floor(spawnAcc));
  spawnAcc-=toSpawn;
  for(let k=0;k<toSpawn&&drops.length<MAX_DROPS;k++){
@@ -2322,6 +2344,9 @@ function dropStep(dt){
     accepted=true;break;
    }
   }
+  // Partículas esparsas representam garoa; a chuva física continua
+  // controlada pelo campo de precipitação da atmosfera.
+  if(!accepted&&level<=2)accepted=true;
   if(!accepted)continue;
   drops.push({x,z,y:2.5+random()*4.8,
    speed:profile.speed+random()*profile.speedVar,
