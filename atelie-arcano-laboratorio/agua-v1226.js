@@ -1,11 +1,11 @@
-/* Ateliê Arcano V12.25 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
+/* Ateliê Arcano V12.26 — poças, lagoas e respingos conformes ao relevo (modelo ilustrativo, não calibrado).
    Chuva, interceptação vegetal, infiltração, percolação, escoamento e evapotranspiração.
    Simulação conservativa na malha, com multiplicador de tempo e gotas 3D visíveis. */
 (function(){
 'use strict';
 const T=window.THREE, $=id=>document.getElementById(id), clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const diag=$('diag'),stage=$('stage');
-function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.25]',error);}
+function fail(error){if(diag)diag.textContent='Não foi possível iniciar a água 3D: '+(error&&error.message||error);console.error('[Arcano V12.26]',error);}
 if(!T){fail('Three.js não carregou. Verifique a conexão.');return;}
 const mobile=innerWidth<680, NX=mobile?68:96,NZ=mobile?56:78,W=20,L=16;
 const dx=W/(NX-1), dz=L/(NZ-1),size=NX*NZ;
@@ -742,7 +742,7 @@ const grass=new T.InstancedMesh(
 const ob=new T.Object3D(),grassAnchors=[];
 let gcount=0;
 for(let k=0;k<grass.count*3&&gcount<grass.count;k++){
- const x=(random()-.5)*W,z=(random()-.5)*L,y=elevation(x,z);
+ const x=(random()-.5)*W,z=(random()-.5)*L,y=terrainContact(x,z);
  if(rockAt(x,z)||y<-.15)continue;
  const scale=.60+random()*.95,angle=random()*6.28;
  grassAnchors.push({x,z,y,scale,angle});
@@ -778,7 +778,7 @@ const sproutGroup=new T.Group();sproutGroup.name='Mudas anime alimentadas pelo s
 const sproutHeads=[],sproutColors=['#83a775','#6f9666','#98ae7e'];
 const sproutMaterial=new T.MeshToonMaterial({color:'#ffffff',vertexColors:false});
 for(let i=0;i<(mobile?24:48);i++){
- const x=(random()-.5)*(W-1),z=(random()-.5)*(L-1),y=elevation(x,z);
+ const x=(random()-.5)*(W-1),z=(random()-.5)*(L-1),y=terrainContact(x,z);
  if(y<-.16||rockAt(x,z))continue;
  const g=new T.Group(),stem=new T.Mesh(new T.CylinderGeometry(.015,.020,.26,5),
   new T.MeshToonMaterial({color:'#6c8054'}));
@@ -864,7 +864,7 @@ const meadowRng=rand(93012);
 meadowMesh.count=0;meadowMesh.name='Gramado painterly denso — instâncias';
 for(let n=0;n<meadowCount*3&&meadowMesh.count<meadowCount;n++){
  const x=(meadowRng()-.5)*(W-1.0),z=(meadowRng()-.5)*(L-1.0);
- const y=elevation(x,z);
+ const y=terrainContact(x,z);
  if(y<-.21||rockAt(x,z))continue;
  const cell=idx(clamp(Math.round((x+W*.5)/dx),0,NX-1),
   clamp(Math.round((z+L*.5)/dz),0,NZ-1));
@@ -962,12 +962,33 @@ function addLeafWind(mesh){
  }
 }
 
+// Ancoragem V12.26: o ponto de apoio é a MALHA do terreno, não só a fórmula
+// contínua de elevação. O pivô FBX/glTF pode ficar muito acima da raiz.
+function terrainContact(x,z){return sample(soil,clamp(x,-W*.49,W*.49),
+ clamp(z,-L*.49,L*.49));}
+function supportHeight(type,x,z,extent){
+ const centerY=terrainContact(x,z);
+ if(type!=='rock')return centerY;
+ // Pedras têm contato numa área, e entram levemente no solo da encosta.
+ // Usar altura mínima permite apoiar a pedra pelo volume, sem base suspensa.
+ const rr=clamp(extent*.26,.16,.60);
+ let low=centerY;
+ for(const [u,v] of [[rr,0],[-rr,0],[0,rr],[0,-rr],[rr*.65,rr*.65],[-rr*.65,-rr*.65]])
+  low=Math.min(low,terrainContact(x+u,z+v));
+ return low;
+}
+function snapForestToGround(anchor){
+ const a=anchor,scale=a.obj.scale.y;
+ const y=a.contactY-a.localBottom*scale-a.embed;
+ a.obj.position.y=y;
+ a.obj.updateMatrixWorld(true);
+}
 function placeForestModel(item,root){
  const randomForest=rand(9157+item.name.split('').reduce((a,c)=>a+c.charCodeAt(0),0));
  root.updateMatrixWorld(true);
  root.traverse(mesh=>addLeafWind(mesh));
- const bbox=new T.Box3().setFromObject(root);
- const h=Math.max(.001,bbox.max.y-bbox.min.y);
+ const originalBox=new T.Box3().setFromObject(root);
+ const h=Math.max(.001,originalBox.max.y-originalBox.min.y);
  const count=mobile?item.mobile:item.desktop;
  let created=0;
  for(let attempt=0;attempt<count*26&&created<count;attempt++){
@@ -985,23 +1006,38 @@ function placeForestModel(item,root){
    }
   }
   if(basinBlocked)continue;
-  const y=elevation(x,z);
-  if(y<-.13)continue;
+  const groundY=terrainContact(x,z);
+  if(groundY<-.13)continue;
   const obj=root.clone(true),factor=.78+randomForest()*.52;
   const desired=item.height*factor;
-  const scale=desired/h;
-  obj.scale.setScalar(scale);obj.position.set(x,y-bbox.min.y*scale-.015,z);
-  const rot=randomForest()*Math.PI*2;obj.rotation.y=rot;
+  const scale=desired/h,rot=randomForest()*Math.PI*2;
+  // Calcula o Box3 da instância já rotacionada, com o pivô da malha original.
+  // A base inferior é medida após transformações do FBX — não suposta em y=0.
+  obj.position.set(x,0,z);obj.rotation.set(0,rot,0);obj.scale.setScalar(scale);
+  obj.updateMatrixWorld(true);
+  const worldBox=new T.Box3().setFromObject(obj);
+  if(!Number.isFinite(worldBox.min.y)||!Number.isFinite(worldBox.max.y))continue;
+  const projected=Math.max(worldBox.max.x-worldBox.min.x,worldBox.max.z-worldBox.min.z);
+  const localBottom=worldBox.min.y/scale;
+  const contactY=supportHeight(item.type,x,z,projected);
+  const embed=item.type==='rock'?
+   clamp(desired*.14,.045,.17):
+   item.type==='tree'||item.type==='pine'?.035:.018;
+  const anchor={obj,x,z,y:contactY,contactY,localBottom,embed,
+   rotation:rot,baseScale:scale,pack:item.pack||'mega',type:item.type,
+   phase:randomForest()*Math.PI*2,qualityRank:randomForest(),modelName:item.name};
+  snapForestToGround(anchor);
   obj.traverse(o=>{
    if(!o.isMesh)return;
    o.castShadow=!mobile&&(item.type==='tree'||item.type==='pine')&&created<4;
    o.receiveShadow=false;
-   const mat=o.material;
-   if(mat){mat.side=T.DoubleSide;mat.roughness=.92;mat.metalness=0;}
+   const materials=Array.isArray(o.material)?o.material:[o.material];
+   for(const mat of materials)if(mat){
+    mat.side=T.DoubleSide;mat.roughness=.90;mat.metalness=0;
+   }
   });
   forestGroup.add(obj);
-  forestInstances.push({obj,x,z,y,rotation:rot,baseScale:scale,pack:item.pack||'mega',type:item.type,
-   phase:randomForest()*Math.PI*2});
+  forestInstances.push(anchor);
   created++;
  }
 }
@@ -1047,15 +1083,7 @@ function modelTextureManager(Module){
 }
 function setForestCollection(value){
  forestCollection=['mixed','mega','ultimate'].includes(value)?value:'mixed';
- for(const a of forestInstances){
-  const allowed=forestCollection==='mixed'||a.pack===forestCollection;
-  if(a.type==='rock'||a.type==='tree'||a.type==='pine')a.obj.visible=allowed;
-  else{
-   const k=idx(clamp(Math.round((a.x+W*.5)/dx),0,NX-1),
-    clamp(Math.round((a.z+L*.5)/dz),0,NZ-1));
-   a.obj.visible=allowed&&soilHealth[k]>.1;
-  }
- }
+ applyForestVisibility();
  if($('forestPack'))$('forestPack').value=forestCollection;
  if(typeof reflectionAge!=='undefined')reflectionAge=999;
  forestStatus('visual '+(forestCollection==='mixed'?'combinado':forestCollection));
@@ -1115,7 +1143,7 @@ function updateForestHealth(){
   const biomass=clamp(soilPlant[k],.12,1.2),health=clamp(soilHealth[k],0,1);
   const factor=.69+biomass*.30;
   a.obj.scale.setScalar(a.baseScale*factor);
-  a.obj.visible=health>.10&&(forestCollection==='mixed'||forestCollection===a.pack);
+  snapForestToGround(a);
  }
 }
 function animateForest(dt){
@@ -1858,7 +1886,7 @@ let last=performance.now();function loop(now){
 }
 
 window.addEventListener('resize',resize);
-window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1225'))fail(e.error||e.message);});
-window.arcanoWaterV1225={scene,renderer,setForestCollection,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
+window.addEventListener('error',e=>{if((e.filename||'').includes('agua-v1226'))fail(e.error||e.message);});
+window.arcanoWaterV1226={scene,renderer,setForestCollection,leafWindUniforms,leafWindMaterials,getFog:()=>({strength:fogStrength,target:fogTarget,rainMemory:fogRainMemory,age:fogRainAge,dewGap:fogDewGap,wind:atmWindMean,reason:fogCause}),forestGroup,forestModels,forestInstances,setFloraVisible,seed,setMode,add,setSoilType,addSoilOrganic,addSoilNutrients,terrain:land,water,stones,grass,sprouts:sproutGroup,soilProfiles:SOIL_PROFILES,soilKeyIndex,soilOrganic,soilLitter,soilN,soilP,soilK,soilCa,soilPH,soilSalinity,soilPlant,soilHealth,soilLimiting,soilCapacity,permeability,ecologyStep,soilMoisture,deepWater,canopy,depth,soil,turbidity,stats,impactHeightAt,rockHeightAt,rockSolids,setRainLevel,applyClimate,skyDome,atmosphere:{temp:atmTemp,humidity:atmHumidity,pressure:atmPressure,cloud:atmCloud,rain:atmRain,rainField,getDayClock:()=>dayClock,getMetrics:()=>({temperature:atmTempMean,humidity:atmHumMean,pressure:atmPressureMean,wind:atmWindMean,clouds:atmCloudMean,rain:atmRainMean,daySeconds:dayClock})},reflectionCamera,reflectionCamera2,getMode:()=>mode,getWetArea:()=>wetted,getImpacts:()=>totalImpacts};
 try{resize();setMode('puddle');requestAnimationFrame(loop);}catch(e){fail(e);}
 })();
