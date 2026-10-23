@@ -224,9 +224,12 @@ function makeRoad(){
 function initializeLandscape(){
  for(let k=0;k<cells;k++){
   const {x,z}=position(k),distRoad=Math.abs(z-roadZ(x)),distRiver=Math.abs(x-riverX(z));
-  // Borda de terra batida macia, largura suficiente para se distinguir no solo.
+  // A trilha é desgaste por PASSAGENS acumuladas. A passagem central
+  // preexistente é apenas um histórico inicial, não um desenho permanente.
   const roadT=clamp(1-distRoad/1.10,0,1);
-  roadMask[k]=roadT*roadT*(3-2*roadT);
+  const historic=roadT*roadT*(3-2*roadT);
+  traffic[k]=historic*.76;
+  roadMask[k]=historic*.82;
   riverMask[k]=clamp(1-distRiver/.68,0,1);
   // A estrada recebe a compactação histórica; rio rebaixa o leito local.
   if(riverMask[k]>.05){
@@ -237,10 +240,12 @@ function initializeLandscape(){
      Math.pow((z-.84)/1.15,2));
    api.soil[k]-=Math.pow(riverMask[k],1.5)*(.13+.15*nearBridge);
   }
-  if(roadMask[k]>.1){traffic[k]=.68+roadMask[k]*.23;
-   api.permeability[k]*=(1-roadMask[k]*.44);}
+  if(roadMask[k]>.1)
+   api.permeability[k]*=(1-roadMask[k]*.38);
+  compaction[k]=roadMask[k]*.48;
   const shade=.5+.5*Math.sin(x*.85+z*.34)*Math.cos(z*.6);
   const moist=api.soilMoisture[k]/Math.max(.001,api.soilCapacity[k]);
+  lightField[k]=clamp(.45+.35*shade,0,1);
   cover[k]=clamp(.89+.08*shade+.12*moist-roadMask[k]*1.06-riverMask[k]*.90,0,1);
   foodResources[k]=Math.max(0,cover[k]*(1-roadMask[k])*.12);
  }
@@ -549,7 +554,9 @@ function rockShape(){
   const physical=api.rockSolids[i%Math.max(1,api.rockSolids.length)];
   const x=physical?physical.x:(random()-.5)*W*.92;
   const z=physical?physical.z:(random()-.5)*L*.92,k=idx(x,z);
-  if(roadMask[k]>.65)continue;
+  // Pedras grandes nunca nascem dentro da estrada ou junto a suas bordas.
+  // Rotas novas contornam as rochas existentes.
+  if(roadMask[k]>.12||Math.abs(z-roadZ(x))<1.5)continue;
   const key=names[i%names.length];const geom=meshLibrary[key];if(!geom)continue;
   const m=new T.Mesh(geom,mat.clone());m.name='Rocks.fbx '+key;
   const scale=.30+random()*.65;
