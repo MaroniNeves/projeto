@@ -70,7 +70,7 @@ function height(x,z){
 }
 const mobileDevice=innerWidth<680;
 // Orçamento alto igual no modo Equilibrado: vegetação fechada por TODO o mapa.
-const grassBudgets=mobileDevice?{high:1150000,balanced:1150000,low:470000}:{high:1500000,balanced:1500000,low:620000};
+const grassBudgets=mobileDevice?{high:1900000,balanced:1900000,low:800000}:{high:2400000,balanced:2400000,low:1000000};
 let grassDrawn=0,lastGrassQuality='';
 function applyGrassQuality(){
  const quality=api.getGraphicsQuality()||'balanced';
@@ -333,11 +333,10 @@ function initializeLandscape(){
 // Uma segunda escrita periódica causava a piscada observada no Android.
 function terrainTint(){/* delegated to main rebuild() */}
 async function grassShape(){
- // V12.50: aplica a DENSIDADE VISUAL da V12.42 em todo solo verde.
- // A V12.42 punha 89% dos tufos somente num corredor ~12m de largura.
- // Agora há pontos regulares apenas como estratificação subjacente; cada
- // posição sofre deslocamento aleatório completo, e os altos formam pares
- // V12.42 (68% de chance). Grama, rio, estrada e ninhos permanecem reais.
+ // V12.52: três estratos de grama Quaternius em TODO solo vegetável:
+ // forração baixa contínua, segunda moita curta entre as primeiras e
+ // grupamentos altos no mesmo estilo V12.42. Sem cones/triângulos antigos.
+ // Estrada, rio e pequenas clareiras dos formigueiros continuam descobertos.
  const names=['grassShort1','grassMixed1','grassTall1','grassMixed2'];
  const materials=new Map(),obj=new T.Object3D();
  for(const name of names){
@@ -348,17 +347,27 @@ async function grassShape(){
  if(!materials.size)return;
  const step=mobileDevice?.140:.125,chunkSize=10;
  const nxChunk=Math.ceil(W/chunkSize),nzChunk=Math.ceil(L/chunkSize);
- let planted=0,available=0,nearRoad=0,farRoad=0,chunkCount=0;
+ let planted=0,available=0,nearRoad=0,farRoad=0,chunkCount=0,carpet=0,clumps=0;
  const matColor=new T.Color();
  function suitable(x,z){
   if(Math.abs(x)>W*.49||Math.abs(z)>L*.49)return -1;
   const k=idx(x,z);
   if(fixedRoadMask[k]>.045||Math.abs(z-roadZ(x))<1.11||
     nestBareMask[k]>20||riverMask[k]>.74||api.depth[k]>.068||
-    cover[k]<.105)return -1;
+    cover[k]<.025)return -1;
   return k;
  }
- for(let cz=0;cz<nzChunk;cz++)for(let cx=0;cx<nxChunk;cx++){
+ // O ponto inicial da câmera tem prioridade: a vegetação começa a
+ // aparecer ao redor do jogador e depois se espalha até as bordas.
+ // Cada setor recebe a MESMA quantidade por metro quadrado.
+ const sectorOrder=[];
+ for(let cz=0;cz<nzChunk;cz++)for(let cx=0;cx<nxChunk;cx++)
+  sectorOrder.push({cx,cz,distance:
+   Math.pow(-W*.48+(cx+.5)*chunkSize,2)+
+   Math.pow(-L*.48+(cz+.5)*chunkSize,2)});
+ sectorOrder.sort((a,b)=>a.distance-b.distance);
+ let sectorIndex=0;
+ for(const {cx,cz} of sectorOrder){
   const minX=-W*.48+cx*chunkSize,maxX=Math.min(W*.48,minX+chunkSize);
   const minZ=-L*.48+cz*chunkSize,maxZ=Math.min(L*.48,minZ+chunkSize);
   if(maxX<=minX||maxZ<=minZ)continue;
@@ -370,7 +379,7 @@ async function grassShape(){
    const k=suitable(x,z);if(k<0)return false;
    const growth=clamp(cover[k]*(1-traffic[k])*
      (.55+.45*clamp(api.soilPlant[k],0,1)),0,1);
-   if(growth<.10)return false;
+   if(growth<.02)return false;
    const scale=(name==='grassShort1'?.43:name==='grassTall1'?.72:.63)*
      (.73+random()*.58)*multiplier;
    obj.position.set(x,height(x,z)-.018,z);
@@ -384,8 +393,8 @@ async function grassShape(){
    if(Math.abs(z-roadZ(x))<7.5)nearRoad++;else farRoad++;
    return true;
   }
-  // Espalhamento equilibrado: mesmo espaçamento estatístico de touceiras
-  // em clareiras, no fundo da floresta, junto a árvores e ao lado da pista.
+  // Mesmo adensamento em TODAS as regiões: não depender de grama
+  // triangular preexistente, nem dar prioridade à estrada.
   for(let iz=0;iz<rows;iz++)for(let ix=0;ix<cols;ix++){
    const x=minX+(ix+random())/cols*(maxX-minX);
    const z=minZ+(iz+random())/rows*(maxZ-minZ);
@@ -393,24 +402,32 @@ async function grassShape(){
    available++;
    const growth=clamp(cover[k]*(1-traffic[k])*
      (.55+.45*clamp(api.soilPlant[k],0,1)),0,1);
-   if(growth<.10)continue;
-   const tall=random()>=.37;
-   if(tall){
+   // Estrato de preenchimento SEMPRE presente na grama saudável.
+   // Reutiliza as malhas 3D Quaternius. Sem vegetação sobre solo pisado.
+   if(plant(random()<.21?'grassMixed1':'grassShort1',
+      x,z,1.18+growth*.33))carpet++;
+   // Uma segunda moita fecha os intervalos; também passa pelo teste
+   // de estrada, água, crescimento e solo descoberto em cada posição.
+   if(random()<.76){
+    const dx2=(random()-.5)*step*1.34,dz2=(random()-.5)*step*1.34;
+    const px=x+dx2,pz=z+dz2;
+    if(px>minX&&px<maxX&&pz>minZ&&pz<maxZ&&
+       plant(random()<.24?'grassMixed2':'grassShort1',px,pz,1.02+growth*.25))carpet++;
+   }
+   // Touceiras altas da V12.42; por cima do tapete baixo, e não no lugar.
+   if(random()<.68){
     const chance=random(),name=chance<.45?'grassTall1':
-      chance<.82?'grassMixed1':'grassMixed2';
-    if(!plant(name,x,z,1.04+growth*.30))continue;
+     chance<.82?'grassMixed1':'grassMixed2';
+    if(plant(name,x+(random()-.5)*step*.7,
+       z+(random()-.5)*step*.7,1.04+growth*.30))clumps++;
     if(random()<.68){
-     // Segundo tufo sem alinhamento, como nas manchas altas da V12.42.
      const px=x+(random()-.5)*.42,pz=z+(random()-.5)*.42;
      if(px>minX&&px<maxX&&pz>minZ&&pz<maxZ){
       const other=random(),secondary=other<.45?'grassTall1':
        other<.82?'grassMixed1':'grassMixed2';
-      plant(secondary,px,pz,1.04+growth*.30);
+      if(plant(secondary,px,pz,1.04+growth*.30))clumps++;
      }
     }
-   }else{
-    plant(random()<.16?'grassMixed1':'grassShort1',
-      x,z,.88+growth*.26);
    }
   }
   // Cada setor vira apenas 4 meshes instanciados. O GPU não recebe
@@ -418,7 +435,7 @@ async function grassShape(){
   for(const name of names){
    const entries=groups.get(name);if(!entries.length)continue;
    const mesh=new T.InstancedMesh(meshLibrary[name],materials.get(name),entries.length);
-   mesh.name='Capim fechado V12.50 · '+name+' · '+cx+','+cz;
+   mesh.name='Tapete de grama Quaternius V12.52 · '+name+' · '+cx+','+cz;
    mesh.frustumCulled=true;mesh.castShadow=false;mesh.receiveShadow=true;
    mesh.userData.planted=entries.length;
    mesh.userData.grassKeys=new Uint32Array(entries.length);
@@ -436,12 +453,17 @@ async function grassShape(){
    foliage.add(mesh);chunkCount++;
   }
   // Libera o navegador entre partes do mapa, em especial no Android.
-  if((cz*nxChunk+cx)%3===2)
+  sectorIndex++;
+  if(sectorIndex%3===0){
+   if($('ecoStatus'))$('ecoStatus').textContent=
+    '🌱 Preenchendo gramado 3D '+Math.round(sectorIndex/sectorOrder.length*100)+
+    '% · '+planted.toLocaleString('pt-BR')+' tufos (sem triângulos antigos)';
    await new Promise(resolve=>requestAnimationFrame(resolve));
+  }
  }
  applyGrassQuality();
- console.info('[Arcano V12.50] Grama muito densa em TODO o mapa',
-   {planted,eligibleSites:available,chunks:chunkCount,nearRoad,farRoad,quality:lastGrassQuality});
+ console.info('[Arcano V12.52] Tapete baixo + tufo alto em TODO o mapa',
+   {planted,carpet,clumps,eligibleSites:available,chunks:chunkCount,nearRoad,farRoad,quality:lastGrassQuality});
 }
 // FOLHAS: pequena malha 3D low-poly de seis faces (nervura central elevada),
 // nas cores dos modelos Quaternius já carregados. O próprio MegaKit/Ultimate
