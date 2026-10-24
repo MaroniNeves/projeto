@@ -73,6 +73,9 @@ const mobileDevice=innerWidth<680;
 const grassBudgets=mobileDevice?{high:1900000,balanced:1900000,low:800000}:{high:2400000,balanced:2400000,low:1000000};
 let grassDrawn=0,lastGrassQuality='';
 const grassChunkMeshes=new Map();
+// Cada célula do solo é avaliada UMA vez por atualização, mesmo quando
+// dezenas de tufos ocupam essa mesma célula.
+const grassCurrentScale=new Float64Array(cells);
 const grassCellLastScale=new Float32Array(cells);
 grassCellLastScale.fill(NaN);
 let grassForceRefresh=true;
@@ -89,7 +92,9 @@ function applyGrassQuality(){
  grassDrawn=0;
  for(const m of foliage.children)if(m.isInstancedMesh){
   m.count=Math.min(m.userData.planted||0,Math.round((m.userData.planted||0)*ratio));
-  grassDrawn+=m.count;m.instanceMatrix.needsUpdate=true;
+  // Alterar apenas o número de instâncias não altera o conteúdo do buffer
+  // e não exige transferir novamente as matrizes para a GPU.
+  grassDrawn+=m.count;
  }
  if(lastGrassQuality!==quality)grassForceRefresh=true;
  lastGrassQuality=quality;
@@ -384,7 +389,12 @@ async function grassShape(){
   const minZ=-L*.48+cz*chunkSize,maxZ=Math.min(L*.48,minZ+chunkSize);
   if(maxX<=minX||maxZ<=minZ)continue;
   const cols=Math.ceil((maxX-minX)/step),rows=Math.ceil((maxZ-minZ)/step);
-  const groups=new Map(names.map(name=>[name,[]]));
+  // Pacotes binários reutilizáveis: não criar milhões de Object3D/Matrix4
+  // temporários no carregamento. Dados/posições são idênticos aos originais.
+  const groups=new Map(names.map(name=>[name,{
+   matrices:new Float32Array(128*16),keys:new Uint32Array(128),
+   biomes:new Float64Array(128),count:0
+  }]));
   function plant(name,x,z,multiplier=1){
    const geo=meshLibrary[name],out=groups.get(name);
    if(!geo||planted>=grassBudgets.high)return false;
@@ -400,7 +410,15 @@ async function grassShape(){
      scale*(.78+random()*.44));
    obj.updateMatrix();
    const color=api.biomeField?.(x,z)||0;
-   out.push({matrix:obj.matrix.clone(),k,biome:color});
+   if(out.count===out.keys.length){
+    const cap=out.keys.length*2;
+    const matrices=new Float32Array(cap*16),keys=new Uint32Array(cap);
+    const biomes=new Float64Array(cap);
+    matrices.set(out.matrices);keys.set(out.keys);biomes.set(out.biomes);
+    out.matrices=matrices;out.keys=keys;out.biomes=biomes;
+   }
+   out.matrices.set(obj.matrix.elements,out.count*16);
+   out.keys[out.count]=k;out.biomes[out.count]=color;out.count++;
    planted++;
    if(Math.abs(z-roadZ(x))<7.5)nearRoad++;else farRoad++;
    return true;
@@ -445,18 +463,20 @@ async function grassShape(){
   // Cada setor vira apenas 4 meshes instanciados. O GPU não recebe
   // os milhões de vértices dos setores fora da câmera.
   for(const name of names){
-   const entries=groups.get(name);if(!entries.length)continue;
-   const mesh=new T.InstancedMesh(meshLibrary[name],materials.get(name),entries.length);
+   const entries=groups.get(name);if(!entries.count)continue;
+   const mesh=new T.InstancedMesh(meshLibrary[name],materials.get(name),entries.count);
+   // Copiar os mesmos 16 floats de cada matriz de uma única vez.
+   mesh.instanceMatrix.array.set(entries.matrices.subarray(0,entries.count*16));
+   mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
    mesh.name='Tapete de grama Quaternius V12.52 · '+name+' · '+cx+','+cz;
    mesh.frustumCulled=true;mesh.castShadow=false;mesh.receiveShadow=true;
-   mesh.userData.planted=entries.length;
-   mesh.userData.grassKeys=new Uint32Array(entries.length);
-   mesh.userData.lastScale=new Float32Array(entries.length);
+   mesh.userData.planted=entries.count;
+   mesh.userData.grassKeys=entries.keys.subarray(0,entries.count);
+   mesh.userData.lastScale=new Float32Array(entries.count);
    mesh.userData.lastScale.fill(1);
-   for(let i=0;i<entries.length;i++){
-    const a=entries[i];mesh.setMatrixAt(i,a.matrix);
-    mesh.userData.grassKeys[i]=a.k;
-    matColor.setRGB(1,1-a.biome*.13,1-a.biome*.28);
+   for(let i=0;i<entries.count;i++){
+    const biome=entries.biomes[i];
+    matColor.setRGB(1,1-biome*.13,1-biome*.28);
     mesh.setColorAt(i,matColor);
    }
    mesh.computeBoundingSphere();
@@ -467,7 +487,8 @@ async function grassShape(){
    if(!grassChunkMeshes.has(sectorId))grassChunkMeshes.set(sectorId,[]);
    grassChunkMeshes.get(sectorId).push(mesh);
   }
-  // Libera o navegador entre partes do mapa, em especial no Android.
+  // Libera temporários antes de entregar o controle ao navegador.
+  groups.clear();
   sectorIndex++;
   if(sectorIndex%3===0){
    if($('ecoStatus'))$('ecoStatus').textContent=
@@ -1424,13 +1445,17 @@ function updateGrassMeshes(force=false){
  const dirty=new Set();
  if(force||grassForceRefresh){
   for(const id of grassChunkMeshes.keys())dirty.add(id);
-  for(let k=0;k<cells;k++)grassCellLastScale[k]=grassAliveScale(k);
+  for(let k=0;k<cells;k++){
+   const scale=grassAliveScale(k);
+   grassCurrentScale[k]=scale;grassCellLastScale[k]=scale;
+  }
   grassForceRefresh=false;
  }else{
   const chunkSize=10,nxChunk=Math.ceil(W/chunkSize),nzChunk=Math.ceil(L/chunkSize);
   const xMargin=dx*1.05,zMargin=dz*1.05;
   for(let k=0;k<cells;k++){
    const scale=grassAliveScale(k),prev=grassCellLastScale[k];
+   grassCurrentScale[k]=scale;
    if(Math.abs(scale-prev)<.018)continue;
    grassCellLastScale[k]=scale;
    const x=-W*.5+(k%NX)*dx,z=-L*.5+Math.floor(k/NX)*dz;
@@ -1455,16 +1480,25 @@ function updateGrassMeshes(force=false){
   for(const mesh of sector){
    const keys=mesh.userData.grassKeys,previous=mesh.userData.lastScale;
    const buffer=mesh.instanceMatrix.array;
-   let changed=false;
+   let firstChanged=mesh.count,lastChanged=-1;
    for(let i=0;i<mesh.count;i++){
-    const scale=grassAliveScale(keys[i]);
+    const scale=grassCurrentScale[keys[i]];
     const last=previous[i]||1;
     if(Math.abs(scale-last)<.018)continue;
     const ratio=scale/last,off=i*16;
     for(let j=0;j<12;j++)buffer[off+j]*=ratio;
-    previous[i]=scale;changed=true;
+    previous[i]=scale;
+    if(i<firstChanged)firstChanged=i;
+    lastChanged=i;
    }
-   if(changed)mesh.instanceMatrix.needsUpdate=true;
+   if(lastChanged>=0){
+    // r152: updateRange conta floats (16 por matriz). Preserva todas as
+    // instâncias e transfere somente o intervalo alterado à GPU.
+    const attr=mesh.instanceMatrix;
+    attr.updateRange.offset=firstChanged*16;
+    attr.updateRange.count=(lastChanged-firstChanged+1)*16;
+    attr.needsUpdate=true;
+   }
   }
  }
 }
