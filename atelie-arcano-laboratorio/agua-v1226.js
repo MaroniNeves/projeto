@@ -3778,6 +3778,8 @@ function updateInfo(force){
   rainMeter.style.setProperty('--rain-fill',rainFill);
  let surface=0,stored=0,ground=0,leaf=0,saturated=0,participating=0;
  let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0,mudTotal=0,mudWeight=0,wetSoilOnly=0;
+ let nAvg=0,pAvg=0,kAvg=0,caAvg=0,phAvg=0,biotaAvg=0,salAvg=0,omAvg=0,growthAvg=0,healthAvg=0;
+ const limited=new Uint32Array(SOIL_LIMITS.length);
  for(let k=0;k<size;k++){
   surface+=depth[k];stored+=soilMoisture[k];ground+=deepWater[k];leaf+=canopy[k];
    if(depth[k]>.010){mudTotal+=turbidity[k]*depth[k];mudWeight+=depth[k];}
@@ -3787,6 +3789,11 @@ function updateInfo(force){
   const q=uiBasinDistances[k];
   if(q<.72){lagoonCells++;if(depth[k]>=SURFACE_VISIBLE)lagoonWet++;lagoonMax=Math.max(lagoonMax,depth[k]);}
   if(depth[k]>=SURFACE_VISIBLE&&q>.72)otherPuddles++;
+  // Agregar nutrientes junto das águas: duas leituras da grade -> uma,
+  // mantendo a mesma ordem de somas de cada indicador.
+  nAvg+=soilN[k];pAvg+=soilP[k];kAvg+=soilK[k];caAvg+=soilCa[k];phAvg+=soilPH[k];
+  biotaAvg+=soilBiota[k];salAvg+=soilSalinity[k];omAvg+=soilOrganic[k];
+  growthAvg+=soilPlant[k];healthAvg+=soilHealth[k];limited[soilLimiting[k]]++;
  }
  surface*=area;stored*=area;ground*=area;leaf*=area;
  hudText('rainDetail',(physicalWeather
@@ -3795,13 +3802,6 @@ function updateInfo(force){
   :'Escala '+level+'/5 · chuva manual '+name)+
    ' • '+timeScale+'× • '+drops.length+' gotas 3D');
  hudText('soilStats','Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo');
- let nAvg=0,pAvg=0,kAvg=0,caAvg=0,phAvg=0,biotaAvg=0,salAvg=0,omAvg=0,growthAvg=0,healthAvg=0;
- const limited=new Array(SOIL_LIMITS.length).fill(0);
- for(let k=0;k<size;k++){
-  nAvg+=soilN[k];pAvg+=soilP[k];kAvg+=soilK[k];caAvg+=soilCa[k];phAvg+=soilPH[k];
-  biotaAvg+=soilBiota[k];salAvg+=soilSalinity[k];omAvg+=soilOrganic[k];
-  growthAvg+=soilPlant[k];healthAvg+=soilHealth[k];limited[soilLimiting[k]]++;
- }
  const asPct=x=>Math.round(clamp(x/size,0,1)*100);
  const mainLimit=limited.indexOf(Math.max(...limited));
  hudText('fertilityStats',(soilType==='mosaico'?'Mosaico ecológico ('+SOIL_KEYS.length+' perfis disponíveis)':SOIL_PROFILES[soilType].name)+
