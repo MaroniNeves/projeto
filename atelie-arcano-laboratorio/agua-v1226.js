@@ -50,6 +50,10 @@ const soilOrganic=new Float32Array(size),soilLitter=new Float32Array(size),soilN
  soilPlant=new Float32Array(size),soilHealth=new Float32Array(size),soilLimiting=new Uint8Array(size);
 const SOIL_LIMITS=['água','nitrogênio','fósforo','potássio','cálcio','pH','salinidade','oxigênio'];
 const plantNeeds={moisture:.50,n:.58,p:.50,k:.48,ca:.45};
+// Espaço temporário reutilizado: não criar 8 números em novo Array
+// a cada célula examinada pela ecologia.
+const nutrientFactors=new Float64Array(8);
+const soilColorScratch=new T.Color(),soilMossColor=new T.Color('#77966c');
 let soilEcologySeconds=0,plantVisualSeconds=0,soilUpdates=0;
 function chooseMosaicSoil(x,z,h,k){
  const stream=Math.abs(x-center(z));
@@ -83,13 +87,13 @@ function configureSoilCells(preserve=true){
   soilCa[k]=p.ca;soilPH[k]=p.ph;soilSalinity[k]=p.salt;
   soilBiota[k]=clamp(soilOrganic[k]*(1-p.salt)*.85,.02,1);
   soilPlant[k]=preserve?clamp(soilPlant[k],.08,1):clamp(.38+.30*cover[k],.1,1);
-  const c=new T.Color(p.col),shade=.91+.09*Math.sin(x*.82+z*1.14);
+  const c=soilColorScratch.set(p.col),shade=.91+.09*Math.sin(x*.82+z*1.14);
   // Solo visível continua distinguindo os perfis, mas recebe musgo suave nas
   // áreas com cobertura vegetal e não nas margens de solo saturado.
   const mossFactor=clamp((cover[k]-.28)*.58,0,.34)*
    clamp((soil[k]+.2)*2.0,0,1);
-  c.lerp(new T.Color('#77966c'),mossFactor);
-  for(let m=0;m<3;m++)dry[k*3+m]=c.toArray()[m]*shade;
+  c.lerp(soilMossColor,mossFactor);
+  dry[k*3]=c.r*shade;dry[k*3+1]=c.g*shade;dry[k*3+2]=c.b*shade;
  }
  land.material.color.set('#ffffff');
  landG.attributes.color.needsUpdate=true;
@@ -104,9 +108,12 @@ function minNutrientAt(k){
  const acidity=clamp(1-Math.abs(soilPH[k]-6.5)/2.5,0,1);
  const salinity=clamp(1-soilSalinity[k]*1.20,0,1);
  const calcium=clamp(soilCa[k]/plantNeeds.ca,0,1);
- const factors=[waterFactor,n,phos,pot,calcium,acidity,salinity,oxygen];
- let minimum=factors[0],limiter=0;
- for(let m=1;m<factors.length;m++)if(factors[m]<minimum){minimum=factors[m];limiter=m;}
+ nutrientFactors[0]=waterFactor;nutrientFactors[1]=n;
+ nutrientFactors[2]=phos;nutrientFactors[3]=pot;
+ nutrientFactors[4]=calcium;nutrientFactors[5]=acidity;
+ nutrientFactors[6]=salinity;nutrientFactors[7]=oxygen;
+ let minimum=nutrientFactors[0],limiter=0;
+ for(let m=1;m<8;m++)if(nutrientFactors[m]<minimum){minimum=nutrientFactors[m];limiter=m;}
  soilLimiting[k]=limiter;
  return clamp(minimum,0,1);
 }
@@ -160,6 +167,18 @@ function ecologyStep(dt){
 }
 
 const nx=i=>-W*.5+i*dx,nz=j=>-L*.5+j*dz, idx=(i,j)=>j*NX+i;
+// V12.55: vizinhos calculados UMA vez. Mantém exatamente a ordem
+// esquerda, direita, cima e baixo das transferências de água/solo.
+const gridNeighbors=new Int32Array(size*4);
+const gridX=new Float64Array(size),gridZ=new Float64Array(size);
+for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
+ const k=idx(i,j),o=k*4;
+ gridX[k]=nx(i);gridZ[k]=nz(j);
+ gridNeighbors[o]=idx(Math.max(0,i-1),j);
+ gridNeighbors[o+1]=idx(Math.min(NX-1,i+1),j);
+ gridNeighbors[o+2]=idx(i,Math.max(0,j-1));
+ gridNeighbors[o+3]=idx(i,Math.min(NZ-1,j+1));
+}
 const smooth=(t)=>t*t*(3-2*t);
 function rand(seed){return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};}
 const random=rand(22026),basins=[
@@ -2950,11 +2969,12 @@ function aquiferStep(dt){
  for(let j=1;j<NZ-1;j++)for(let i=1;i<NX-1;i++){
   const k=idx(i,j),store=deepWater[k];
   if(store<.000001)continue;
-  const neighbours=[k-1,k+1,k-NX,k+NX];
+  const base=k*4;
   const head=soil[k]-1.15+store*1.6;
   let available=Math.min(store,.0045*dt);
-  for(const q of neighbours){
+  for(let n=0;n<4;n++){
    if(available<=0)break;
+   const q=gridNeighbors[base+n];
    const nextHead=soil[q]-1.15+deepWater[q]*1.6;
    const transfer=Math.min(available,Math.max(0,head-nextHead)*speed*.25);
    aquiferFlux[k]-=transfer;aquiferFlux[q]+=transfer;
@@ -2970,20 +2990,24 @@ function aquiferStep(dt){
  }
  for(let k=0;k<size;k++)deepWater[k]=Math.max(0,deepWater[k]+aquiferFlux[k]);
 }
+// Reutilizar as quatro parcelas de vazão em vez de alocar um Array
+// por célula molhada. Os valores são zerados antes de cada uso.
+const flowTransfers=new Float64Array(4);
 function flowStep(dt,multiplier){
  delta.fill(0);const speed=(.62+rainLevels[level]*.07)*dt*2.0*multiplier;
  for(let j=1;j<NZ-1;j++)for(let i=1;i<NX-1;i++){
   const k=idx(i,j),v=depth[k];if(v<.000008)continue;
-  const head=soil[k]+v,neigh=[k-1,k+1,k-NX,k+NX],transfer=[0,0,0,0];let sum=0;
-  for(let n=0;n<4;n++){const q=neigh[n];
+  const head=soil[k]+v,base=k*4;let sum=0;
+  flowTransfers[0]=flowTransfers[1]=flowTransfers[2]=flowTransfers[3]=0;
+  for(let n=0;n<4;n++){const q=gridNeighbors[base+n];
    const diff=head-soil[q]-depth[q];if(diff<=0)continue;
    const resistance=(blocked[k]||blocked[q])?
        .54+.46*clamp(Math.max(v,depth[q])/.30,0,1):1;
     const amount=diff*speed*(n<2?dz/dx:dx/dz)*.38*resistance;
-    transfer[n]=amount;sum+=amount;
+    flowTransfers[n]=amount;sum+=amount;
   }
   const fraction=sum>v?v/sum:1;
-  for(let n=0;n<4;n++)if(transfer[n]){const a=transfer[n]*fraction;delta[k]-=a;delta[neigh[n]]+=a;}
+  for(let n=0;n<4;n++)if(flowTransfers[n]){const a=flowTransfers[n]*fraction;delta[k]-=a;delta[gridNeighbors[base+n]]+=a;}
  }
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
   const k=idx(i,j);
@@ -3027,7 +3051,7 @@ function rebuild(){
  // Ler a grade física uma única vez, mantendo fluxos/águas exatos;
  // identificar linhas cujo solo mudou enquanto os dados já estão no cache.
  for(let j=0;j<NZ;j++)for(let i=0;i<NX;i++){
-  const k=idx(i,j),d=depth[k],x=nx(i),z=nz(j),o=k*3;
+  const k=idx(i,j),d=depth[k],x=gridX[k],z=gridZ[k],o=k*3;
   shoreField[k]=d-SURFACE_VISIBLE-
     .0017*Math.sin(x*3.9+z*4.2)-.0011*Math.sin(x*8.7-z*5.1);
   wet[k]=clamp((d-.002)/.014,0,1);
@@ -3035,8 +3059,8 @@ function rebuild(){
   if(d>.0035)
    reflectWetBlocks[Math.floor(j/REFLECT_CELL_BLOCK)*reflectCols+
     Math.floor(i/REFLECT_CELL_BLOCK)]=1;
-  const left=idx(Math.max(0,i-1),j),right=idx(Math.min(NX-1,i+1),j);
-  const up=idx(i,Math.max(0,j-1)),down=idx(i,Math.min(NZ-1,j+1));
+  const base=k*4,left=gridNeighbors[base],right=gridNeighbors[base+1];
+  const up=gridNeighbors[base+2],down=gridNeighbors[base+3];
   flow[k*2]=flowXField[k]=(soil[left]+depth[left]-soil[right]-depth[right])*.6;
   flow[k*2+1]=flowZField[k]=(soil[up]+depth[up]-soil[down]-depth[down])*.6;
   const road=ecoActive?(eco.roadMask[k]||0):0;
