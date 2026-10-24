@@ -545,6 +545,7 @@ function dewPointCelsius(temp,rh){
  const gamma=Math.log(relative)+(a*temp)/(b+temp);
  return b*gamma/(a-gamma);
 }
+const fogDewTint=new T.Color('#d9e7df');
 function updateGroundFog(dt){
  const rainIncrease=Math.max(0,stats.rain-fogLastRain);
  fogLastRain=stats.rain;
@@ -605,7 +606,7 @@ function updateGroundFog(dt){
  scene.fog.near=36-27*strength;
  scene.fog.far=74-51*strength;
  const base=weatherCfg?weatherCfg.bg:'#b6c6bc';
- scene.fog.color.set(base).lerp(new T.Color('#d9e7df'),strength*.65);
+ scene.fog.color.set(base).lerp(fogDewTint,strength*.65);
  for(const patch of fogPatches){
   patch.mesh.visible=strength>.04;
   patch.mesh.material.opacity=strength*(.18+.07*Math.sin(visualTime*.30+patch.phase));
@@ -2578,7 +2579,7 @@ const foamLimit=mobile?120:220,foamObj=new T.Object3D();
 const foamMesh=new T.InstancedMesh(new T.PlaneGeometry(.060,.027),
  new T.MeshBasicMaterial({color:'#e2d5bb',transparent:true,opacity:.60,side:T.DoubleSide,depthWrite:false}),foamLimit);
 foamMesh.count=0;foamMesh.frustumCulled=false;foamMesh.renderOrder=5;scene.add(foamMesh);
-const foamClean=new T.Color('#c6f3e9'),foamDirty=new T.Color('#a48a69');
+const foamClean=new T.Color('#c6f3e9'),foamDirty=new T.Color('#a48a69'),foamTintScratch=new T.Color();
 let reflectionAge=999,reflectionFrames=0,reflectionsOn=true,reflectionReady=false,reflection2Ready=false;
 let reflectionTurn=0;
 // V12.53: consultar apenas os blocos onde a água realmente existe.
@@ -3179,13 +3180,18 @@ function rebuild(){
   foamObj.rotation.set(-Math.PI/2,0,.8*Math.sin(x*5.5-z*3.1));
   const scale=.48+.6*variation;foamObj.scale.set(scale,scale*.75,1);
   foamObj.updateMatrix();foamMesh.setMatrixAt(foamCount,foamObj.matrix);
-  foamMesh.setColorAt(foamCount,foamClean.clone().lerp(foamDirty,clamp(turbidity[k]*1.35,0,1)));
+  foamMesh.setColorAt(foamCount,foamTintScratch.copy(foamClean).lerp(foamDirty,clamp(turbidity[k]*1.35,0,1)));
   foamCount++;
  }
  foamMesh.count=foamCount;foamMesh.instanceMatrix.needsUpdate=true;
  if(foamMesh.instanceColor)foamMesh.instanceColor.needsUpdate=true;
 }
 // O solo define a cor, a altura e o número das partículas expelidas.
+// Cores auxiliares reutilizadas entre impactos: cada partícula ainda recebe
+// sua própria cópia e conserva exatamente a cor no restante da animação.
+const waterTintBase=new T.Color('#a8c8d6'),waterTintMud=new T.Color('#907058');
+const dirtTintDark=new T.Color('#584436');
+const waterTintScratch=new T.Color(),dirtTintScratch=new T.Color();
 function spawnSplash(x,z,h){
  const i=Math.round((x+W*.5)/dx),j=Math.round((z+L*.5)/dz);
  if(i<0||j<0||i>=NX||j>=NZ)return;
@@ -3197,9 +3203,9 @@ function spawnSplash(x,z,h){
  const muddy=turbidity[k];
  // Um impacto em poça mobiliza pequenas partículas; água barrenta expele gotículas castanhas.
  if(inWater)turbidity[k]=clamp(turbidity[k]+.0018*SOIL_PROFILES[SOIL_KEYS[soilKeyIndex[k]]].erosion,0,1);
- const waterTint=new T.Color('#a8c8d6').lerp(new T.Color('#907058'),muddy*.91);
- const dirtTint=new T.Color(SOIL_PROFILES[SOIL_KEYS[soilKeyIndex[k]]].col);
- dirtTint.lerp(new T.Color('#584436'),saturation*.45);
+ const waterTint=waterTintScratch.copy(waterTintBase).lerp(waterTintMud,muddy*.91);
+ const dirtTint=dirtTintScratch.set(SOIL_PROFILES[SOIL_KEYS[soilKeyIndex[k]]].col);
+ dirtTint.lerp(dirtTintDark,saturation*.45);
  const count=inWater?7+Math.floor(random()*5):
    saturation>.58?4+Math.floor(random()*3):1+Math.floor(random()*3);
  const tint=inWater?waterTint:dirtTint;
