@@ -1218,6 +1218,34 @@ async function arcanoFoliageTexture(filename){
  }
  return arcanoFoliageTextureCache.get(filename);
 }
+// Cascas do mesmo pacote Quaternius já usado pelo laboratório, hospedadas localmente.
+// Compartilhar por arquivo e convenção UV: glTF não inverte Y; FBX inverte.
+const arcanoLocalBarkFiles={
+ CommonTree_1:'NormalTree_Bark.jpg',CommonTree_2:'NormalTree_Bark.jpg',
+ CommonTree_3:'NormalTree_Bark.jpg',CommonTree_4:'NormalTree_Bark.jpg',
+ CommonTree_5:'NormalTree_Bark.jpg',Pine_2:'PineTree_Bark.jpg',Pine_4:'PineTree_Bark.jpg',
+ BirchTree_1:'BirchTree_Bark.jpg',BirchTree_3:'BirchTree_Bark.jpg',
+ MapleTree_3:'MapleTree_Bark.jpg',NormalTree_2:'NormalTree_Bark.jpg',PineTree_2:'PineTree_Bark.jpg'
+};
+const arcanoLocalBarkCache=new Map();
+async function arcanoLocalBarkTexture(item){
+ const filename=arcanoLocalBarkFiles[item.name];
+ if(!filename)return null;
+ const flipY=item.pack==='ultimate',key=filename+'@'+flipY;
+ if(!arcanoLocalBarkCache.has(key)){
+  const task=new T.TextureLoader().loadAsync(new URL('./assets/ultimate/'+filename,document.baseURI).href)
+   .then(texture=>{
+    texture.name=filename;texture.colorSpace=T.SRGBColorSpace;texture.flipY=flipY;
+    texture.wrapS=texture.wrapT=T.RepeatWrapping;
+    texture.anisotropy=QUALITY_PRESETS[graphicsQuality].anisotropy;
+    texture.needsUpdate=true;return texture;
+   }).catch(error=>{
+    console.warn('[Arcano] Casca local indisponível:',filename,error);return null;
+   });
+  arcanoLocalBarkCache.set(key,task);
+ }
+ return arcanoLocalBarkCache.get(key);
+}
 // V12.27.3: o FBX pode usar Phong com brilho especular.
  // Converter para Standard preserva a imagem mas remove o aspecto metálico.
 async function arcanoRepairForestMaterials(item,root){
@@ -1228,11 +1256,9 @@ async function arcanoRepairForestMaterials(item,root){
  const flowersMap=item.pack==='ultimate'&&
    (item.type==='bush'||item.type==='flower')?
    await arcanoFoliageTexture('Flowers.png'):null;
- // V12.57: os pacotes Quaternius GLTF incluem UV de casca, mas não
- // hospedam Bark_NormalTree.png. Não usar material liso quando falta mapa.
- // Recupera a casca painterly já existente no próprio laboratório.
+ // Cascas locais por espécie; a textura painterly existente fica como reserva.
  const isTree=item.type==='tree'||item.type==='pine';
- const barkMap=isTree?arcanoTreeBarkTexture(item.name):null;
+ const barkMap=isTree?(await arcanoLocalBarkTexture(item)||arcanoTreeBarkTexture(item.name)):null;
  root.traverse(obj=>{
   if(!obj.isMesh)return;
   const source=Array.isArray(obj.material)?obj.material:[obj.material];
@@ -1299,6 +1325,8 @@ function registerForestMaterial(item,root){
   const materials=Array.isArray(o.material)?o.material:[o.material];
   for(const mat of materials){
    if(!mat||qualityMaterials.has(mat))continue;
+   // Cascas locais conservam resolução e orientação UV em todos os presets.
+   if(mat.userData.arcanoMaterialType==='wood')continue;
    // Cor e transparência da folhagem permanecem no PNG original local.
    // Apenas materiais de casca/rocha que tinham substituto 128px recebem
    // opcionalmente a imagem original do próprio pacote, em qualidade Alta.
@@ -1400,7 +1428,7 @@ function updateGraphicsStatus(){
   ' · tela '+Math.min(devicePixelRatio||1,mobile?q.mobilePixel:q.desktopPixel).toFixed(2)+'×'+
   ' · folhagem '+Math.round(q.small*100)+'%'+
   ' · sombras '+(mobile?q.shadowsMobile:q.shadowsDesktop)+'px'+
-  ' · cascas originais '+originalsReady+
+  ' · cascas locais 1024px · detalhes minerais '+originalsReady+
   (resolution?' ('+resolution+'px)': ' (reserva leve)')+
   (originalDetailLoading.size?' · baixando':'')+
   (originalsUnavailable?' · algumas indisponíveis':'')+
