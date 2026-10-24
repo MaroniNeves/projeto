@@ -102,8 +102,11 @@ function applyGrassQuality(){
 async function loadMeshes(){
  // Decodificar de forma linear, sem callback/alocação por byte.
  // O conteúdo comprimido e todas as malhas permanecem idênticos.
- const packed=atob(raw.compressed),bytes=new Uint8Array(packed.length);
- for(let i=0;i<packed.length;i++)bytes[i]=packed.charCodeAt(i);
+ const bytes=(()=>{
+  const packed=atob(raw.compressed),binary=new Uint8Array(packed.length);
+  for(let i=0;i<packed.length;i++)binary[i]=packed.charCodeAt(i);
+  return binary;
+ })(); // A string base64 decodificada sai do escopo antes da descompressão.
  if(!('DecompressionStream' in window))throw new Error('Navegador sem DecompressionStream');
  const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
  const data=JSON.parse(await new Response(stream).text());
