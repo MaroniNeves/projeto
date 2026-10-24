@@ -3752,11 +3752,24 @@ function setMode(next){
 $('replay').addEventListener('click',()=>seed(mode));
 $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'▶ Continuar':'⏸ Pausar';updateInfo(true);});
 $('cam').addEventListener('click',()=>{yaw=.83;pitch=.79;radius=24;});
+// V12.55: distâncias estáticas dos indicadores só precisam ser calculadas uma vez.
+const uiBasinDistances=new Float64Array(size);
+for(let k=0;k<size;k++){
+ const i=k%NX,j=Math.floor(k/NX),x=nx(i),z=nz(j),b=basins[1];
+ uiBasinDistances[k]=((x-b.x)/b.sx)**2+((z-b.z)/b.sz)**2;
+}
+const hudNodes=Object.create(null);
+function hudText(id,value){
+ const node=hudNodes[id]||(hudNodes[id]=$(id));
+ if(node&&node.textContent!==value)node.textContent=value;
+}
 function updateInfo(force){
  const now=performance.now();if(!force&&now-lastUI<420)return;lastUI=now;
  // A régua visual é não linear, acompanhando a força crescente da precipitação.
  const pct=Math.round(Math.pow(rainMeters[level]/rainMeters[5],.62)*100),name=rainNames[level];
- $('intensityName').textContent=name;$('rainMeter').style.setProperty('--rain-fill',pct+'%');
+ hudText('intensityName',name);const rainMeter=$('rainMeter'),rainFill=pct+'%';
+ if(rainMeter&&rainMeter.style.getPropertyValue('--rain-fill')!==rainFill)
+  rainMeter.style.setProperty('--rain-fill',rainFill);
  let surface=0,stored=0,ground=0,leaf=0,saturated=0,participating=0;
  let lagoonWet=0,lagoonCells=0,lagoonMax=0,otherPuddles=0,mudTotal=0,mudWeight=0,wetSoilOnly=0;
  for(let k=0;k<size;k++){
@@ -3765,18 +3778,17 @@ function updateInfo(force){
   const soilSat=clamp(soilMoisture[k]/soilCapacity[k],0,1);
   saturated+=soilSat;participating++;
   if(soilSat>.18&&depth[k]<SURFACE_VISIBLE)wetSoilOnly++;
-  const i=k%NX,j=Math.floor(k/NX),x=nx(i),z=nz(j),b=basins[1];
-  const q=((x-b.x)/b.sx)**2+((z-b.z)/b.sz)**2;
+  const q=uiBasinDistances[k];
   if(q<.72){lagoonCells++;if(depth[k]>=SURFACE_VISIBLE)lagoonWet++;lagoonMax=Math.max(lagoonMax,depth[k]);}
   if(depth[k]>=SURFACE_VISIBLE&&q>.72)otherPuddles++;
  }
  surface*=area;stored*=area;ground*=area;leaf*=area;
- $('rainDetail').textContent=(physicalWeather
+ hudText('rainDetail',(physicalWeather
   ?'Escala '+level+'/5 · chuva regional '+Math.round(clamp(appliedRainMean/.0061,0,1)*100)+
     '% · '+activeRainRegions+'/'+ATM_N+' zonas com chuva'
   :'Escala '+level+'/5 · chuva manual '+name)+
-   ' • '+timeScale+'× • '+drops.length+' gotas 3D';
- $('soilStats').textContent='Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo';
+   ' • '+timeScale+'× • '+drops.length+' gotas 3D');
+ hudText('soilStats','Terra: '+Math.round(saturated/Math.max(1,participating)*100)+'% saturada · '+stored.toFixed(1)+' m³ retidos no solo');
  let nAvg=0,pAvg=0,kAvg=0,caAvg=0,phAvg=0,biotaAvg=0,salAvg=0,omAvg=0,growthAvg=0,healthAvg=0;
  const limited=new Array(SOIL_LIMITS.length).fill(0);
  for(let k=0;k<size;k++){
@@ -3786,32 +3798,32 @@ function updateInfo(force){
  }
  const asPct=x=>Math.round(clamp(x/size,0,1)*100);
  const mainLimit=limited.indexOf(Math.max(...limited));
- $('fertilityStats').textContent=(soilType==='mosaico'?'Mosaico ecológico ('+SOIL_KEYS.length+' perfis disponíveis)':SOIL_PROFILES[soilType].name)+
-  ' · N '+asPct(nAvg)+'% · P '+asPct(pAvg)+'% · K '+asPct(kAvg)+'% · Ca '+asPct(caAvg)+'% · húmus '+asPct(omAvg)+'%';
- $('plantStats').textContent='🌱 Biomassa '+asPct(growthAvg)+'% · condição de crescimento '+asPct(healthAvg)+
-  '% · principal limitante: '+SOIL_LIMITS[mainLimit]+' · pH '+(phAvg/size).toFixed(1)+' · salinidade '+asPct(salAvg)+'% · biota '+asPct(biotaAvg)+'%';
- $('windStatus').textContent='🍃 Vento '+atmWindMean.toFixed(2)+
+ hudText('fertilityStats',(soilType==='mosaico'?'Mosaico ecológico ('+SOIL_KEYS.length+' perfis disponíveis)':SOIL_PROFILES[soilType].name)+
+  ' · N '+asPct(nAvg)+'% · P '+asPct(pAvg)+'% · K '+asPct(kAvg)+'% · Ca '+asPct(caAvg)+'% · húmus '+asPct(omAvg)+'%');
+ hudText('plantStats','🌱 Biomassa '+asPct(growthAvg)+'% · condição de crescimento '+asPct(healthAvg)+
+  '% · principal limitante: '+SOIL_LIMITS[mainLimit]+' · pH '+(phAvg/size).toFixed(1)+' · salinidade '+asPct(salAvg)+'% · biota '+asPct(biotaAvg)+'%');
+ hudText('windStatus','🍃 Vento '+atmWindMean.toFixed(2)+
   ' (índice de jogo) · potência '+windUserPower+'% · '+
   (atmWindMean<.16?'aragem':atmWindMean<.46?'brisa':atmWindMean<.95?'moderado':atmWindMean<1.55?'forte':'rajadas intensas')+
   ' · folhas '+(forestGroup.visible?'animadas na GPU':'floresta anterior')+
   ' · direção '+Math.round((atmWindHeading*180/Math.PI+360)%360)+'°'+
-  ' · '+(climate==='storm'||stormActive()?'rajadas fortes':'rajadas variáveis');
- $('fogStatus').textContent='🌫 Neblina '+Math.round(fogStrength*100)+
+  ' · '+(climate==='storm'||stormActive()?'rajadas fortes':'rajadas variáveis'));
+ hudText('fogStatus','🌫 Neblina '+Math.round(fogStrength*100)+
   '% · '+fogCause+' · solo '+Math.round(fogWetness*100)+
-  '% úmido · ar-superfície/orvalho '+fogDewGap.toFixed(1)+' °C';
- $('waterStats').textContent='Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³';
- $('wetGroundStats').textContent='Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+
-  ' m² · infiltração '+stats.infiltrated.toFixed(1)+' m³ · aquífero '+ground.toFixed(1)+' m³';
- $('splashStats').textContent='Impactos '+totalImpacts+' · '+splashes.length+
+  '% úmido · ar-superfície/orvalho '+fogDewGap.toFixed(1)+' °C');
+ hudText('waterStats','Poças '+wetted.toFixed(1)+' m² ('+Math.round(wetted/(participating*area)*100)+'% do terreno) · água superficial '+surface.toFixed(1)+' m³');
+ hudText('wetGroundStats','Terra úmida sem poça: '+(wetSoilOnly*area).toFixed(1)+
+  ' m² · infiltração '+stats.infiltrated.toFixed(1)+' m³ · aquífero '+ground.toFixed(1)+' m³');
+ hudText('splashStats','Impactos '+totalImpacts+' · '+splashes.length+
   ' partículas · '+ripples.length+' ondas · '+leafDripTotal+
-  ' gotas pós-chuva · '+foamCount+' manchas de espuma';
-  $('reflectionStats').textContent='Superfície '+VIS_NX+'×'+VIS_NZ+
+  ' gotas pós-chuva · '+foamCount+' manchas de espuma');
+  hudText('reflectionStats','Superfície '+VIS_NX+'×'+VIS_NZ+
   ' · espelho da câmera '+(reflectionsOn?(reflectionReady?'ativo':'preparando'):'desligado')+
-  ' · '+planarRT.width+'×'+planarRT.height+' · '+reflectionFrames+' capturas';
- $('climateStats').textContent='Céu: '+(weatherCfg?weatherCfg.name:'preparando')+
+  ' · '+planarRT.width+'×'+planarRT.height+' · '+reflectionFrames+' capturas');
+ hudText('climateStats','Céu: '+(weatherCfg?weatherCfg.name:'preparando')+
   (climateChoice==='auto'?' (automático)':'')+
-  ' · '+Math.round((weatherCfg?weatherCfg.coverage:0)*100)+'% nuvens · sol e reflexos climáticos';
-  $('mudStats').textContent='Sedimentos suspensos: '+Math.round(mudTotal/Math.max(.0001,mudWeight)*100)+'% · '+(soilType==='mosaico'?'mosaico de solos':SOIL_PROFILES[soilType].name);
+  ' · '+Math.round((weatherCfg?weatherCfg.coverage:0)*100)+'% nuvens · sol e reflexos climáticos');
+  hudText('mudStats','Sedimentos suspensos: '+Math.round(mudTotal/Math.max(.0001,mudWeight)*100)+'% · '+(soilType==='mosaico'?'mosaico de solos':SOIL_PROFILES[soilType].name));
  // Conta apenas rochas que realmente encontram a lâmina, não rochas sobre terra seca.
  let touchedRocks=0,coveredRocks=0;
  for(const rock of rockSolids){
@@ -3820,27 +3832,28 @@ function updateInfo(force){
   if(waterline>=rock.bottom+.015)touchedRocks++;
   if(waterline>=rock.top-.012)coveredRocks++;
  }
- $('lakeStats').textContent='Lagoa: '+Math.round(lagoonWet/Math.max(1,lagoonCells)*100)+'% da bacia coberta · profundidade '+lagoonMax.toFixed(2)+' m · '+touchedRocks+' rochas molhadas · '+coveredRocks+' encobertas';
- $('cycleStats').textContent='Infiltrou '+stats.infiltrated.toFixed(1)+' m³ · folhas '+leaf.toFixed(1)+' m³ · evapotranspiração '+(stats.evaporated+stats.transpired).toFixed(1)+' m³ · drenou '+stats.outflow.toFixed(1)+' m³';
+ hudText('lakeStats','Lagoa: '+Math.round(lagoonWet/Math.max(1,lagoonCells)*100)+'% da bacia coberta · profundidade '+lagoonMax.toFixed(2)+' m · '+touchedRocks+' rochas molhadas · '+coveredRocks+' encobertas');
+ hudText('cycleStats','Infiltrou '+stats.infiltrated.toFixed(1)+' m³ · folhas '+leaf.toFixed(1)+' m³ · evapotranspiração '+(stats.evaporated+stats.transpired).toFixed(1)+' m³ · drenou '+stats.outflow.toFixed(1)+' m³');
  const hour=Math.floor(dayClock/60),minute=Math.floor(dayClock%60);
  const hh=String(hour).padStart(2,'0'),mm=String(minute).padStart(2,'0');
  const seasonName=(['Verão','Outono','Inverno','Primavera'])[Math.floor((atmosDayIndex%SEASON_DAYS)/(SEASON_DAYS/4))];
  const sunAltitude=solarAt(dayClock);
  const phaseName=sunAltitude<-.035?'Noite':sunAltitude<.10?'Crepúsculo':
   dayClock<DAY_SECONDS*.50?'Manhã':'Tarde';
- $('dayCycleStats').textContent=(sunAltitude<-.035?'☾ ':'☀ ')+
-  'Dia '+(atmosDayIndex+1)+' · '+hh+':'+mm+' · '+phaseName+' · '+seasonName+' · 1 dia = 24 min reais';
- $('dayCycleBar').style.width=(dayClock/DAY_SECONDS*100).toFixed(2)+'%';
- $('atmosStats').textContent=(physicalWeather?'Atmosfera física':'Clima manual')+
+ hudText('dayCycleStats',(sunAltitude<-.035?'☾ ':'☀ ')+
+  'Dia '+(atmosDayIndex+1)+' · '+hh+':'+mm+' · '+phaseName+' · '+seasonName+' · 1 dia = 24 min reais');
+ const dayBar=$('dayCycleBar'),dayWidth=(dayClock/DAY_SECONDS*100).toFixed(2)+'%';
+ if(dayBar&&dayBar.style.width!==dayWidth)dayBar.style.width=dayWidth;
+ hudText('atmosStats',(physicalWeather?'Atmosfera física':'Clima manual')+
   ' · '+atmTempMean.toFixed(1)+' °C · umidade '+Math.round(atmHumMean*100)+
   '% · '+atmPressureMean.toFixed(0)+' hPa · vento '+atmWindMean.toFixed(1)+
-  ' · nuvens '+Math.round(atmCloudMean*100)+'% · chuva efetiva '+Math.round(clamp(appliedRainMean/.0061,0,1)*100)+'%';
- $('simClock').textContent='Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':'');
- $('info').textContent=level===0
+  ' · nuvens '+Math.round(atmCloudMean*100)+'% · chuva efetiva '+Math.round(clamp(appliedRainMean/.0061,0,1)*100)+'%');
+ hudText('simClock','Tempo simulado: '+(time<60?time.toFixed(0)+' s':(time/60).toFixed(1)+' min')+(paused?' · PAUSADO':''));
+ hudText('info',level===0
  ?'Chuva suspensa: poças infiltram e evaporam; o ciclo solar continua'
  :physicalWeather
  ?'A chuva depende das nuvens, vento e umidade locais • toque para adicionar água'
- :'Chuva manual: as depressões concentram poças • arraste para girar';
+ :'Chuva manual: as depressões concentram poças • arraste para girar');
 }
 
 let last=performance.now();const gamePerf={elapsed:0,frames:0,lastFps:0};
