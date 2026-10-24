@@ -1228,6 +1228,11 @@ async function arcanoRepairForestMaterials(item,root){
  const flowersMap=item.pack==='ultimate'&&
    (item.type==='bush'||item.type==='flower')?
    await arcanoFoliageTexture('Flowers.png'):null;
+ // V12.57: os pacotes Quaternius GLTF incluem UV de casca, mas não
+ // hospedam Bark_NormalTree.png. Não usar material liso quando falta mapa.
+ // Recupera a casca painterly já existente no próprio laboratório.
+ const isTree=item.type==='tree'||item.type==='pine';
+ const barkMap=isTree?arcanoTreeBarkTexture(item.name):null;
  root.traverse(obj=>{
   if(!obj.isMesh)return;
   const source=Array.isArray(obj.material)?obj.material:[obj.material];
@@ -1237,7 +1242,11 @@ async function arcanoRepairForestMaterials(item,root){
    const visualName=name+' '+(obj.name||'').toLowerCase();
    const foliage=/(leaves|leaf|foliage|canopy|flower|petal|grass|fern|plant|bush)/.test(visualName)
      && !/(bark|trunk|wood|stem|rock|stone)/.test(name);
-   const wood=/(bark|trunk|wood|stem|branch)/.test(name);
+   const explicitWood=/(bark|trunk|wood|stem|branch)/.test(name);
+   // Materiais FBX com nome genérico podem conter apenas tronco opaco.
+   // Folhas, pétalas e mapas alpha sempre ficam fora desta correção.
+   const wood=isTree&&(explicitWood||
+    (!foliage&&!old.map&&!old.alphaMap&&!old.transparent));
    const rock=/(rock|stone)/.test(name);
    const petal=/(flower|petal|blossom)/.test(name)||
      (!name&&/(flower|petal|blossom)/.test(obj.name||'')&&item.type==='flower');
@@ -1249,8 +1258,10 @@ async function arcanoRepairForestMaterials(item,root){
      if(leafMap)map=leafMap;
     }else if(!map)map=petal?(flowersMap||leafMap):leafMap;
    }
+   if(wood&&barkMap)map=barkMap;
    if(item.type==='rock')map=arcanoRockFallback;
-   const tint=item.type==='rock'?new T.Color('#d6d3ca'):
+   const tint=wood&&barkMap?new T.Color('#ffffff'):
+     item.type==='rock'?new T.Color('#d6d3ca'):
      map&&item.pack==='ultimate'?
       new T.Color(item.type==='bush'&&!petal?'#d7e3d0':'#ffffff'):
       (old.color?.clone?.()||new T.Color('#ffffff'));
@@ -1268,7 +1279,8 @@ async function arcanoRepairForestMaterials(item,root){
     vertexColors:!!old.vertexColors,flatShading:!!old.flatShading
    });
    material.userData={...old.userData,arcanoNaturalMaterial:true,
-    arcanoMaterialType:foliage?'leaf':wood?'wood':rock?'stone':'other'};
+    arcanoMaterialType:foliage?'leaf':wood?'wood':rock?'stone':'other',
+    arcanoTreeBarkTexture:!!(wood&&barkMap)};
    material.emissive.set('#000000');material.emissiveIntensity=0;
    if(map){
     map.colorSpace=T.SRGBColorSpace;
@@ -1292,9 +1304,9 @@ function registerForestMaterial(item,root){
    // opcionalmente a imagem original do próprio pacote, em qualidade Alta.
    const original=originalTextureFiles[item.name];
    const source=mat.map?.image?.currentSrc||mat.map?.image?.src||'';
-   const isProcedural=typeof source==='string'&&source.startsWith('data:image/');
-   const materialName=(mat.name||'')+' '+(o.name||'');
-   if(!original||!(item.type==='rock'||/(bark|trunk|wood|rock|stone)/i.test(mat.name||'')))continue;
+   // Classificação criada pelo reparo: funciona mesmo quando o FBX usa
+   // nomes de materiais genéricos, sem confundir a copa com o tronco.
+   if(!original||!(item.type==='rock'||mat.userData.arcanoMaterialType==='wood'))continue;
    mat.userData.arcanoFallbackMap=mat.map||null;
    mat.userData.arcanoOriginalTextureFile=original;
    qualityMaterials.add(mat);
@@ -2147,10 +2159,10 @@ function placeForestModel(item,root){
 // evitados aqui para manter o navegador Android responsivo.
 // Substitutos painterly de 512px (antes 128px). Alta pode usar os mapas
 // oficiais do Ultimate; Equilibrada conserva um material bem definido offline.
-function materialCanvas(base,accent){
+function materialCanvas(base,accent,asCanvas=false){
  const c=document.createElement('canvas');c.width=c.height=512;
- const ctx=c.getContext('2d'),rng=rand(base==='#79624b'?3916:4721);
- const bark=base==='#79624b';
+ const ctx=c.getContext('2d'),rng=rand(base==='#898e83'?4721:3916);
+ const bark=base!=='#898e83';
  ctx.fillStyle=base;ctx.fillRect(0,0,512,512);
  for(let i=0;i<(bark?1700:1150);i++){
   const x=rng()*512,y=rng()*512;
@@ -2173,7 +2185,25 @@ function materialCanvas(base,accent){
   ctx.globalAlpha=.065+rng()*.12;ctx.fillStyle=rng()>.5?accent:'#564e44';
   ctx.fillRect(x,y,rad,bark?rad*(1+rng()*3.5):rad);
  }
- ctx.globalAlpha=1;return c.toDataURL('image/png');
+ ctx.globalAlpha=1;return asCanvas?c:c.toDataURL('image/png');
+}
+// Mesma textura painterly 512px já usada pelo fallback FBX no projeto.
+// Três tonalidades naturais, com UV e mipmaps do modelo original intactos.
+const arcanoTreeBarkCache=new Map();
+function arcanoTreeBarkTexture(name){
+ const key=/birch/i.test(name)?'birch':/pine/i.test(name)?'pine':'brown';
+ if(arcanoTreeBarkCache.has(key))return arcanoTreeBarkCache.get(key);
+ const palette=key==='birch'?['#b1a594','#564f47']:
+  key==='pine'?['#634c38','#ae8b69']:['#79624b','#b19a78'];
+ const tex=new T.CanvasTexture(materialCanvas(palette[0],palette[1],true));
+ tex.name='Atelie Arcano · casca '+key+' · 512px';
+ tex.colorSpace=T.SRGBColorSpace;
+ tex.wrapS=tex.wrapT=T.RepeatWrapping;
+ tex.magFilter=T.LinearFilter;
+ tex.minFilter=T.LinearMipmapLinearFilter;
+ tex.anisotropy=QUALITY_PRESETS[graphicsQuality].anisotropy;
+ tex.generateMipmaps=true;
+ arcanoTreeBarkCache.set(key,tex);return tex;
 }
 function modelTextureManager(Module){
  const manager=new Module.LoadingManager();
