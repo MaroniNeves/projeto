@@ -298,6 +298,9 @@ let atmRainMean=0,atmRainPeak=0,atmCloudMean=.42,atmHumMean=.70,atmTempMean=23,
  atmPressureMean=1011,atmWindMean=.4,atmWindHeading=0,atmosDayIndex=0;
 // Intensidade de 0 a 100%, preservando o cálculo atmosférico regional.
 let windUserPower=70;
+// O campo atmosférico é atualizado de maneira discreta (~550 ms).
+// As amostras locais dos troncos só precisam ser refeitas quando muda.
+let atmWindRevision=0;
 const atmId=(i,j)=>j*ATM_NX+i,atmX=i=>-W*.5+i*W/(ATM_NX-1),
  atmZ=j=>-L*.5+j*L/(ATM_NZ-1);
 const SEASON_DAYS=24;
@@ -333,6 +336,7 @@ function initAtmosphere(){
   }
   atmRain[k]=0;atmWindX[k]=.32;atmWindZ[k]=.15;
  }
+ atmWindRevision++;
  rainField.fill(0);atmRainMean=atmRainPeak=0;
  appliedRainMean=appliedRainPeak=activeRainRegions=0;
  atmCloudMean=.48;atmHumMean=.74;atmTempMean=23;atmPressureMean=1012;
@@ -444,6 +448,7 @@ function atmosphereStep(dt){
   const next=atmCloudPreset();
   if(next!==climate)applyClimate(next);
  }
+ atmWindRevision++;
 }
 function updateAtmosphere(dt){
  // O relógio solar corre em tempo real: 1440 s = 24 h do jogo.
@@ -2448,8 +2453,12 @@ function updateForestHealth(){
   const j=clamp(Math.round((a.z+L*.5)/dz),0,NZ-1),k=idx(i,j);
   const biomass=clamp(soilPlant[k],.12,1.2),health=clamp(soilHealth[k],0,1);
   const factor=.69+biomass*.30;
+  // Sem alterações de biomassa ou escala, não reconstruir matrizes nem
+  // posicionamento de milhares de plantas; nenhuma mudança visual.
+  if(a.lastHealthFactor===factor)continue;
   a.obj.scale.copy(a.fullScale).multiplyScalar(factor);
   snapForestToGround(a);
+  a.lastHealthFactor=factor;
  }
  applyForestVisibility();
 }
@@ -2472,13 +2481,19 @@ function animateForest(dt){
   // Árvores fora do alcance ou de qualidade escolhida continuam presentes
   // no mapa, mas não precisam atualizar os pivôs de vento a cada quadro.
   if(a.type==='rock'||!a.obj.visible)continue;
-  const wx=fieldAt(atmWindX,a.x,a.z),wz=fieldAt(atmWindZ,a.x,a.z);
-  const localStrength=clamp(Math.hypot(wx,wz)/2.4,0,1.2);
-  const wave=.72+.28*Math.sin(t*(.84+localStrength)+a.phase);
-  const sway=(.002+.024*localStrength)*(.8+.2*gust)*wave;
-  const inv=1/Math.max(.015,Math.hypot(wx,wz));
-  a.obj.rotation.z=a.baseRz+sway*wx*inv;
-  a.obj.rotation.x=a.baseRx-sway*wz*inv;
+  if(a.windRevision!==atmWindRevision){
+   const wx=fieldAt(atmWindX,a.x,a.z),wz=fieldAt(atmWindZ,a.x,a.z);
+   const magnitude=Math.hypot(wx,wz);
+   a.windX=wx;a.windZ=wz;
+   a.windLocalStrength=clamp(magnitude/2.4,0,1.2);
+   a.windInverse=1/Math.max(.015,magnitude);
+   a.windRevision=atmWindRevision;
+  }
+  // A onda continua animada em TODOS os quadros, sem perda de movimento.
+  const wave=.72+.28*Math.sin(t*(.84+a.windLocalStrength)+a.phase);
+  const sway=(.002+.024*a.windLocalStrength)*(.8+.2*gust)*wave;
+  a.obj.rotation.z=a.baseRz+sway*a.windX*a.windInverse;
+  a.obj.rotation.x=a.baseRx-sway*a.windZ*a.windInverse;
  }
 }
 loadPainterlyForest();
