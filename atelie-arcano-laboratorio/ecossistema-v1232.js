@@ -100,7 +100,10 @@ function applyGrassQuality(){
  lastGrassQuality=quality;
 }
 async function loadMeshes(){
- const bytes=Uint8Array.from(atob(raw.compressed),c=>c.charCodeAt(0));
+ // Decodificar de forma linear, sem callback/alocação por byte.
+ // O conteúdo comprimido e todas as malhas permanecem idênticos.
+ const packed=atob(raw.compressed),bytes=new Uint8Array(packed.length);
+ for(let i=0;i<packed.length;i++)bytes[i]=packed.charCodeAt(i);
  if(!('DecompressionStream' in window))throw new Error('Navegador sem DecompressionStream');
  const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
  const data=JSON.parse(await new Response(stream).text());
@@ -471,7 +474,9 @@ async function grassShape(){
    mesh.name='Tapete de grama Quaternius V12.52 · '+name+' · '+cx+','+cz;
    mesh.frustumCulled=true;mesh.castShadow=false;mesh.receiveShadow=true;
    mesh.userData.planted=entries.count;
-   mesh.userData.grassKeys=entries.keys.subarray(0,entries.count);
+   // A visualização exact-size não retém o buffer temporário dobrado
+   // durante o plantio (reduz memória residente após carregar o mapa).
+   mesh.userData.grassKeys=new Uint32Array(entries.keys.subarray(0,entries.count));
    mesh.userData.lastScale=new Float32Array(entries.count);
    mesh.userData.lastScale.fill(1);
    for(let i=0;i<entries.count;i++){
