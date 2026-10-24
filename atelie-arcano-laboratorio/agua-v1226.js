@@ -3322,9 +3322,11 @@ function resize(){
  renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
 }
 
-/* V12.44: terceira pessoa só quando Jogar está ativo.
-   Referência 3D pública: three.js Xbot.glb (idle/walk/run).
-   Um manequim procedural leve funciona caso o GLB esteja offline. */
+/* V12.56: download do MESMO personagem jogável com seu esqueleto
+   e animações originais embutidas no GLB (idle/walk/run). */
+const GAME_CHARACTER_GLB_URL=
+ 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Xbot.glb';
+const GAME_CHARACTER_DOWNLOAD_NAME='Atelie_Arcano_Xbot_Animado.glb';
 const game={
  active:false,root:null,character:null,mixer:null,actions:{},animation:'',
  heading:Math.PI,position:new T.Vector3(),camHeading:Math.PI,camPitch:.35,camDistance:4.8,orbitPointer:null,orbitX:0,orbitY:0,
@@ -3333,6 +3335,53 @@ const game={
 };
 function gameStatus(message){
  if($('gameStatus'))$('gameStatus').textContent=message;
+}
+// O link aponta para o mesmo GLB carregado no jogo. O navegador recebe um
+// arquivo único com malha, rig, textura e clips (não uma pose congelada).
+// Se downloads via Blob forem bloqueados, o segundo toque abre o link RAW.
+let gameDownloadBusy=false,gameDownloadDirectLink=false;
+async function downloadAnimatedCharacter(event){
+ if(gameDownloadDirectLink)return;
+ event.preventDefault();
+ if(gameDownloadBusy)return;
+ gameDownloadBusy=true;
+ const links=[$('gameDownload'),$('gameDownloadHUD')].filter(Boolean);
+ const updateLabels=label=>links.forEach(link=>{
+  link.textContent=label;
+  link.setAttribute('aria-label',label);
+ });
+ updateLabels('⬇ Preparando GLB animado…');
+ try{
+  const response=await fetch(GAME_CHARACTER_GLB_URL,{mode:'cors'});
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  const buffer=await response.arrayBuffer(),view=new DataView(buffer);
+  // GLB v2: cabeçalho + JSON contendo animações e esqueleto.
+  if(buffer.byteLength<24||view.getUint32(0,true)!==0x46546c67||
+     view.getUint32(4,true)!==2||
+     view.getUint32(8,true)!==buffer.byteLength||
+     view.getUint32(16,true)!==0x4e4f534a)
+   throw new Error('Arquivo não é um GLB válido');
+  const jsonLength=view.getUint32(12,true);
+  if(jsonLength>buffer.byteLength-20)throw new Error('GLB incompleto');
+  const gltf=JSON.parse(new TextDecoder().decode(new Uint8Array(buffer,20,jsonLength)));
+  const clips=(gltf.animations||[]).map(a=>(a.name||'').toLowerCase());
+  if(!['idle','walk','run'].every(name=>clips.some(clip=>clip.includes(name))))
+   throw new Error('Arquivo sem os movimentos necessários');
+  const blob=new Blob([buffer],{type:'model/gltf-binary'});
+  const objectURL=URL.createObjectURL(blob);
+  const anchor=document.createElement('a');
+  anchor.href=objectURL;anchor.download=GAME_CHARACTER_DOWNLOAD_NAME;
+  anchor.style.display='none';document.body.appendChild(anchor);
+  anchor.click();anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(objectURL),60000);
+  updateLabels('✓ Baixar boneco 3D + animações');
+ }catch(error){
+  console.warn('[Arcano V12.56] Download do personagem:',error);
+  gameDownloadDirectLink=true;
+  // A origem raw permanece acessível no próprio href de cada link.
+  updateLabels('⬇ Baixar GLB pela fonte');
+  if(game.active)gameStatus('Download alternativo: toque em Baixar GLB pela fonte.');
+ }finally{gameDownloadBusy=false;}
 }
 function gameFallback(){
  const g=new T.Group(),cloth=new T.MeshStandardMaterial({color:'#4b4e3c',roughness:1,metalness:0});
@@ -3357,9 +3406,7 @@ async function loadGameCharacter(){
  gameStatus('Carregando personagem 3D…');
  try{
   const {GLTFLoader}=await import('https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js');
-  const gltf=await new GLTFLoader().loadAsync(
-   'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Xbot.glb'
-  );
+  const gltf=await new GLTFLoader().loadAsync(GAME_CHARACTER_GLB_URL);
   const model=gltf.scene;
   model.updateMatrixWorld(true);
   const box=new T.Box3().setFromObject(model),sz=box.getSize(new T.Vector3());
@@ -3521,6 +3568,8 @@ async function setPlayActive(active){
   if($('gameStick'))$('gameStick').style.transform='translate(0,0)';
  }
 }
+for(const link of [$('gameDownload'),$('gameDownloadHUD')])
+ if(link)link.addEventListener('click',downloadAnimatedCharacter);
 if($('playEntry'))$('playEntry').addEventListener('click',()=>setPlayActive(true));
 if($('gameExit'))$('gameExit').addEventListener('click',()=>setPlayActive(false));
 window.addEventListener('keydown',ev=>{
