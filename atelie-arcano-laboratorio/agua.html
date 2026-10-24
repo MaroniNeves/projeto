@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Floresta V12.55 · ancoragem, reflexos e vento físico</title>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b141b"><title>Ateliê Arcano — Floresta V12.56 · ancoragem, reflexos e vento físico</title>
 <style>
 :root{color-scheme:dark;--bg:#101d29;--edge:#45606b;--font:#eaf1ed;--muted:#aabfc7;--accent:#80c0bf}*{box-sizing:border-box}
 body{margin:0;background:#0b131b;color:var(--font);font:14px/1.35 system-ui,Segoe UI,sans-serif;overflow:hidden}
@@ -55,17 +55,23 @@ body.ui-hidden #showControls{display:block}
 .day-timeline{height:7px;margin:5px 0 7px;border-radius:7px;overflow:hidden;border:1px solid #55737a;background:linear-gradient(90deg,#233451 0%,#f3ac65 24%,#c8ecb6 43%,#e4bd76 73%,#273451 90%)}
 #dayCycleBar{height:100%;width:0%;border-right:3px solid white;box-shadow:0 0 5px white;transition:width .25s linear}
 
-/* V12.55 — jogar: HUD exclusiva, joystick móvel, orientação horizontal. */
+/* V12.56 — jogar: HUD exclusiva, joystick móvel, orientação horizontal. */
+#gameDownload{position:fixed;z-index:32;right:12px;top:calc(58px + env(safe-area-inset-top));
+ padding:9px 12px;border:1px solid #93a995;border-radius:10px;background:#233b33;
+ color:#f1f5eb;text-decoration:none;font:700 12px system-ui;cursor:pointer;text-align:center;
+ max-width:min(92vw,260px)}
 #playEntry{position:fixed;z-index:32;right:12px;top:calc(10px + env(safe-area-inset-top));padding:10px 15px;
  border:1px solid #c6d7b2;border-radius:10px;background:#355743;color:#f7f7e4;font:700 13px system-ui;cursor:pointer}
 #gameHUD{display:none;position:fixed;inset:0;z-index:40;pointer-events:none;color:#f5f6ed}
 body.play-active .top,body.play-active .bottom,body.play-active .hint,
-body.play-active #showControls,body.play-active #playEntry{display:none!important}
+body.play-active #showControls,body.play-active #playEntry,
+body.play-active #gameDownload{display:none!important}
 body.play-active #gameHUD{display:block}
 .game-top{display:flex;justify-content:space-between;align-items:center;gap:9px;
  padding:calc(10px + env(safe-area-inset-top)) 14px 0}
-.game-top button,.game-action{pointer-events:auto;border:1px solid #98ac99;background:#152826db;
+.game-top button,.game-top a,.game-action{pointer-events:auto;border:1px solid #98ac99;background:#152826db;
  color:#fff;border-radius:11px;min-height:43px;padding:9px 14px;font:700 13px system-ui;touch-action:none}
+.game-top a{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 .game-top output{padding:7px 10px;border-radius:8px;background:#152826a8;font:600 12px system-ui}
 .game-bottom{position:absolute;bottom:calc(10px + env(safe-area-inset-bottom));left:18px;right:18px;
  display:flex;align-items:end;justify-content:space-between;pointer-events:none;gap:12px}
@@ -87,11 +93,20 @@ body.play-active .game-top{flex-wrap:wrap}
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script><script defer src="./agua-v1226.js"></script><script defer src="./arcano-assets-v1232.js"></script><script defer src="./nature-imported-v1239.js"></script><script defer src="./ecossistema-v1232.js"></script>
 </head>
 <body><canvas id="stage" aria-label="Cena tridimensional de chuva, poças e lagoas"></canvas>
-<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Floresta V12.55 · solo em camadas · chuva, aquífero e vegetação</strong><small>Grama em tufos originais · pedras texturizadas · solo granular · gotejamento das folhas</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
+<header class="top"><div class="row"><div class="name"><strong>✦ Ateliê Arcano · Floresta V12.56 · solo em camadas · chuva, aquífero e vegetação</strong><small>Grama em tufos originais · pedras texturizadas · solo granular · gotejamento das folhas</small></div><a class="home" href="index.html" id="back">← Laboratório</a><a class="home ar-legacy" href="agua-v124.html">V12.4</a></div>
 <nav class="pills" aria-label="Escolher efeito"><button type="button" data-mode="rain">🌧 Chuva</button><button type="button" data-mode="puddle">💧 Poças</button><button type="button" data-mode="lagoon">🌊 Lagoa</button><button type="button" data-mode="storm">⛈ Temporal</button></nav></header>
 <button type="button" id="playEntry" aria-label="Jogar e controlar o personagem">🎮 Jogar</button>
+<a id="gameDownload"
+ href="https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Xbot.glb"
+ download="Atelie_Arcano_Xbot_Animado.glb"
+ aria-label="Baixar boneco 3D Xbot com esqueleto e animações parado, andar e correr"
+ title="GLB com malha, rig e animações Idle, Walk e Run; compatível com Blender e Three.js">⬇ Boneco 3D + animações</a>
 <div id="gameHUD" aria-label="Controle do personagem" aria-hidden="true">
  <div class="game-top"><button type="button" id="gameExit">← Sair do jogo</button>
+ <a id="gameDownloadHUD"
+ href="https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Xbot.glb"
+ download="Atelie_Arcano_Xbot_Animado.glb"
+ aria-label="Baixar personagem 3D animado em GLB com esqueleto e movimentos">⬇ GLB animado</a>
  <output id="gameStatus" aria-live="polite">Preparando personagem…</output><output id="gameFPS">FPS —</output></div>
  <div id="gameRotateHint">↻ Gire o aparelho para a horizontal. O jogo continuará funcionando se o navegador não permitir girar automaticamente.</div>
  <div class="game-bottom">
@@ -186,7 +201,7 @@ body.play-active .game-top{flex-wrap:wrap}
     <label for="fogToggle"><input id="fogToggle" type="checkbox" checked> Neblina física apenas sob condições de formação (não nas tempestades)</label>
  </div>
  <details id="ecoPanel" class="ecology-panel" style="padding:10px;margin:8px 0;border:1px solid #4c706c;border-radius:10px;background:#12272c">
- <summary style="font-weight:600;cursor:pointer">🌿 V12.55 · Rio, estrada, gramado e vida do solo</summary>
+ <summary style="font-weight:600;cursor:pointer">🌿 V12.56 · Rio, estrada, gramado e vida do solo</summary>
  <p style="font-size:11px;color:#abc9bd;line-height:1.5">
   Mapa ampliado para 128 × 100 unidades (10× a área de 40 × 32), com floresta volumosa à beira da estrada, grama 3D Quaternius em TRÊS camadas por todo solo vegetado: forração curta, tufos de preenchimento e grupos altos; desempenho otimizado com atualização localizada de grama e solo, envio parcial à GPU, cache de vento, vizinhos do solo e água pré-calculados, indicadores com menos processamento e reutilização de objetos temporários; reflexos recalculados apenas quando há água visível; sem trazer de volta modelos antigos em cone ou triângulo; pequenas clareiras de terra nos formigueiros, arbustos fora da estrada e caminho fixo sem grama. Pedrinhas, minerais e gravetos completam o chão. As qualidades Alta e Equilibrada exibem o gramado fechado completo, mesmo custando FPS; a Econômica reduz. O solo fica verde sob o gramado, e a estrada de terra compactada atravessa a clareira central. Ponte de madeira nivelada conecta as duas margens elevadas do rio.
   As colônias procuram alimento conforme o vigor das plantas e os resíduos no solo; os animais permanecem minúsculos em escala natural.
