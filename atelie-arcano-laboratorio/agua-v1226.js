@@ -3847,7 +3847,10 @@ function loop(now){
   updateReflections(dt);
   updateInfo(false);
  }
- setView();renderer.render(scene,camera);
+ // A câmera já foi atualizada antes dos reflexos. Evitar a segunda
+ // aplicação da mesma matriz a cada quadro; manter o caso pausado.
+ if(paused||document.hidden)setView();
+ renderer.render(scene,camera);
  gamePerf.elapsed+=rawDt;gamePerf.frames++;
  if(gamePerf.elapsed>=1.25){
   gamePerf.lastFps=Math.round(gamePerf.frames/gamePerf.elapsed);
